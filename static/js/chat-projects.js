@@ -22,6 +22,8 @@
 //                        the chat menu's "Move to project" (firebase.js)
 //   move(bookmarkId, projectId, {keyboard})   in (an id) or out (null), with Undo
 //   armed(), arm(id), disarm()   the project a new chat starts in
+//   settle()             sends every deletion still offering its Undo;
+//                        resolves once each was sent (performLogout)
 //   reset()              logout
 // =====================================================================
 (function () {
@@ -844,6 +846,6 @@
 
   App.chatProjects = Object.freeze({
     adopt, ordered, known, nameOf, isOpen, rowFor, emptyRowFor, heading, syncToggle,
-    showPicker, move, armed: () => armedId, arm, disarm, reset, icons: ICONS,
+    showPicker, move, armed: () => armedId, arm, disarm, settle: settleDeletes, reset, icons: ICONS,
   });
 })();

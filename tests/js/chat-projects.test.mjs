@@ -152,4 +152,22 @@ describe("projects in the chat list", () => {
     expect(path).toBe("/bookmarks/a/project");
     expect(JSON.parse(request.body)).toEqual({ project_id: "p_aaaaaaaaaaaa" });
   });
+
+  it("sends a deletion still offering its Undo when asked to settle (logout)", async () => {
+    const data = [{ id: "t1", timestamp: ago(1), project_id: "p_aaaaaaaaaaaa" }];
+    const { window, document, chatProjects } = await boot(data, { projects: [PROJECTS[0]] });
+    window.auth = { currentUser: { uid: "u1", getIdToken: async () => "token" } };
+    window.App.undoNotice = { show: options => ({ settle: () => options.onExpire(), focusAction() {} }) };
+    window.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ status: "success" }) }));
+
+    document.querySelector('[data-project-id="p_aaaaaaaaaaaa"] .bookmark-menu-button').click();
+    document.querySelector('.bookmark-menu-item[data-action="delete"]').click();
+    expect(window.fetch).not.toHaveBeenCalled();
+
+    await chatProjects.settle();
+    const [path, request] = window.fetch.mock.calls[0];
+    expect(path).toBe("/projects/p_aaaaaaaaaaaa");
+    expect(request.method).toBe("DELETE");
+    expect(data[0].project_id).toBeNull();
+  });
 });

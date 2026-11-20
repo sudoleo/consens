@@ -8017,7 +8017,8 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   weitere auch über „+“ (Zeile im Benennen-Zustand). Verschieben ist optimistisch wie Pin (Fehler stellt
   zurück, 404 eines Projekts vergisst es), mit Toast „Moved to {name}“ + Undo; Löschen eines Projekts
   blendet es weich aus, die Chats kehren unter ihre Daten zurück, Toast mit Undo, DELETE erst danach (ein
-  neuer Lauf, eine verdeckte Seite und Logout schicken es sofort). Offen/zu merkt sich
+  neuer Lauf und eine verdeckte Seite schicken es sofort, `performLogout` über `settle()` noch mit dem
+  Token des Kontos vor `signOut`). Offen/zu merkt sich
   `localStorage["projects_open"]`; `loadBookmarks` übergibt der ersten Seite `projects` an `adopt()`,
   das für bis zu drei offene Projekte `GET /projects/{id}/bookmarks` holt, und wartet darauf höchstens
   600 ms vor dem Einblenden (`App.bookmarkUi.addListRows`). Bringt eine Seite weniger als

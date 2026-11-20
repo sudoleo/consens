@@ -115,10 +115,11 @@ async function performLogout() {
     // arrive is dropped with the account's values on sign-out.
     const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
     // A chat deleted a moment ago (its Undo still offered) is deleted now,
-    // with this account's token; so is whatever the Watches page still holds
-    // (commitPending).
+    // with this account's token; so is a project (chat-projects.js) and
+    // whatever the Watches page still holds (commitPending).
     const deletesSent = Promise.race([
-      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.()]),
+      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.chatProjects?.settle?.(),
+        window.App?.watchDashboard?.commitPending?.()]),
       new Promise(resolve => setTimeout(resolve, 3000))
     ]);
     // Clear the HttpOnly server session before dropping the Firebase identity.
