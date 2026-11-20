@@ -245,45 +245,35 @@ def test_watch_page_leads_with_one_state_line_and_keeps_the_curve_off_phones():
     assert ".wp-evidence li { min-width: 0; max-width: 100%; }" in public_css
 
 
-def test_landing_explains_consensus_watch_as_fourth_product_step():
+def test_landing_shows_the_watch_as_a_chapter_of_its_chat():
     landing = read("templates/landing.html")
     navigation = read("templates/partials/public_nav.html")
 
-    assert 'id="watch"' in landing
-    assert "04 · Monitor" in landing
-    assert "Let the Agent keep watch." in landing
-    assert 'href="/app/watches"' in landing
+    assert '<section class="lc-part" id="watch">' in landing
+    assert "05 · Watch" in landing
     assert 'href="/#watch">Watches</a>' in navigation
+    # The two parts the bar marks (public-nav.js trackSections).
+    assert '<div class="lc-part" id="harness">' in landing
+    assert '["watch", "harness"]' in read("static/js/public-nav.js")
 
 
-def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
-    """The example once showed "72/100 model agreement" and "34/100 movement"
-    long after watches dropped scores for goals and evidence. Every label it
-    shows has to exist in the dashboard, the watch page, the alert options,
-    the watch mail or the Telegram message, so a rename there flags the
-    landing too."""
+def test_landing_watch_card_uses_the_words_of_the_app_card():
+    """The Watch chapter rebuilds the card the agent prepares in a chat
+    (agent-watch.js). Every label it shows has to exist there, so a rename in
+    the app flags the landing page too. No scores: Watches dropped them for
+    goals and evidence."""
     landing = read("templates/landing.html")
-    section = landing.split('<section id="watch"', 1)[1].split("</section>", 1)[0]
+    chapter = landing.split('<section class="lc-part" id="watch">', 1)[1].split("</section>\n\n", 1)[0]
 
-    assert "/100" not in section
-    assert "materially" not in section
-    # An Agent Watch: the words its page, sheet, chat,
-    # mail and Telegram message use.
-    dashboard = read("static/js/watch-dashboard.js")
-    field = read("static/js/watch-composer.js")
-    chat = read("static/js/thread-history.js")
-    mail = read("app/services/mailer.py")
-    telegram = read("app/services/telegram_watch.py")
-    for label, source in (
-        ("Found something", dashboard),
-        ("Done when", field),
-        ("nothing new", chat),
-        ("What it found", mail),
-        ("Your Watch found something", telegram),
-        ("Seen on", telegram),
-    ):
-        assert label in section, label
-        assert label in source, f"{label!r} is no longer live wording"
+    assert "/100" not in chapter
+    card = read("static/js/agent-watch.js")
+    for label in ("Start Watch", "Change", "End Watch", "Watch running", "Done when: ", "next run "):
+        assert label in chapter, label
+        assert label in card, label
+    # The card stands in its running state without script, and the script
+    # only chooses which of the two sets of words shows.
+    assert 'data-watch data-state="watching"' in chapter
+    assert chapter.count('data-when="proposal"') == 4 and chapter.count('data-when="watching"') == 3
 
 
 def test_landing_heights_in_the_page_flow_ignore_the_browser_bar():

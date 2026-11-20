@@ -200,10 +200,9 @@ def test_account_popup_and_settings_controls_have_exactly_one_binder():
         assert control in app_ui
 
 
-def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
+def test_login_dialog_accessibility():
     template = read("templates/index.html")
     firebase = read("static/firebase.js")
-    landing = read("templates/landing.html")
 
     # A native <dialog> through App.modalDialog: the page behind is inert,
     # Escape closes it, Tab wraps inside and focus goes back to the opener.
@@ -214,12 +213,3 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     assert "keepOpen: authDialogHasTyping" in firebase
     assert "function trapTab(dialog, event)" in modal_dialog
     assert "opener.focus({ preventScroll: true })" in modal_dialog
-    # Der Widerspruch ist ein roter Textmarker; die leisen Arten sind eine
-    # Punktlinie (User-Vorgabe: ein "gut zu wissen" soll den Lesefluss nicht
-    # sprengen; Punkte, keine durchgezogene Linie, die sich wie ein Link
-    # liest). Die Legende nennt die Arten der Pruefer-Anmerkungen.
-    assert "red · wrong" in landing and "dotted · doubtful" in landing and "fine dots · incomplete" in landing
-    assert "fine rule" not in landing
-    assert "heavier amber rule" not in landing
-    assert "fine dotted line" not in landing
-    assert "amber wavy line" not in landing

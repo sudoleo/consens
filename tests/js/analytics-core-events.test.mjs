@@ -112,8 +112,8 @@ describe('open_app', () => {
 
   it('names the page and the button a visitor entered the app from', () => {
     const { w, tracked } = page('https://consens.io/');
-    click(w, '/app?demo=1', 'id="heroDemoButton" data-umami-event="landing_hero_demo_start"');
-    expect(tracked).toEqual([['open_app', { from: 'landing', demo: true, place: 'heroDemoButton' }]]);
+    click(w, '/app?focus=1', 'id="landingField" data-umami-event="landing_hero_open_app"');
+    expect(tracked).toEqual([['open_app', { from: 'landing', demo: false, place: 'landingField' }]]);
   });
 
   it('reports share pages as one source', () => {

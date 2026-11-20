@@ -19,7 +19,6 @@ Diese sechs reichen für fast jede Frage. Sie haben in jedem Modus dieselbe Form
 | `login` | Anmeldung mit bestehendem Konto | `method` (google, email = Passwort, email_link = Link aus der Mail) |
 | `ask` | eine Frage wurde abgeschickt | `mode` (agent, consensus, compare), `follow_up`, `files`, `reasoning`, `source` (typed, example, pasted, link), `after_login` (nur `true`: die Frage, die ein Gast vor dem Anmelden abgeschickt hat) |
 | `answer` | dieser Lauf ist fertig (einmal pro Lauf) | `mode`, `status` (ok, partial, failed) |
-| `landing_hero_demo_start` | Demo gestartet | – |
 
 Der Weg zur ersten Frage als Umami-Funnel:
 `/` (Seite) → `open_app` → `signup` → `ask`.

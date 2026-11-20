@@ -692,110 +692,92 @@ Event-Namen stehen in [`docs/analytics.md`](analytics.md). Die vier Informations
 Chat-/Bookmark-Speicherung, zusätzliche KI-/Suchaufrufe und tatsächliche Retention;
 Betreiberangaben werden als direkt lesbares HTML ausgegeben. Offene rechtliche
 Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
-Navigation beschränkt sich auf Product, Watches, Topics, Questions und die
-App-CTA (Benchmark seit 2026-11-01 nur noch im Footer,
-`tests/test_public_design_system.py` zählt vier Links); Model guide, About,
-Benchmark und „Consensus engine“ (vorher „How consensus works“) liegen im Footer. Seit 2026-10-02
-erzählt die Landingpage Agent als Standard. Seit dem einen Modus des Agenten
-(Zweig one-mode, live mit seinem Deploy) lautet der Hero „One AI does the work.
-Several check it.“ / „Eine KI arbeitet, mehrere prüfen.“; Meta-Titel („The AI
-Agent Other AI Models Check“), Beschreibungen und die Markenkarte
-`og-home-v2.png` aus `og_image.BRAND_HEADLINE` (= Hero, neu gerendert) ebenso.
-Vorher (2026-10-02 bis zum einen Modus) „Six models answer …“ bzw. „Several
-models answer.“ mit Score und Judge, was der Agent nicht mehr tut.
-Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip
-(der Modus steckt im (+)), rechts „2 AIs cross-check“ neben den zwei Marken von
-Daily (Claude, DeepSeek seit 2026-11-01), ohne Pfeil wie in /app; eine Fläche,
-eine Reihe: (+) · die Marken vor den Prüfer-Worten · Senden
-(`partials/composer_marks_mockup.html`; seit 2026-10-31 ohne Reasoning: die
-Mockups zeigen keinen Chatmodell-Chip, neben dem in /app die Stufe steht).
-Das Wärmepumpen-Beispiel ist seit 2026-11-01 ein Lauf mit Dailys zwei Prüfern
-Claude und DeepSeek (wie die Demo in `static/demo.js`; Claude trägt „wrong“ und
-„incomplete“, DeepSeek „doubtful“; die zwei Antworten sind beim Kesseltest
-uneins). Szene 02 (`#agent-mode`, `.lp-agent`) sagt, was der Agent kann (planen,
-im Web suchen, Code am eigenen Arbeitsplatz ausführen, echte Dateien), dass die
-Prüfer ihn nie steuern, und baut einen Turn des einen Modus so nach, wie
-`agent-activity.js`/`agent-review.js` ihn zeichnen: die Marken der Prüfer neben
-der Uhr, Suche, Arbeitsplatz, das Skript, das er schreibt (`Wrote the file
-buy_vs_rent.py`), der Befehl, den er ausführt (`$ python buy_vs_rent.py`, wie
-`.agent-vm` in `/app`: Ausgabe Zeile für Zeile in einem getönten Feld, offen,
-solange er läuft, danach eingeklappt mit Dauer), der Agent fragt die zwei KIs
-einmal. Sobald er schreibt, klappen die Schritte in die Uhrzeile
-(`.lp-agent-log.is-folded`) und EINE Live-Zeile bleibt (`.lp-agent-writing`,
-„Writing answer…“ / „Reviewing the answer…“, Uhr „Reviewing · …s“): mit offenen
-Schritten wären Antwort und Diagramm höher als ein Laptop-Fenster. Die Antwort
-trägt ihr Diagramm im Text wie in `/app`, hier als Markup statt als Bild
-(`partials/demo_chart_mockup.html`, geschrieben von `scripts/demo_assets.py`
-`mock_chart` aus demselben Modell wie PNG und Excel; `tests/test_demo_assets.py`
-hält Datei, Zahlen der Befehlsausgabe und die deutschen Beschriftungen am
-Modell): Raster und Beschriftung in der Tinte der Seite, scharf in jeder Breite
-und im Dunkeln, die zwei Linien in einer eigenen Ebene, deren rechte Kante
-`--draw` (0 bis 1, vom Scroll) verschiebt, sodass sie Jahr für Jahr wachsen;
-Schnittpunkt, „Your 12 years“ und Endwerte erscheinen, sobald die Linien sie
-erreichen (`.is-crossed`, `.is-staying`, `.is-drawn`). Darunter die Excel-Datei,
-drei markierte Sätze (wrong / doubtful / incomplete) und „Notes 3 · Answers 2“,
-kein Score. Der Satz „Without the reviewers…“ ist der Satz der Seite, nicht des
-Agenten: Er steht erst mit den Marken da (`[data-run-closing]`), nie im
-gestreamten Text. Treiber `landing-scenes.js` (`buildRunScene`, Zeitachse
-`PLAN_AT` … `DONE_AT`, Schreiben ab `WRITE_AT` 0.56, Diagramm 0.61–0.71,
-`REVIEW_AT` 0.80, `MODEL_FINISH` je Anzahl der `[data-model]`-Marken, 2 und 3,
-sonst gleichmäßig, `data-reviewer`-Marken, `.lp-agent-answer.is-reviewing`,
-drei `data-mark`-Arten; Standbild bei reduced motion = fertiger Turn über
-`render.still`). Angeheftet ist Szene 02 nur, wo die Karte neben der
-Überschrift unter die Leiste passt (ab 900 px Breite und 760 px Höhe, 250vh,
-Diagrammhöhe aus der Fensterhöhe); sonst (Handy, flaches Fenster) steht sie im
-Seitenfluss, und die Karte selbst ist die Uhr (`render.anchor`, `measure`): Der
-Lauf beginnt, wenn die Karte von unten hereinkommt, und endet, wenn ihre letzte
-Zeile da ist. Vorher spielte ein Handy den ganzen Lauf in den 150 px ab, die
-einer zu hohen angehefteten Bühne an Weg blieben. Szene 03
-(„Decide“) in vier Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
-öffnet die Notizkarte `#lpNoteTax` über `data-diff-open`), was die Farben
-heißen (`.lp-mark-key`) und was die anderen KIs antworteten (`.lp-answers`).
-`landing-insights.js` baut nur noch die Hover-Vorschau der
-markierten Stelle. Die Reihenfolge der Seite: Hero, 01 Ask, 02 Run, 03 Decide,
-04 Monitor, Benchmark, Models, Harness, Schlussfeld; die Überschriften sagen, was da
-steht, ohne Werbezeilen (der Abschnitt „Why consens.io“ mit drei Spalten, die
-Szene 03 wiederholten, und „Proof, not promises“ sind entfallen).
-**Harness (seit 2026-11-20, Max: „Harness“ soll in den Mittelpunkt):** Über der
-h1 steht als Produktname „Agent harness“ (`.lp-hero-kind`), die Leiste aller
-öffentlichen Seiten hat den Link „Harness“ (`/#harness`), und der Abschnitt
-`#harness` nennt vier Fakten als Liste an einer Haarlinie (`.lp-harness-facts`:
-Live review, Speed, Its own computer, Your accounts) neben der Halt-Karte von
-`/app` (`.lp-pause-card`: „A reviewer paused the work“, eingeschleuste
-Anweisung, „Let it continue“). Jeder Satz dort beschreibt den Code von heute
-(der Kommentar im Template nennt die Stellen): Kein Aufruf wartet auf die
-Prüfer (`agent_gate.outward`), ein Halt kommt nach dem gemeldeten Schritt;
-deshalb zeigt die Karte eine gelesene Seite, keinen Klick. Die frühere fünfte
-Stufe von Szene 03 („A pause before a risky step“, „The step runs only if you
-let it“) zeigte die leere Vorab-Prüfung und ist mit diesem Abschnitt
-entfallen. Ändert sich eins der Fakten, ändert sich der Satz.
+Navigation beschränkt sich auf Product, Harness, Watches, Topics, Questions und
+die App-CTA (Benchmark seit 2026-11-01 nur noch im Footer,
+`tests/test_public_design_system.py` hält die fünf Links); Model guide, About,
+Benchmark und „Consensus engine“ (vorher „How consensus works“) liegen im Footer. Die Landingpage
+(`templates/landing.html`) ist seit 2026-11-20 ein einziger Chat (Max: nicht
+mehr „eine Seite, wo mal links und rechts Dinge stehen“). Über der h1 steht als
+Produktname „Agent harness“ (`.lp-hero-kind`), die h1 lautet „One AI does the
+work. Several check it.“ / „Eine KI arbeitet, mehrere prüfen.“; Meta-Titel
+(„The AI Agent Other AI Models Check“), Beschreibungen und die Markenkarte
+`og-home-v2.png` aus `og_image.BRAND_HEADLINE` (= Hero) tragen denselben Satz.
+Darunter läuft eine Spalte (`.lc-thread`, 720 px) mit fünf Kapiteln und den
+Modellfamilien, und das Eingabefeld von `/app` ist über die ganze Seite unten
+angedockt (`.lc-dock`, `position: sticky`): der Link `#landingField` auf
+`/app?focus=1`, neben dem Knopf der Leiste der einzige Weg in die App. Am Ende
+ruht es unter „Try it with your own question.“. Neben dem Faden steht nichts.
+
+Der Faden spielt EINE Frage durch, eine Reise mit dem Auto (5 Tage Südtirol und
+Gardasee, 1.500 € Budget). Jedes Kapitel ist ein `section.lc-part` mit einer
+Überschrift aus zwei Sätzen (`.lc-h2`, der zweite in `--ink-3`) und zeigt an der
+Frage eine Sache:
+- `#workspace` (01): das Arbeitsplatz-Fenster mit offenem Terminal-Reiter
+  (`.lc-ws`, Nachbau des Panels aus `workspace-view.js`: Titel, Schalter
+  Browser | Terminal, Statuszeile), die Antwort als Kennzahlen (`.md-figures`
+  aus `answer-shapes.css`), drei Fotos als Collage (`.lc-collage`, wie
+  `.md-picture-line` in `/app`) und der Reiseplan als Zeitstrahl
+  (`table.md-timeline`).
+- `#review` (02): derselbe Plan. Die Prüfer markieren „The Stelvio Pass.“
+  (`.cx-claim.is-major`), Claudes Notiz (`.lc-note`) steht in Lesegröße unter
+  dem Tag, danach der korrigierte Tag mit grünem Punkt (`.lc-fixed`) und der
+  Satz der Seite (`.lc-win`). In diesem Kapitel steht kein Foto: Der Fund ist
+  die Hauptsache der Seite und soll nicht untergehen (Max).
+- `#files` (03): `south-tyrol.pptx` in der Dateivorschau (`.lc-viewer`, Nachbau
+  von `file-viewer.js`: Name, „PowerPoint · 6 slides“, Download, Leiste mit
+  Miniaturen; die Folie ist in beiden Themes weiß, Schrift in `cqw`).
+- `#browser` (04): dasselbe Fenster mit offenem Browser-Reiter im Zustand „der
+  Agent wartet auf dich“ (`.lc-ws-turn`, „Take over“): ein Buchungsformular,
+  das an der Kartennummer endet. Was der Agent eingetragen hat, ist ein grauer
+  Balken, nie ein Name.
+- `#watch` (05): die Watch-Karte des Chats (`.lc-watchcard`, Worte von
+  `agent-watch.js`, `test_landing_watch_card_uses_the_words_of_the_app_card`
+  hält sie an der App), „4 weeks later“ als Tageskapsel wie `.thread-day` und
+  der Lauf, den die Watch schickt, mit Foto. Darunter „See a live Watch“, nur
+  wenn es eine laufende, kuratierte öffentliche Watch gibt (siehe unten).
+- `#models`: die Modellfamilien als Marken (`.lp-logos`). Kommt eine Familie in
+  die App, kommt ihre Marke hierher (`tests/test_navigation_settings_ui.py`).
+Die Leiste markiert `#harness` (Kapitel 01 bis 04 in einem `div.lc-part`) und
+`#watch` (`public-nav.js trackSections`); `#product` ist der Hero. Den
+Benchmark-Abschnitt gibt es auf der Landing nicht mehr (Max 2026-11-20),
+`/benchmark` ist im Footer verlinkt.
+
+Wahr und nachprüfbar ist, was der Prüfer im Beispiel behauptet (Stilfser Joch
+im Winter gesperrt, öffnet meist Ende Mai; Reschenpass ganzjährig offen; 48
+Kehren, 2.757 m). Budget, Hotel, Fahrzeiten und der Fund der Watch gehören zum
+Beispiel. Die fünf Fotos liegen unter `static/landing/` (Wikimedia Commons, CC
+BY-SA 4.0 bzw. CC BY 3.0, beschnitten); jede Bildzeile (`.lc-credit`) nennt
+Urheber und Lizenz mit Link. `tests/test_landing_chat.py` hält die Reihenfolge
+der Kapitel, den einen Weg in die App und Maße, Gewicht, `alt` und Nennung
+jedes Fotos.
+
+Stile: `static/css/landing-chat.css`, nach `landing.css` und
+`answer-shapes.css` geladen (Schrift, Tokens, Leiste, Feld und Marken kommen aus
+`landing.css`). Die Seite ist im letzten Bild gezeichnet; jeder Zustand davor
+steht unter `.lc-js`, das `static/js/landing-chat.js` nur setzt, wenn der Leser
+nicht um weniger Bewegung gebeten hat. Ohne Skript, im Lesemodus und für Crawler
+ist nichts versteckt und nichts wartet. Das Skript:
+- Stücke mit `data-reveal` erscheinen, sobald sie über dem angedockten Feld
+  stehen (`standsClear`: ein kurzes Stück ganz, ein hohes mit seinen ersten 110
+  px). Ein IntersectionObserver statt eines Scroll-Listeners: Ein Handy liefert
+  Scroll-Ereignisse im Nachlauf verspätet, die Stücke kämen hinter dem Finger.
+- Die Prüfung (`[data-review]`) läuft einmal auf der Uhr ab, sobald der Platz
+  der Notiz im Bild ist: `plain` → `reviewing` („Reviewing the answer…“ mit dem
+  Schimmer `.lp-agent-answer.is-reviewing`, 1150 ms) → `found`. Dann treten die
+  unbeanstandeten Tage in `--ink-3` zurück (Farbe, nicht Deckkraft: 4,5:1
+  bleibt), die Marke zieht sich von links auf, der Punkt von Tag 3 wird rot,
+  und die Tage nach der Notiz gleiten für sie auseinander (`transform` um
+  `--note-room`, das Skript misst die Höhe; kein neues Layout, unter dem Plan
+  bewegt sich nichts). Was danach kommt (`data-after-review`), wartet, bis der
+  Fund steht.
+- Die Watch-Karte (`[data-watch]`) wechselt mit der Scroll-Position zwischen
+  `proposal`, `pressing` und `watching` (`watchState`); die Worte beider
+  Zustände stehen im Markup (`data-when`), wo die deutsche Seite sie übersetzt.
+- Klicks auf `#landingField` und `#navCtaButton` setzen `skipLandingRedirect`.
+`tests/js/landing-chat.test.mjs` prüft das Skript mit eigenen Beobachtern und
+Timern.
 `/consensus-engine` und `/benchmark` beschreiben die Engine hinter Watches,
-Topics und API, nicht die Antworten der App. Der Log faltet sich mit einem
-Höhenübergang über `.lp-agent-log-items` (statt `hidden`), der Platz für den
-höchsten Zustand ist am
-Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
-trägt als `min-width` die gemessene Breite der Fassung, die es gerade zeigt
-(die Marken dahinter gleiten zum kürzeren fertigen Label, zurück ohne
-Übergang); gemessen wird mit `.is-measuring` (Übergänge aus) in der Sprache
-der Seite (`App.i18n.flush()`), danach steht die Karte wieder auf dem Frame
-des Lesers. In `/app` faltet der Aktivitätslog vermutlich genauso hart
-(gemeldet, nicht geändert). Seit 2026-10-26 (Barrierefreiheit P2) sind beide
-Szenen-Mockups `aria-hidden`: Sie zeigen den Frame, auf dem der Scroll steht,
-ein Screenreader las dort ein leeres Feld oder einen halben Lauf. Daneben sagt
-je ein `.lp-sr`-Block die fertige Szene in Worten (Frage; fertiger Turn mit
-Notizen, Antwort, Marken und Evidenzzeile), `tests/js/landing-scenes.test.mjs`
-hält ihn mit den gestreamten Sätzen im Gleichlauf. Szene 03 und Watch sprechen von „answer“ statt
-„consensus“. Seit dem Feinschliff (2026-10-02) ist die H1 `.lp-hero-claim` die lauteste
-Zeile der Seite (Display-Größe, zweiter Satz in `--ink-3`), die ganze Landing
-steht auf EINEM Grund (`--ground`; Abschnitte trennt eine auslaufende
-Haarlinie statt zweier Tonstufen), Szene 01 läuft mit 210vh (Desktop) bzw.
-170vh durch, Szene 02 angeheftet mit 250vh, beide enden ohne Leerlauf, ihre
-Schiene ist 1 px und trägt an
-der Spitze das Hauslicht. `.lp-reveal` blendet nicht mehr aus: Blöcke sind ab
-dem ersten Frame sichtbar, nur unterhalb der Falz startende (`.is-armed`)
-steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`),
-mit denselben Marken vor „2 AIs cross-check“ (im Link `aria-hidden` und ohne
-Namen, `marks_in_link`, damit sie nicht in den Namen des Links geraten).
+Topics und API, nicht die Antworten der App.
 Die Leiste beginnt seit 2026-10-25 mit der Sprungmarke `.skip-link` auf
 `#main` (a11y-Audit P3); jede Seite mit der Leiste hat genau ein
 `<main id="main">` (`tests/test_public_skip_link.py`).
@@ -821,13 +803,12 @@ Material: Panels (`.legal-panel`, `.notice`) sind Abschnitte mit Haarlinie, kein
 grauen Kästen mit Schiene; `body { overflow-x: clip }` als Netz gegen
 seitliches Schwimmen bei 320 px. Höhen im Seitenfluss der Landing sind `svh`,
 nie `dvh` (Safari-Leiste).
-Der Landing-Hero
-zeigt ein klickbares Input-Feld (Look des /app-Inputs, "Try the demo"-Button,
-Provider-Chips darunter). Seit 2026-10-04 öffnet ein Klick ins Feld die App
-(`#heroAskField`, Stretched-Link über `#heroField`, `/app?focus=1`), nur der
-Button `#heroDemoButton` startet die Demo (`/app?demo=1`). `?focus=1` setzt
-`app-init.js` den Cursor in `#questionInput`, sobald das Konto tippen darf
-(`updateQuestionInputAccess`); Gäste sehen das gesperrte Feld mit Login-Zeile;
+Das angedockte Feld der Landing (`#landingField`) öffnet die App mit
+`/app?focus=1`: `app-init.js` setzt den Cursor in `#questionInput`, sobald das
+Konto tippen darf (`updateQuestionInputAccess`); Gäste sehen das gesperrte Feld
+mit Login-Zeile. Die Demo (`/app?demo=1`) hat auf der Landing keinen Knopf
+mehr, sie startet in der App. Dort trägt „Try the demo“ die
+`.demo-action`-Gestaltung;
 Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
 `static/css/demo-action.css` (Import in `landing.css` und `static/style.css`):
 seit 2026-10-02 schlank: 36 px hoch wie der Senden-Kreis, Pille, 13 px/500,
@@ -843,16 +824,16 @@ Seit 2026-10-01 tragen die Bedienelemente, die eine Frage an die Modelle
 schicken, ein Licht von unten aus `static/css/send-glow.css` (ebenfalls in
 `landing.css` und `static/style.css` importiert): ein `::before` mit
 Hausgrün (`--agree`) als Schimmer und beleuchteter Unterkante, links unten am
-hellsten. Klasse `send-glow` auf `#sendButton`, `.lp-send` und „Try the
-demo“ (Markup in `landing.html` und `static/demo.js`). Zustände stehen beim
+hellsten. Klasse `send-glow` auf `#sendButton`, `.lp-send` (im angedockten Feld
+der Landing) und „Try the demo“ (`static/demo.js`). Zustände stehen beim
 Bedienelement: in `shell.css` steigt und sinkt das Licht am Senden-Knopf seit
 2026-10-31 im halben Takt (`send-glow-wait`, Grenzen per `--glow-rest`/
 `--glow-rise`), schwach, solange das Feld leer ist, heller mit Text, Hover am
 hellsten; ohne Bewegung steht es (leer halb so stark). Beim Stopp-Knopf atmet
 es seit 2026-10-02 nur in der Deckkraft (`send-glow-breathe`, kein
 umlaufendes Licht; Start-Ring und Stopp-Einblendung deutlich kleiner); in
-`landing.css` atmet `.lp-send` genauso und wird heller, sobald die
-Mockup-Frage fertig ist. Das Licht ist diesen Elementen vorbehalten.
+`landing.css` atmet `.lp-send` genauso; im angedockten Feld der Landing steht
+es immer auf `.is-ready`. Das Licht ist diesen Elementen vorbehalten.
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
@@ -888,10 +869,9 @@ drei strittige Stellen, 19 Claims und den daraus gerechneten Score 43/100
 (`consensus_scoring.py`); seitdem zeigt der Agent-Ablauf die Marken der
 Prüfer, und die Consensus-/Differences-Fixtures der Demo sind entfallen. Zahl
 und Einheit (°C, kW, m², im Deutschen auch % und €) trennt ein geschuetztes
-Leerzeichen, auch in Zitaten und Tests. Der Landing-Walkthrough (Szene 01–03)
-zeigt denselben Lauf (Szene 02 mit Suche, Arbeitsplatz, Skript, Befehl samt
-Ausgabe, dem Diagramm in der Antwort und der Excel-Datei), damit Hero, Demo
-und Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
+Leerzeichen, auch in Zitaten und Tests. Die Landing erzählt seit 2026-11-20
+einen eigenen Fall (eine Reise, siehe oben) und teilt keine Zahlen mehr mit
+der Demo. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
 `App.previewConsensusPreset('fast')`, einschliesslich aller sechs Familien
 und ihrer aktuellen Modelllabels (seit 2026-10-15; vorher Balanced). Eine eigene
 Open-Models-/Custom-Wahl wird dabei nur für die Vorführung durch Daily ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
@@ -934,55 +914,35 @@ danach der Login-Hinweis); der Consensus-Demo-Ablauf ist am 2026-10-25 mit dem M
 Sie bleibt vollständig clientseitig und ruft weder
 `recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
 damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
-Produktgeschichte führt danach über Ask/Run/Decide zum vierten
-Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
-erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
-ist in der öffentlichen Navigation erreichbar. Seit 2026-10-20 spricht das
-Beispiel die Sprache der echten Watches (Ziel „Waiting for“, Bewegung mit
-Quelle, Telegram-Gliederung, kein Score) und darunter steht „See a live
-watch“ – nur, wenn es eine laufende, kuratierte öffentliche Watch gibt
+„See a live Watch“ im Watch-Kapitel der Landing steht nur da, wenn es eine
+laufende, kuratierte öffentliche Watch gibt
 (`share_snapshots.live_watch_path`: aktive, öffentliche Watch, neuester Check,
 **nur indexierte Seiten** – dieselbe Menge wie `/questions` und Sitemap; eine
 nur per Link öffentliche Seite steht nie auf der Startseite, auch nicht als
 Ersatz; 15-min-Cache, Moderation leert ihn, eine Minute Pause nach einem
 Lesefehler, `stream(retry=None, timeout=3)`, damit die Landing nie auf
-Firestore wartet; `pages.landing_live_watch`). Dahinter steht der
-Benchmark-Abschnitt `#benchmark` (statisch, Mini-Diagramm aus
-`benchmark.css`, „See the full benchmark“): am 2026-11-01 mit dem einen Modus
-entfernt, seit 2026-11-02 zurück (Max: „Der Benchmark soll bleiben“), mit dem
-Satz, dass er die Konsens-Engine hinter Watches, Themen und API misst, nicht
-die Antworten des Agenten. Deshalb steht er hinter der Watch-Szene, die diese
-Engine bedient, und nicht zwischen den Szenen des Agenten. Der Live-Streifen aus dem Model Pulse darunter
-(03.10. bis 2026-11-01) bleibt weg, der Pulse ist ein Archiv. In Szene 01
-leuchtet „2 AIs cross-check“ seit 2026-11-02 nicht mehr auf (ein
-Überbleibsel des früheren Lauf-Schalters, das beim Scrollen flackerte).
+Firestore wartet; `pages.landing_live_watch`). Der Live-Streifen aus dem Model
+Pulse (03.10. bis 2026-11-01) bleibt weg, der Pulse ist ein Archiv.
 `/model-pulse` zeigt (als Archiv) Best-answer-Raten pro Lauf, in dem eine
 Familie war (siehe oben), und trennt dieses
 Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Seit
-2026-10-25 (a11y-Audit P1) sind die Balkendiagramme auf `/benchmark` und das
-kleine auf der Landing `aria-hidden`; je eine unsichtbare Tabelle
+2026-10-25 (a11y-Audit P1) sind die Balkendiagramme auf `/benchmark`
+`aria-hidden`; je eine unsichtbare Tabelle
 (`.bench-sr`, benannt per `aria-labelledby` nach dem Diagrammtitel) trägt
 dieselben Werte samt 95-%-Intervall, die großen Diagramme sind als Scroller
 fokussierbar. `tests/test_benchmark_charts.py` hält Balken und Tabelle gleich.
 Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
-Eingabe-Mockups im Landing-Hero, der Ask-Szene und dem Schlussfeld setzen die Reihe mit
+Das angedockte Feld der Landing setzt seine Reihe mit
 `partials/composer_marks_mockup.html` zusammen (gestapelte Provider-Icons vor
-den Prüfer-Worten, wie `#composerModelPicker`; das frühere
-`partials/composer_tools_mockup.html` mit Reasoning ist seit 2026-10-31 weg). Keine HTML-Kommentare mit Apostroph in diesen
-Templates: `scripts/i18n.py` liest sie sonst als offenen Attributwert. Seit 2026-10-30 hängt keine 36-px-Leiste
-mehr unter dem Feld (früher mit „Attach“). In der Ask-Szene bleiben die
-Marken nach dem Senden vor ihren Worten stehen, wie im Chat von `/app`
-(`#composerReviewers`); reine Agent-Ergebnis-Mockups bleiben ohne Eingabeleiste.
-Die Vorschau enthält keine scheinbar bedienbaren Schalter; der Hero-Input
-verlinkt weiterhin auf die echte Demo.
-Container-Queries kürzen die Werkzeuglabels anhand der tatsächlichen Breite
-des jeweiligen Mockups, damit die Ask-Vorschau auch auf Desktop und bei 320 px
-mit dem zusätzlichen Check-Sources-Eintrag nicht überläuft.
+den Prüfer-Worten, wie `#composerModelPicker`; im Link `aria-hidden` und ohne
+Namen, `marks_in_link`, damit sie nicht in den Namen des Links geraten). Keine
+HTML-Kommentare mit Apostroph in diesen Templates: `scripts/i18n.py` liest sie
+sonst als offenen Attributwert.
 **Seit 2026-07-25 spiegeln alle
-Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
-`landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
+Marketing-Mockups die Inline-Confidence-Darstellung der App** (das
+Review-Kapitel in `landing.html`, `product_result_mockup.html`
 und die beiden Mockups in `consensus-engine.html`): eine Antwort in voller
 Breite, Uneinigkeit als farbige `.cx-claim`-Marke im Satz, die Differences als
 zugeklapptes `details.consensus-differences-panel` darunter.
@@ -990,11 +950,8 @@ zugeklapptes `details.consensus-differences-panel` darunter.
 Verdict- und Differences-Vokabular (`--cx-mark-*` auf der Ampel
 `--agree`/`--partial`/`--dispute`, `--cx-major-line`, `--cx-flash`,
 `.diff-card.is-focused`) und wird von App und
-Landing importiert. Landing-
-spezifisch sind nur die Lesehilfe `.lp-mark-key` unter der Scene-03-Überschrift,
-das Einlaufen der Marker beim Scroll (`.lp-scene-visual.is-visible` /
-`.lp-slide.is-active`) und ein kleiner Handler in `landing.html`, der
-`[data-diff-open]` auf die passende Karte klickbar macht. Seit 2026-07-27 tragen alle diese Mockups
+Landing importiert. Auf der Landing zieht sich die Marke von links über ihre
+Worte (`landing-chat.css`). Seit 2026-07-27 tragen alle diese Mockups
 zusätzlich die rahmenlose Shell-Sprache: Der Verdict ist eine Zeile (Score-Ring
 + Headline + Judge-Fußnote) statt eines gefüllten Balkens. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
@@ -4252,8 +4209,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Marke. `leavePinnedCardByTab`: Tab hinter dem letzten Weg schließt die Karte
   und gibt den Fokus an die Marke zurück, ohne `preventDefault`, sodass der
   Browser hinter ihr weitergeht; Shift+Tab vor dem ersten bleibt an der Marke.
-  Die Landing-Karte (`landing-insights.js`) macht es ebenso (Name per
-  `aria-labelledby`, Tastatur am `click.detail === 0`). Escape nimmt eine
+  Escape nimmt eine
   Vorschau weg, ohne Zeiger oder Fokus zu bewegen (K6, Capture-Listener mit
   `preventDefault`; der nichtmodale Leser prüft `defaultPrevented` und bleibt
   offen). Ein Klick auf eine Widerspruchs-Passage öffnet seit 2026-10-23
@@ -4542,7 +4498,6 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   oder „No search needed"): GLM zeigte sonst nach der Such-Entscheidung
   „I'll answer directly." als einzige Live-Zeile.
   Modelle ohne Reasoning (z. B. Haiku, Mistral Small) liefern keine Zeile.
-  Die Landing-Schiene (`.lp-scene-rail`) zeichnet weiter die alte Linie.
   Reduzierte Bewegung: kein Pulsieren, kein Aufleuchten. Alles Drückbare gibt
   beim Druck auf 97 % nach (`base.css`, Spezifität 0, eigene Transforms
   gewinnen).

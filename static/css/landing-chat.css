@@ -1,0 +1,722 @@
+/* ==========================================================================
+   consens.io — the landing page as one chat (templates/landing.html)
+
+   One column on one ground, as /app: the reader's messages in a bubble on
+   the right, the agent's answer without a surface on the left, the field
+   docked under the thread. Every product piece is a rebuild of /app in its
+   own tokens and words: the answer's shapes are the app's (answer-shapes.css
+   .md-figures, .md-timeline), the marks are .cx-claim, the workspace panel
+   follows workspace-view.css, the file preview file-viewer.css, the Watch
+   card agent-landing-chat.css .agent-watch-card. This file lays the page out as a
+   thread; type, tokens, the bar and the field itself come from landing.css,
+   which the page loads first.
+
+   The page is drawn in its last frame. Every state before it stands under
+   .lc-js, which landing-chat.js sets unless the reader asked for less
+   motion: without the script nothing is hidden and nothing waits.
+   ========================================================================== */
+
+.lc-page { background: var(--ground); }
+.lc-page .lp-nav,
+.lc-page .lp-footer { background: var(--ground); }
+
+.lc {
+  --lc-col: min(720px, calc(100% - 2 * var(--page-gutter)));
+  /* Between two pieces of one answer. An answer is a few things with air
+     between them, never a block. */
+  --lc-gap: clamp(34px, 5.5vh, 50px);
+  position: relative;
+}
+
+/* landing.css lets these pieces fade in on load. Here the scroll reveals
+   them, and an animation's last frame would win over the armed state. */
+.lc .lp-agent-step,
+.lc .lp-agent-files { animation: none; }
+
+/* --------------------------------------------------------------------------
+   Intro: what it is, in one line. svh, never dvh (see landing.css).
+   -------------------------------------------------------------------------- */
+.lc-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(74vh - 54px);
+  min-height: calc(74svh - 54px);
+  padding: clamp(36px, 8vh, 88px) var(--page-gutter) clamp(20px, 4vh, 44px);
+  text-align: center;
+}
+.lc-intro .lp-eyebrow { margin-bottom: 20px; }
+.lc-intro-hint {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: clamp(22px, 3.4vh, 34px) 0 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+}
+/* A drawing in the line's own colour, not a masked surface: it keeps its
+   colour in contrast mode without a rule of its own. */
+.lc-intro-hint svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Three nods, then still: nothing on the page moves for ever. */
+  .lc-intro-hint svg { animation: lcNod var(--dur-beat) var(--ease-standard) var(--dur-light) 3; }
+}
+@keyframes lcNod { 50% { transform: translateY(5px); } }
+
+/* --------------------------------------------------------------------------
+   The thread
+   -------------------------------------------------------------------------- */
+.lc-thread {
+  display: flex;
+  flex-direction: column;
+  width: var(--lc-col);
+  margin: 0 auto;
+}
+/* A chapter, and the part of the page the bar marks: a box as tall as what
+   it holds, laid out like the thread it is a piece of. */
+.lc-part { display: flex; flex-direction: column; min-width: 0; }
+
+/* A chapter: the page's voice between the messages, centred like the day
+   line of a messenger. Two sentences, the second one step quieter, as the
+   claim at the top of the page. */
+.lc-beat {
+  /* Margin, not padding: the reveal measures the words, not the air above. */
+  margin: clamp(104px, 18vh, 176px) 0 clamp(38px, 6.5vh, 60px);
+  text-align: center;
+}
+.lc-beat--first { margin-top: clamp(20px, 5vh, 56px); }
+.lc-beat .lp-eyebrow {
+  margin-bottom: 14px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+}
+.lc-h2,
+.lc-win {
+  margin: 0 auto;
+  color: var(--ink);
+  font-size: clamp(1.5rem, 3.1vw, 2.125rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.14;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+/* Each sentence is one thought: the break belongs between them. */
+.lc-h2 span { display: inline-block; }
+.lc-h2 span + span { color: var(--ink-3); }
+.lc-beat--end { margin-bottom: clamp(14px, 3vh, 26px); }
+
+/* The reader's message. */
+.lc-user {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 clamp(26px, 4.5vh, 40px);
+}
+.lc-bubble {
+  max-width: min(84%, 500px);
+  margin: 0;
+  padding: 12px 17px;
+  border-radius: var(--radius-xl);
+  background: var(--raise);
+  color: var(--ink);
+  font-size: var(--font-size-read);
+  line-height: var(--line-height-ui);
+}
+
+/* The agent's turn: no surface, the page is its paper. Its pieces stand
+   apart; only what belongs to one statement sits close. */
+.lc-agent { display: flex; flex-direction: column; min-width: 0; }
+.lc-agent > * { margin: 0; }
+.lc-agent > * + * { margin-top: var(--lc-gap); }
+.lc-agent > .lc-clock + * { margin-top: 14px; }
+.lc-agent > .lc-review-head + * { margin-top: 22px; }
+.lc-agent > .lc-corrected + * { margin-top: 14px; }
+.lc-agent > .lc-photo + .lc-answer,
+.lc-agent > .lc-answer + .lc-photo { margin-top: clamp(22px, 3.5vh, 30px); }
+.lc-agent > .lc-photo + .lc-sent { margin-top: 16px; }
+
+.lc-answer { display: grid; gap: 18px; min-width: 0; }
+.lc-answer p { font-size: var(--font-size-read); }
+
+/* What the answer comes down to: one line, a step above the reading size. */
+.lc-answer .lc-verdict {
+  color: var(--ink);
+  font-size: var(--font-size-title);
+  line-height: 1.4;
+}
+.lc-verdict strong { font-weight: var(--font-weight-semibold); }
+
+/* Figures and the timeline are the app's shapes; here they take the answer's
+   size and no margin of their own (the gaps of the turn carry them). */
+.lc .md-figures { margin: 0; font-size: var(--font-size-read); gap: 1.2em 2.2em; }
+.lc .md-figures > div { flex: 0 1 auto; min-width: 7.5rem; }
+.lc table.md-timeline {
+  border-collapse: collapse;
+  color: var(--ink);
+  font-size: var(--font-size-read);
+  line-height: 1.7;
+  text-align: start;
+}
+.lc table.md-timeline td { text-align: start; }
+.lc table.md-timeline strong { font-weight: var(--font-weight-semibold); }
+.lc .lp-agent-files { gap: 12px 28px; }
+
+/* Three pictures on one line: one large, two beside it, filled edge to
+   edge (the app's collage, agent-workspace.css .md-picture-line). */
+.lc-collage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  height: clamp(230px, 52vw, 400px);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+.lc-collage-grid img { width: 100%; height: 100%; object-fit: cover; }
+.lc-collage-grid .is-lead { grid-row: span 2; }
+.lc-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+.lc-collage figcaption,
+.lc-photo figcaption,
+.lc-ws figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 9px;
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+/* Who took a picture and under which licence, each name a link to its file
+   on Wikimedia Commons. Quiet, but a link is still told apart by its line. */
+.lc-credit { color: var(--ink-3); font-weight: var(--font-weight-regular); }
+.lc-credit a {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .lc-credit a:hover { color: var(--ink); }
+}
+.lc-credit a:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+
+/* The way to a Watch that is running in public, under the example's own. */
+.lc-agent > .lc-sent + .lc-live { margin-top: 6px; }
+.lc-live { align-self: flex-start; height: 40px; font-size: var(--font-size-sm); }
+
+/* --------------------------------------------------------------------------
+   The workspace: the panel of /app in the thread. A window that floats, so
+   it has the one surface with a lift; its screen is the tinted field of the
+   panel. Title, the Browser | Terminal switch with the open tab raised, the
+   quiet line that says what the agent is doing there.
+   -------------------------------------------------------------------------- */
+.lc-ws-win {
+  border-radius: var(--radius-xl);
+  background: var(--ground);
+  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
+}
+.dark-mode .lc-ws-win { background: var(--side); box-shadow: var(--lift), 0 0 0 1px var(--line); }
+.lc-ws-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 10px 16px;
+}
+.lc-ws-title { color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.lc-ws-tabs {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+}
+.lc-ws-tabs span {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-3);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
+}
+.lc-ws-tabs .is-active { background: var(--ground); color: var(--ink); }
+.dark-mode .lc-ws-tabs .is-active { background: color-mix(in srgb, var(--ink) 12%, var(--raise)); }
+.lc-ws-tools { display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; min-height: 28px; }
+.lc-ws-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--font-size-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-ws-take {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+/* Whose turn it is, right above the picture (workspace-view.css
+   .workspace-view-turn): a dot in the pause tone while the agent waits for
+   the reader, a title over one quiet line, the one strong button. */
+.lc-ws-turn {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  margin: 2px 12px 12px 16px;
+}
+.lc-ws-turn-dot { align-self: start; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--partial); }
+.lc-ws-turn p { display: grid; min-width: 0; margin: 0; }
+.lc-ws-turn strong { color: var(--ink); font-size: var(--font-size-ui); font-weight: var(--font-weight-semibold); line-height: 18px; }
+.lc-ws-turn p span { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 16px; }
+.lc-ws-screen {
+  margin: 0 12px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--raise);
+}
+.lc-ws-win { padding-bottom: 12px; }
+
+/* The terminal, in the tones xterm takes in /app: the field's ground, the
+   page's ink. Columns as the script pads them. */
+.lc-ws-terminal {
+  padding: 14px 16px 15px;
+  color: var(--ink);
+  font: var(--font-weight-regular) var(--font-size-ui) / 1.65 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.lc-term-line { margin: 0; white-space: nowrap; }
+.lc-term-line.is-command::before { content: "$ "; color: var(--ink-3); }
+.lc-term-row { display: grid; grid-template-columns: 4ch 18ch 5ch 7ch; }
+.lc-term-row > :nth-child(n + 3) { text-align: end; }
+.lc-term-row.is-head { color: var(--ink-3); }
+.lc-term-line:last-child { margin-top: 0.5em; color: var(--ink-3); }
+
+/* The page the browser shows: a booking form, filled in up to the card.
+   What the agent typed is a grey bar, not a name: the picture shows that a
+   field is filled, never with what. */
+.lc-book { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr); background: var(--ground); }
+.dark-mode .lc-book { background: var(--raise); }
+.lc-ws-browser { box-shadow: inset 0 0 0 1px var(--line-soft); }
+.lc-book img { width: 100%; height: 100%; min-height: 250px; object-fit: cover; }
+.lc-book-body { display: grid; align-content: center; gap: 4px; padding: clamp(16px, 3vw, 24px); color: var(--ink-3); font-size: var(--font-size-ui); }
+.lc-book-body > b { margin-bottom: 2px; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.lc-book-fields { display: grid; gap: 8px; margin-top: 14px; }
+.lc-book-fields span {
+  display: grid;
+  grid-template-columns: 6.5em minmax(0, 1fr);
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.lc-book-fields small { color: var(--ink-3); font-size: var(--font-size-xs); }
+.lc-book-fields i { height: 8px; border-radius: 4px; }
+.lc-book-fields .is-filled i { width: 62%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.lc-book-fields .is-filled:nth-child(2) i { width: 84%; }
+/* The one field left open, where the agent stopped. */
+.lc-book-fields .is-open { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.lc-book-fields .is-open i { width: 1.5px; height: 16px; border-radius: 0; background: var(--ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .lc-book-fields .is-open i { animation: lpCaret var(--dur-spin) steps(1, end) 6; }
+}
+.lc-book-total { display: flex; align-items: baseline; justify-content: space-between; margin: 14px 0 0; }
+.lc-book-total b { color: var(--ink); font-size: var(--font-size-title); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+
+/* --------------------------------------------------------------------------
+   The file preview: the viewer of /app (file-viewer.js) in the thread. The
+   file's name and what it holds in the head, Download, a rail of thumbnails
+   and the page. A page of a file is white in both themes.
+   -------------------------------------------------------------------------- */
+.lc-viewer-glyph { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--ink-3); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.lc-viewer .lc-ws-head { gap: 10px; }
+.lc-viewer-tool {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  color: var(--ink);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+.lc-viewer-main { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; margin: 0 12px; }
+.lc-viewer-rail { display: grid; align-content: start; gap: 8px; margin: 0; padding: 2px; list-style: none; }
+.lc-viewer-rail li {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  aspect-ratio: 16 / 9;
+  padding: 0 9px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.lc-viewer-rail i { width: 78%; height: 3px; border-radius: 2px; background: rgba(10, 10, 10, 0.16); }
+.lc-viewer-rail i:first-child { width: 52%; height: 4px; background: rgba(10, 10, 10, 0.55); }
+.lc-viewer-rail i:nth-child(3) { width: 60%; }
+.lc-viewer-rail .is-title { background: #0a0a0a; }
+.lc-viewer-rail .is-title i { background: rgba(255, 255, 255, 0.4); }
+.lc-viewer-rail .is-title i:first-child { background: rgba(255, 255, 255, 0.9); }
+.lc-viewer-rail .is-active { box-shadow: 0 0 0 2px var(--ink); }
+.lc-viewer-stage {
+  display: grid;
+  align-content: center;
+  padding: clamp(12px, 2.4vw, 20px);
+  border-radius: var(--radius-sm);
+  background: var(--raise);
+}
+.lc-slide {
+  position: relative;
+  display: grid;
+  align-content: center;
+  aspect-ratio: 16 / 9;
+  padding: 0 8% 4%;
+  border-radius: 3px;
+  background: #fff;
+  color: #0a0a0a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 10px 26px -14px rgba(0, 0, 0, 0.32);
+  container-type: inline-size;
+}
+.lc-slide p { margin: 0; }
+.lc-slide-kicker { color: #5e5e5e; font-size: 2.5cqw; font-weight: var(--font-weight-semibold); }
+.lc-slide .lc-slide-title { margin-top: 1cqw; font-size: 8.4cqw; font-weight: var(--font-weight-semibold); line-height: 1.05; letter-spacing: -0.035em; }
+.lc-slide .lc-slide-line { margin-top: 2.2cqw; color: #5e5e5e; font-size: 3.1cqw; }
+/* The way there as a line with its three stops. */
+.lc-slide-route { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); margin: 6.4cqw 0 0; padding: 0; list-style: none; }
+.lc-slide-route::before { content: ""; position: absolute; top: 0.85cqw; left: 1cqw; width: 67.6%; height: 0.36cqw; background: #0a0a0a; }
+.lc-slide-route li { position: relative; display: grid; gap: 0.5cqw; padding-top: 3.6cqw; }
+.lc-slide-route li::before { content: ""; position: absolute; top: 0; left: 0; width: 2cqw; height: 2cqw; border-radius: 50%; background: #0a0a0a; }
+.lc-slide-route b { font-size: 3cqw; font-weight: var(--font-weight-semibold); }
+.lc-slide-route span { color: #5e5e5e; font-size: 2.4cqw; }
+.lc-slide-foot { position: absolute; right: 8%; bottom: 6%; left: 8%; display: flex; justify-content: space-between; color: #6b6b6b; font-size: 2.1cqw; }
+
+/* --------------------------------------------------------------------------
+   The review
+   -------------------------------------------------------------------------- */
+/* Who reviewed it and what they found, in the words of the row under an
+   answer in /app. */
+.lc-review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--ink);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-medium);
+}
+
+.lc-claims { gap: 14px; }
+
+/* The review, as it happens. The page stands in its last frame without
+   script and under reduced motion (the mark, the dimmed days, the note);
+   landing-chat.js plays the way there once, when the note's place has come into
+   view: "plain" (the plan, the reviewers reading), "reviewing" (a sheen
+   over the plan), "found". Everything before "found" is written here as
+   the exception. */
+.lc-review-state { display: grid; min-width: 0; }
+.lc-review-state > span {
+  grid-area: 1 / 1;
+  transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s;
+}
+.lc-review-state [data-when="reviewing"] { visibility: hidden; opacity: 0; color: var(--ink-3); }
+.lc-review-state .lp-review-tally { margin-left: 8px; font-size: var(--font-size-ui); font-weight: var(--font-weight-regular); }
+.lc-js .lc-review:not([data-phase="found"]) .lc-review-state [data-when="reviewing"] { visibility: visible; opacity: 1; }
+.lc-js .lc-review:not([data-phase="found"]) .lc-review-state [data-when="found"] { visibility: hidden; opacity: 0; }
+
+/* The plan with the reviewers' mark on it. The days nobody objected to
+   step back, one after the other, so the eye lands on the one that is
+   wrong and on the note under it. Tone, not a frame. */
+.lc-review table.md-timeline > tbody > tr > td {
+  transition: color var(--dur-light) var(--ease-standard) calc(var(--row, 0) * var(--dur-press) / 2),
+    transform var(--dur-light) var(--ease-out) var(--dur-light);
+}
+/* Until the note is there, the days after it stand where they would without
+   it: moved up by its height (landing-chat.js measures --note-room), not laid out
+   anew. The plan reads whole before the review, the days glide apart for
+   the note, and nothing under the plan ever moves. */
+.lc-js .lc-review:not([data-phase="found"]) .lc-claims tr.lc-note-row ~ tr > td {
+  transform: translateY(calc(-1 * var(--note-room, 0px)));
+  transition-delay: 0s;
+}
+.lc-review .lc-claims tr.lc-note-row > td:first-child::before { transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-light); }
+.lc-js .lc-review:not([data-phase="found"]) .lc-claims tr.lc-note-row > td:first-child::before { opacity: 0; transition-delay: 0s; }
+/* They step back to the page's second ink, not to a faded one: the plan
+   stays readable for everyone (4.5:1), which a lower opacity would not be. */
+.lc-review .lc-claims table.md-timeline > tbody > tr:not(.is-hit):not(.lc-note-row) > td { color: var(--ink-3); }
+.lc-review .lc-claims table.md-timeline > tbody > tr:not(.is-hit):not(.lc-note-row) > td:first-child::after {
+  background: var(--ink-3);
+  transition: background-color var(--dur-light) var(--ease-standard) calc(var(--row, 0) * var(--dur-press) / 2);
+}
+.lc-js .lc-review:not([data-phase="found"]) .lc-claims table.md-timeline > tbody > tr > td { color: var(--ink); }
+.lc-js .lc-review:not([data-phase="found"]) .lc-claims table.md-timeline > tbody > tr:not(.is-hit) > td:first-child::after { background: var(--ink); }
+.lc-claims tbody > tr:nth-child(2) { --row: 1; }
+.lc-claims tbody > tr:nth-child(5) { --row: 2; }
+.lc-claims tbody > tr:nth-child(6) { --row: 3; }
+
+/* The point of the day that is wrong takes the mark's colour: the one
+   glyph on the rail that carries the finding. */
+.lc-review .lc-claims table.md-timeline > tbody > tr.is-hit > td:first-child::after {
+  background: var(--dispute);
+  transition: background-color var(--dur-layer) var(--ease-standard) var(--dur-layer);
+}
+.lc-js .lc-review:not([data-phase="found"]) .lc-claims table.md-timeline > tbody > tr.is-hit > td:first-child::after { background: var(--ink); }
+
+/* The mark is drawn over its words from the left, as a marker is. It is a
+   picture of the app's mark (.cx-claim.is-major) in the same colour, on a
+   layer that can grow; it takes no room, so no line breaks anew. */
+.lc-review .cx-claim.is-major {
+  margin: 0 -0.14em;
+  padding: 0.1em 0.14em;
+  background-color: transparent;
+  background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow: none;
+  transition: background-size var(--dur-light) var(--ease-out) var(--dur-layer);
+}
+.lc-js .lc-review:not([data-phase="found"]) .cx-claim.is-major { background-size: 0% 100%; }
+
+/* The note's row carries the rail on, without a point of its own. */
+.lc-review table.md-timeline > tbody > tr.lc-note-row > td:first-child::after { display: none; }
+.lc-review table.md-timeline > tbody > tr.lc-note-row > td:first-child::before { top: -0.4em; bottom: 0.2em; }
+.lc-review table.md-timeline > tbody > tr.lc-note-row > td { padding-bottom: 1.6em; }
+
+/* A reviewer's note: the card a mark opens in /app, here standing open
+   under its day with its tip under the marked words, and at the answer's
+   reading size, because it is what this part of the page is about. It
+   floats, so it is one of the few things with a surface. It keeps its room
+   before it shows, so nothing under it moves. */
+.lc-note {
+  position: relative;
+  max-width: 540px;
+  margin: 8px 0 0;
+  padding: 16px 20px 18px;
+  border-radius: var(--radius-md);
+  background: var(--ground);
+  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
+  white-space: normal;
+  transform-origin: 68px 0;
+  transition: opacity var(--dur-layer) var(--ease-out) calc(var(--dur-layer) * 2.25),
+    transform var(--dur-light) var(--ease-out) calc(var(--dur-layer) * 2.25);
+}
+.dark-mode .lc-note { background: var(--raise); box-shadow: var(--lift), 0 0 0 1px var(--line); }
+.lc-note::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 62px;
+  width: 11px;
+  height: 11px;
+  border-top-left-radius: 3px;
+  background: inherit;
+  box-shadow: -1px -1px 0 0 var(--line-soft);
+  transform: rotate(45deg);
+}
+.dark-mode .lc-note::before { box-shadow: -1px -1px 0 0 var(--line); }
+.lc-answer .lc-note p { margin: 0; font-size: var(--font-size-read); line-height: 1.5; }
+.lc-answer .lc-note .lc-note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--font-size-ui);
+}
+.lc-note-head b { color: var(--dispute); font-weight: var(--font-weight-semibold); }
+.lc-note-by { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--ink-3); }
+.lc-note-by img { width: 14px; height: 14px; }
+.lc-js .lc-review:not([data-phase="found"]) .lc-note { opacity: 0; transform: translateY(-8px) scale(0.975); transition-delay: 0s; }
+
+/* The corrected day, in the plan's own shape. Its point is green: settled. */
+.lc-review .lc-fixed table.md-timeline > tbody > tr > td:first-child::after { background: var(--agree); }
+.lc-agent > .lc-fixed + .lc-answer { margin-top: clamp(22px, 3.5vh, 30px); }
+
+.lc-corrected { font-weight: var(--font-weight-medium); }
+
+/* The page speaking, not the agent. */
+.lc-win { max-width: 22ch; margin-top: clamp(72px, 12vh, 124px); text-align: center; }
+
+/* --------------------------------------------------------------------------
+   The Watch
+   -------------------------------------------------------------------------- */
+/* The card of a Watch the agent prepared (agent-landing-chat.css .agent-watch-card):
+   one raised block with the task, when it is done, its schedule and the one
+   button that starts it. The state lives in the words, not in a colour. */
+.lc-watchcard {
+  width: min(100%, 66ch);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+.lc-watchcard p { margin: 0; }
+.lc-watchcard-head { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.lc-watchcard-head svg,
+.lc-watchrun svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.lc-watchcard .lc-watchcard-task { margin-top: 6px; color: var(--ink); font-weight: var(--font-weight-semibold); }
+.lc-watchcard .lc-watchcard-goal { margin-top: 2px; }
+.lc-watchcard .lc-watchcard-settings { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
+/* As tall with the link alone as with the button: the card never changes
+   its height when the Watch starts. */
+.lc-watchcard-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-height: 40px; margin-top: 12px; }
+.lc-watchcard-start {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--ground);
+  font-weight: var(--font-weight-medium);
+  transition: transform var(--dur-press) var(--ease-standard), opacity var(--dur-press) var(--ease-standard);
+}
+.lc-watchcard[data-state="pressing"] .lc-watchcard-start { opacity: 0.72; transform: scale(0.96); }
+/* The words of both states stand in the markup, where a German page
+   translates them; the card's state shows one set. */
+.lc-watchcard[data-state="watching"] [data-when="proposal"],
+.lc-watchcard:not([data-state="watching"]) [data-when="watching"] { display: none; }
+.lc-watchcard-link {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* The day that starts later in the same chat, as a messenger separates its
+   days (agent-landing-chat.css .thread-day): one tinted capsule, no rule. */
+.lc-day { margin: clamp(64px, 10vh, 96px) 0 clamp(30px, 5vh, 44px); text-align: center; }
+.lc-day span {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+.lc-sent { color: var(--ink-3); font-size: var(--font-size-sm); }
+
+/* --------------------------------------------------------------------------
+   The model families: a few quiet lines of marks before the last line of
+   the page. landing.css draws a mark and its name (.lp-logo); here they
+   stand in the column of the thread, centred, as many to a line as fit.
+   -------------------------------------------------------------------------- */
+.lc-models .lp-logos { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; margin-top: 0; }
+.lc-models .lp-logo { width: 104px; gap: 10px; padding: 14px 4px; }
+.lc-models .lp-logo-mark { height: 30px; }
+.lc-models .lp-logo-mark img { height: 26px; }
+
+/* --------------------------------------------------------------------------
+   The field, docked under the thread as in /app. The thread runs out softly
+   behind it instead of being cut by its edge.
+   -------------------------------------------------------------------------- */
+.lc-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  padding: 10px 0 max(16px, env(safe-area-inset-bottom));
+}
+.lc-dock::before {
+  content: "";
+  position: absolute;
+  inset: -40px 0 0;
+  background: linear-gradient(to top, var(--ground) calc(100% - 52px), transparent);
+  pointer-events: none;
+}
+.lc-composer {
+  width: var(--lc-col);
+  margin: 0 auto;
+  padding: 15px 12px 11px 18px;
+  cursor: pointer;
+  transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
+}
+/* The words of an empty field: its placeholder, in the second ink. */
+.lc-composer .lp-composer-text { min-height: 0; padding-bottom: 8px; color: var(--ink-3); }
+.lc-composer .lp-composer-row { margin-left: -8px; }
+.lc-composer .lp-run-chip { margin-left: 0; }
+.lc-composer .lp-send { width: 36px; height: 36px; }
+.lc-composer .lp-send svg { width: 14px; height: 14px; }
+.lc-composer:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  .lc-composer:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
+  }
+}
+.lc-foot { padding: 0 var(--page-gutter) clamp(36px, 7vh, 72px); }
+
+/* --------------------------------------------------------------------------
+   Scroll reveal. Armed by landing-chat.js (.lc-js on <html>), so the page stands
+   whole without script and under reduced motion. A piece is in the flow
+   from the first frame and only changes opacity and offset: nothing below
+   it ever moves.
+   -------------------------------------------------------------------------- */
+.lc-js [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity var(--dur-light) var(--ease-out), transform calc(var(--dur-light) * 1.35) var(--ease-out);
+}
+.lc-js .lc-user[data-reveal] { transform: translateY(18px) scale(0.97); transform-origin: 100% 100%; }
+.lc-js [data-reveal].is-in { opacity: 1; transform: none; }
+
+/* The terminal prints its lines one after the other once it stands. */
+.lc-js .lc-ws .lc-term-line { opacity: 0; transition: opacity var(--dur-state) var(--ease-standard); }
+.lc-js .lc-ws.is-in .lc-term-line { opacity: 1; transition-delay: calc(var(--dur-layer) + var(--n, 0) * var(--dur-press)); }
+.lc-term-line:nth-child(2) { --n: 1; }
+.lc-term-line:nth-child(3) { --n: 2; }
+.lc-term-line:nth-child(4) { --n: 3; }
+.lc-term-line:nth-child(5) { --n: 4; }
+.lc-term-line:nth-child(6) { --n: 5; }
+.lc-term-line:nth-child(7) { --n: 6; }
+.lc-term-line:nth-child(8) { --n: 7; }
+
+@media (max-width: 600px) {
+  .lc-intro { min-height: calc(70vh - 54px); min-height: calc(70svh - 54px); }
+  .lc-bubble { max-width: 88%; font-size: var(--font-size-base); }
+  .lc-answer p,
+  .lc .md-figures,
+  .lc table.md-timeline { font-size: var(--font-size-base); }
+  .lc-answer .lc-verdict { font-size: var(--font-size-lg); }
+  .lc-review .lc-note { padding: 14px 16px 16px; }
+  .lc-viewer-main { grid-template-columns: minmax(0, 1fr); }
+  .lc-viewer-rail { display: none; }
+  /* The panel's head on a narrow panel: title and tabs keep the first row,
+     the line takes a second one. */
+  .lc-ws-head { flex-wrap: wrap; row-gap: 6px; }
+  .lc-ws-tools { flex-basis: 100%; }
+  .lc-ws-terminal { padding: 12px 12px 13px; font-size: var(--font-size-xs); }
+  .lc-term-row { grid-template-columns: 4ch 16ch 4ch 6ch; }
+  .lc-book { grid-template-columns: minmax(0, 1fr); }
+  .lc-book img { height: 150px; min-height: 0; }
+  /* The docked field stays one row on a phone: (+), the reviewers' words,
+     Send. landing.css gives the words a line of their own, which a field
+     that rides along the whole page cannot afford. */
+  .lc-composer .lp-composer-row { flex-wrap: nowrap; }
+  .lc-composer .lp-composer-row .lp-run-chip { order: 0; flex: 0 0 auto; margin-left: auto; padding-inline: 6px; }
+  .lc-composer .lp-composer-row .lp-send { margin-left: 0; }
+}

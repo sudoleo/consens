@@ -1,5 +1,6 @@
-"""Public input previews stay aligned with the app's start screen: one field, one row."""
-import re
+"""The landing page is one chat with the app's field docked under it, and the
+public input previews stay aligned with the app's start screen: one field,
+one row."""
 from pathlib import Path
 
 import pytest
@@ -8,27 +9,24 @@ from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server  # noqa: F401
 
 
-def scroll_ask(page, progress):
-    page.evaluate("""progress => {
-        const scene = document.querySelector('[data-scene="ask"]');
-        const stage = scene.querySelector('.lp-scene-stage');
-        const top = scene.getBoundingClientRect().top + scrollY;
-        const travel = scene.offsetHeight - stage.offsetHeight;
-        const target = travel > 40 ? top + progress * travel
-          : top - innerHeight * .82 + progress * (scene.offsetHeight + innerHeight * .5);
-        window.scrollTo({top: target, behavior: 'instant'});
-    }""", progress)
-    page.wait_for_function("""progress => {
-        const value = parseFloat(document.querySelector('[data-scene="ask"]').style.getPropertyValue('--sp'));
-        return Math.abs(value - progress) < .03;
-    }""", arg=progress)
+def scroll_to(page, selector, share):
+    """Bring the top of `selector` to `share` of the window's height, in
+    steps as a hand scrolls, so every piece on the way has been in view."""
+    page.evaluate("""async ([selector, share]) => {
+        const target = document.querySelector(selector).getBoundingClientRect().top + scrollY - innerHeight * share;
+        const start = scrollY;
+        for (let step = 1; step <= 8; step += 1) {
+            window.scrollTo({top: start + (target - start) * step / 8, behavior: 'instant'});
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+    }""", [selector, share])
 
 
 @pytest.mark.parametrize('width,dark,reduced', [
     (1440, False, False), (1440, True, False), (390, False, False),
     (320, True, False), (390, True, True),
 ])
-def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
+def test_landing_field_is_docked_like_the_app_composer(browser, phase4_server, width, dark, reduced):
     context = browser.new_context(viewport={'width': width, 'height': 900},
         reduced_motion='reduce' if reduced else 'no-preference')
     context.add_init_script("localStorage.setItem('theme', '" + ('dark' if dark else 'light') + "')")
@@ -39,75 +37,57 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
     try:
         page.goto(phase4_server + '/', wait_until='networkidle')
         page.evaluate('() => document.fonts.ready')
-        # No chat model chip in the mockups, so no reasoning level either: in
-        # /app it stands beside the model's name.
-        expect(page.locator('.lp-composer-preview .lp-composer-models')).to_have_count(3)
-        expect(page.locator('.lp-composer-preview svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
-        # The field opens the app with the caret in the composer; only the demo
-        # button starts the demo, and it sits above the field's link.
-        expect(page.locator('#heroAskField')).to_have_attribute('href', '/app?focus=1')
-        expect(page.locator('#heroDemoButton')).to_have_attribute('href', '/app?demo=1')
-        demo_box = page.locator('#heroDemoButton').bounding_box()
+        field = page.locator('#landingField')
+        # The field opens the app with the caret in the composer. It is the
+        # one way into the app besides the bar's button.
+        expect(field).to_have_attribute('href', '/app?focus=1')
+        expect(page.locator('main a[href^="/app"]')).to_have_count(1)
+        # No chat model chip, so no reasoning level either: in /app it stands
+        # beside the model's name. The mode lives in the (+) menu.
+        expect(field.locator('svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
+        expect(field.locator('.lp-mode-chip')).to_have_count(0)
+        # Daily's two reviewers (Claude and DeepSeek, the app's default)
+        # before their words, no chevron: the words are no picker of their own.
+        models = field.locator('.lp-composer-models')
+        expect(models.locator('img')).to_have_count(2)
+        assert models.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
+        assert models.evaluate('el => el.nextElementSibling.classList.contains("lp-run-chip")')
+        expect(field.locator('.lp-run-chip')).to_have_text('2 AIs cross-check')
+        expect(field.locator('.lp-run-chip i')).to_have_count(0)
+        # A phone leaves the count to the reviewers' words and shows no marks.
+        if width > 640:
+            expect(models).to_be_visible()
+        else:
+            expect(models).to_be_hidden()
+        # One row at every width: (+), the reviewers' words and Send.
+        centres = field.evaluate("""el => ['.lp-icon-btn', '.lp-run-chip', '.lp-send']
+            .map(selector => { const r = el.querySelector(selector).getBoundingClientRect(); return r.top + r.height / 2; })""")
+        assert max(centres) - min(centres) <= 2, centres
+
+        def docked():
+            return field.evaluate("""el => { const r = el.getBoundingClientRect();
+                return r.bottom <= innerHeight && r.bottom > innerHeight - 60 && r.left >= 0 && r.right <= innerWidth; }""")
+
+        # Docked from the first frame and all the way down the thread.
+        assert docked()
+        box = field.bounding_box()
         hit = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id',
-            [demo_box['x'] + demo_box['width'] / 2, demo_box['y'] + demo_box['height'] / 2])
-        assert hit == 'heroDemoButton'
-        field_box = page.locator('#heroField').bounding_box()
-        hit = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id',
-            [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
-        assert hit == 'heroAskField'
-        previews = page.locator('.lp-composer-preview:has(.lp-composer-models)')
-        # The hero, the demo's scene and the closing field show Daily's two
-        # reviewers (Claude and DeepSeek, the app's default and the demo's
-        # lineup).
-        for preview, marks in zip(previews.all(), (2, 2, 2), strict=True):
-            field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
-            # The mode lives in the (+) menu, as in /app.
-            expect(preview.locator('.lp-mode-chip')).to_have_count(0)
-            # The reviewers' marks stand inside the field, before their words
-            # (no chevron: the words are no picker of their own, as in /app).
-            models = field.locator('.lp-composer-models')
-            expect(models.locator('img')).to_have_count(marks)
-            assert models.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
-            assert models.evaluate('el => el.nextElementSibling.classList.contains("lp-run-chip")')
-            expect(field.locator('.lp-run-chip')).to_have_text('2 AIs cross-check')
-            expect(field.locator('.lp-run-chip i')).to_have_count(0)
-            # One field, one row: nothing below the field's own edge.
-            assert preview.evaluate("""el => {
-                const field = el.firstElementChild.getBoundingClientRect();
-                return Math.abs(el.getBoundingClientRect().bottom - field.bottom) < 1;
-            }""")
-            if width > 640:
-                # (+), the marks and the reviewers' words share one line.
-                centres = field.evaluate("""el => [':is(.lp-attach, .lp-icon-btn)', '.lp-composer-models', '.lp-run-chip']
-                    .map(selector => { const r = el.querySelector(selector).getBoundingClientRect(); return r.top + r.height / 2; })""")
-                assert max(centres) - min(centres) <= 2, centres
+            [box['x'] + box['width'] / 2, box['y'] + 24])
+        assert hit == 'landingField'
+        scroll_to(page, '#review', .2)
+        assert docked()
         output = Path('test-results/public-composer-mockups')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}-{"still" if reduced else "motion"}'
-        previews.nth(0).screenshot(path=str(output / f'hero-{suffix}.png'))
-        # A phone leaves the count to the reviewers' words and shows no marks.
-        ask_bar = page.locator('[data-scene="ask"] .lp-composer-models')
-        ask_field = page.locator('[data-scene="ask"] .lp-composer')
-        if reduced:
-            ask_field.scroll_into_view_if_needed()
-        else:
-            scroll_ask(page, .65)
-        expect(ask_field.locator('.lp-run-chip')).to_be_visible()
-        if width > 640:
-            expect(ask_bar).to_be_visible()
-        else:
-            expect(ask_bar).to_be_hidden()
-        # A screen reader reads the finished scene in words, never a frame
-        # of the typing (a11y audit P2).
-        expect(page.locator('[data-scene="ask"] .lp-ask-stage')).to_have_attribute('aria-hidden', 'true')
-        expect(page.locator('[data-scene="ask"] .lp-sr')).to_contain_text(
-            'Should we buy the flat we rent, or keep renting and invest the difference?')
-        previews.nth(1).screenshot(path=str(output / f'ask-{suffix}.png'))
-        if not reduced and width > 640:
-            # Sent, the marks stay before their words, as in a chat in /app.
-            scroll_ask(page, .96)
-            expect(page.locator('[data-scene="ask"] [data-ask-send]')).to_have_class(re.compile(r'(^|\s)is-pressed(\s|$)'))
-            expect(ask_bar).to_be_visible()
+        field.screenshot(path=str(output / f'docked-{suffix}.png'))
+        # At the end it rests under the last line of the page.
+        page.evaluate("window.scrollTo({top: document.documentElement.scrollHeight, behavior: 'instant'})")
+        assert page.evaluate("""() => {
+            const last = document.querySelector('.lc-beat--end').getBoundingClientRect();
+            const field = document.getElementById('landingField').getBoundingClientRect();
+            const footer = document.querySelector('footer').getBoundingClientRect();
+            return last.bottom <= field.top && field.bottom <= footer.top && field.top - last.bottom < 80;
+        }""")
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), page.evaluate("""() => [...document.querySelectorAll('body *')].filter(el => {
             const r = el.getBoundingClientRect(); return r.width && r.right > innerWidth + 1;
         }).slice(0, 12).map(el => ({tag:el.tagName, cls:el.className, right:el.getBoundingClientRect().right}))""")
@@ -123,8 +103,9 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
 
 @pytest.mark.parametrize('width,dark', [(1440, False), (390, True)])
 def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
-    """The Agent has one mode: one AI does the work, the AIs
-    you choose check it. The page says so and shows no score or judge."""
+    """The Agent has one mode: one AI does the work, the AIs you choose check
+    it. The page says so as one chat and shows no score or judge. Under
+    reduced motion it stands in its last frame."""
     context = browser.new_context(viewport={'width': width, 'height': 900}, reduced_motion='reduce')
     context.add_init_script("localStorage.setItem('theme', '" + ('dark' if dark else 'light') + "')")
     context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))
@@ -134,69 +115,139 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
     try:
         page.goto(phase4_server + '/', wait_until='networkidle')
         expect(page.locator('h1')).to_have_text('One AI does the work. Several check it.')
+        expect(page.locator('.lc-intro .lp-hero-kind')).to_have_text('Agent harness')
         expect(page.locator('meta[property="og:image:alt"]')).to_have_attribute(
             'content', 'One AI does the work. Several check it. | consens.io')
         main = page.locator('main')
         for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs', '3 AIs',
                      'Live from real runs', 'Proof, not promises', 'Why consens.io', 'leading AI providers'):
             expect(main).not_to_contain_text(gone)
-        # No Model Pulse strip; the benchmark says what it measures, behind
-        # the Watch scene its engine serves.
-        expect(page.locator('#benchmark')).to_contain_text('not the agent’s answers')
-        assert page.evaluate("""() => Boolean(document.getElementById('watch')
-            .compareDocumentPosition(document.getElementById('benchmark')) & Node.DOCUMENT_POSITION_FOLLOWING)""")
-        expect(page.locator('#benchmark a[href="/benchmark"]')).to_have_text('See the full benchmark')
+        # No Model Pulse strip and no benchmark section; the benchmark has its
+        # own page, linked from the footer.
+        expect(page.locator('#benchmark')).to_have_count(0)
         expect(page.locator('.lp-live-pulse')).to_have_count(0)
-        # Scene 02 ends on the reviewers' marks and the row under the answer.
-        run = page.locator('[data-run]')
-        expect(run.locator('[data-run-clock]')).to_have_text('Thought for 17s')
-        expect(run.locator('.cx-claim.is-audit.is-major')).to_have_count(1)
-        expect(run.locator('[data-run-evidence]')).to_contain_text('Notes 3')
-        expect(run.locator('[data-run-evidence]')).to_contain_text('Answers 2')
-        # Daily's two reviewers beside the clock, and the two AIs it asked.
-        expect(run.locator('[data-reviewer]')).to_have_count(2)
-        expect(run.locator('[data-run-count]')).to_have_text('2 answers')
-        # The run shows its search, its workspace (the script it wrote and
-        # ran) and what it shared, as the demo does: the chart in the answer,
-        # whole in the still frame, and the spreadsheet under it.
-        expect(run.locator('[data-run-item="search"]')).to_have_text(
-            'Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de')
-        expect(run.locator('[data-run-item="workspace"]')).to_have_text(
-            'Opened the workspace · Calculate 30 years of buying and renting')
-        expect(run.locator('[data-run-item="write"]')).to_have_text('Wrote the file buy_vs_rent.py')
-        expect(run.locator('[data-run-item="command"]')).to_contain_text('python buy_vs_rent.py')
-        chart = run.locator('[data-run-chart]')
-        expect(chart).to_be_visible()
-        expect(chart).to_have_class(re.compile(r'(^|\s)is-drawn(\s|$)'))
-        expect(chart.locator('.lp-agent-chart-note')).to_have_text('Buying pulls ahead in year 9')
-        expect(chart.locator('.lp-agent-chart-end')).to_have_text(['€485k', '€379k'])
-        assert chart.evaluate("""el => { const lines = el.querySelector('.lp-agent-chart-lines').getBoundingClientRect();
-            const plot = el.querySelector('.lp-agent-chart-plot').getBoundingClientRect();
-            return lines.width > 150 && Math.abs(lines.width - plot.width) < 1 && plot.height >= 96; }""")
-        expect(run.locator('[data-run-files]')).to_contain_text('buy-vs-rent.xlsx')
-        expect(run.locator('[data-run-files]')).to_contain_text('Excel · 2 sheets')
-        expect(run.locator('[data-run-closing]')).to_be_visible()
-        # Decide: the marked sentence opens the reviewer's note.
-        mark = page.locator('[data-diff-open="lpNoteTax"]')
-        mark.scroll_into_view_if_needed()
-        mark.click()
-        expect(page.locator('#lpNoteTax')).to_have_attribute('open', '')
-        expect(page.locator('#lpNoteTax')).to_contain_text('Saxony has charged 5.5% since January 2023.')
-        expect(page.locator('#lpNoteTax')).to_contain_text('Claude · Wrong')
-        # Decide is about reading the answer; a reviewer's pause is the harness's, as /app shows it.
-        expect(page.locator('.lp-steps > .lp-step')).to_have_count(4)
-        expect(page.locator('#harness .lp-pause-title')).to_have_text('A reviewer paused the work')
-        expect(page.locator('#harness .lp-harness-facts dt')).to_have_text(
-            ['Live review', 'Speed', 'Its own computer', 'Your accounts'])
-        expect(page.locator('.lp-section--hero .lp-hero-kind')).to_have_text('Agent harness')
+        expect(page.locator('footer a[href="/benchmark"]')).to_have_count(1)
+        # One thread of chapters, nothing armed: no piece waits to appear.
+        assert page.evaluate("() => [...document.querySelectorAll('section.lc-part')].map(el => el.id)") == [
+            'workspace', 'review', 'files', 'browser', 'watch', 'models']
+        assert not page.evaluate("() => document.documentElement.classList.contains('lc-js')")
+        assert page.evaluate("""() => [...document.querySelectorAll('[data-reveal]')]
+            .every(el => getComputedStyle(el).opacity === '1')""")
+        # 01: the agent's own computer, the answer in figures, the plan.
+        workspace = page.locator('#workspace')
+        expect(workspace.locator('.lc-ws-tabs .is-active')).to_have_text('Terminal')
+        expect(workspace.locator('.lc-ws-terminal')).to_contain_text('python plan_trip.py')
+        expect(workspace.locator('.md-figures dd')).to_have_text(['€1,210', '€290', '17 h'])
+        expect(workspace.locator('table.md-timeline tbody tr')).to_have_count(5)
+        # 02: the reviewers' one mark on the plan and the note under it; the
+        # days nobody objected to keep a readable ink.
+        review = page.locator('#review')
+        expect(review.locator('.lc-review-state [data-when="found"]')).to_be_visible()
+        expect(review.locator('.lc-review-state [data-when="reviewing"]')).to_be_hidden()
+        expect(review.locator('.cx-claim.is-audit.is-major')).to_have_text('The Stelvio Pass.')
+        expect(review.locator('.lc-note')).to_contain_text('usually reopens at the end of May')
+        expect(review.locator('.lc-note')).to_be_visible()
+        expect(review.locator('.lc-fixed')).to_contain_text('Lake Resia.')
+        assert review.evaluate("""el => {
+            const mark = getComputedStyle(el.querySelector('.cx-claim')).backgroundSize;
+            const quiet = getComputedStyle(el.querySelector('.lc-claims tbody tr td:last-child')).color;
+            const loud = getComputedStyle(el.querySelector('.lc-claims tr.is-hit td:last-child')).color;
+            return mark === '100% 100%' && quiet !== loud;
+        }""")
+        # No photo beside the finding: it is what this chapter is about.
+        expect(page.locator('#review img[src*="/static/landing/"]')).to_have_count(0)
+        # 03 and 04: a real file in its preview, the browser stopped at the payment.
+        expect(page.locator('#files .lc-viewer')).to_contain_text('south-tyrol.pptx')
+        expect(page.locator('#files .lc-viewer')).to_contain_text('PowerPoint · 6 slides')
+        expect(page.locator('#browser .lc-ws-tabs .is-active')).to_have_text('Browser')
+        expect(page.locator('#browser .lc-ws-turn')).to_contain_text('The agent stopped at the payment')
+        expect(page.locator('#browser .lc-ws-take')).to_have_text('Take over')
+        # 05: the Watch card in its running state, then what the Watch sent.
+        card = page.locator('#watch .lc-watchcard')
+        expect(card).to_have_attribute('data-state', 'watching')
+        expect(card.get_by_text('Watch running')).to_be_visible()
+        expect(card.get_by_text('Start Watch')).to_be_hidden()
+        expect(page.locator('#watch')).to_contain_text('The Stelvio Pass is open.')
+        # The model families, each with its mark.
+        expect(page.locator('#models .lp-logo')).to_have_count(11)
+        # Every photo loads once it has come into view, with its credit.
+        page.evaluate("""async () => {
+            for (let y = 0; y <= document.documentElement.scrollHeight; y += 500) {
+                window.scrollTo({top: y, behavior: 'instant'});
+                await new Promise(resolve => setTimeout(resolve, 60));
+            }
+        }""")
+        page.wait_for_function("""() => [...document.querySelectorAll('img[src*="/static/landing/"]')]
+            .every(img => img.complete && img.naturalWidth > 0)""")
+        expect(page.locator('img[src*="/static/landing/"]')).to_have_count(5)
+        expect(page.locator('.lc-credit a[href^="https://commons.wikimedia.org/wiki/File:"]')).to_have_count(5)
         output = Path('test-results/landing-one-mode')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}'
-        page.locator('.lp-scene-02 .lp-scene-visual').screenshot(path=str(output / f'run-{suffix}.png'))
-        page.locator('.lp-scene-03').screenshot(path=str(output / f'decide-{suffix}.png'))
-        page.locator('.lp-section--hero').screenshot(path=str(output / f'hero-{suffix}.png'))
-        page.locator('#harness').screenshot(path=str(output / f'harness-{suffix}.png'))
+        page.locator('.lc-intro').screenshot(path=str(output / f'hero-{suffix}.png'))
+        page.locator('#review .lc-claims').screenshot(path=str(output / f'review-{suffix}.png'))
+        page.locator('#watch .lc-watchcard').screenshot(path=str(output / f'watch-{suffix}.png'))
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        assert errors == []
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_landing_plays_the_review_and_starts_the_watch_along_the_scroll(browser, phase4_server, width):
+    context = browser.new_context(viewport={'width': width, 'height': 900})
+    context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))
+    page = context.new_page()
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.goto(phase4_server + '/', wait_until='networkidle')
+        page.evaluate('() => document.fonts.ready')
+        review = page.locator('#review .lc-review')
+        expect(review).to_have_attribute('data-phase', 'plain')
+        # Before the review the plan reads whole: the days after the note
+        # stand right under day 3.
+        scroll_to(page, '#review', .1)
+        # The cells are what moves (a transform, no new layout), so they are
+        # what is measured.
+        rows = "() => [...document.querySelectorAll('#review .lc-claims tbody tr:not(.lc-note-row) > td:last-child')].map(cell => cell.getBoundingClientRect().top)"
+        before = page.evaluate(rows)
+        gaps = [b - a for a, b in zip(before, before[1:])]
+        assert max(gaps) - min(gaps) < 40, gaps
+        # The next chapter's own box: it carries no offset of a piece that
+        # is still to appear.
+        under = "() => document.getElementById('files').getBoundingClientRect().top + scrollY"
+        resting = page.evaluate(under)
+        # The review plays once the place of the note is in view: the
+        # reviewers read, then their finding is there.
+        scroll_to(page, '#review .lc-claims', .16)
+        expect(review).to_have_attribute('data-phase', 'found', timeout=5000)
+        expect(review.locator('.lc-note')).to_be_visible()
+        page.wait_for_function("() => getComputedStyle(document.querySelector('#review .lc-note')).opacity === '1'")
+        after = page.evaluate(rows)
+        assert after[3] - after[2] > gaps[2] + 60, (before, after)
+        # The correction waits until the finding has landed, then comes like
+        # any other piece: once it stands above the field (on a phone it is
+        # still under it). Nothing under the plan has moved for the note.
+        fixed = review.locator('.lc-fixed')
+        expect(fixed).to_have_class('lp-agent-answer lc-answer lc-fixed')
+        expect(review).to_have_attribute('data-settled', 'true', timeout=5000)
+        scroll_to(page, '#review .lc-fixed', .5)
+        expect(fixed).to_have_class('lp-agent-answer lc-answer lc-fixed is-in', timeout=5000)
+        assert abs(page.evaluate(under) - resting) < 1
+        # The Watch card: its proposal while it comes up, the running Watch
+        # once it has stood in view, and back again with the scroll.
+        card = page.locator('#watch .lc-watchcard')
+        scroll_to(page, '#watch .lc-watchcard', .7)
+        expect(card).to_have_attribute('data-state', 'proposal')
+        expect(card.get_by_text('Start Watch')).to_be_visible()
+        height = card.bounding_box()['height']
+        scroll_to(page, '#watch .lc-watchcard', .2)
+        expect(card).to_have_attribute('data-state', 'watching')
+        expect(card.get_by_text('Watch running')).to_be_visible()
+        assert abs(card.bounding_box()['height'] - height) < 1
+        scroll_to(page, '#watch .lc-watchcard', .7)
+        expect(card).to_have_attribute('data-state', 'proposal')
         assert errors == []
     finally:
         context.close()
@@ -204,8 +255,8 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
 
 @pytest.mark.parametrize('width', [375, 390])
 def test_landing_never_pans_sideways_while_scrolling(browser, phase4_server, width):
-    # The pinned scenes' progress rail carried its light 6px past its tip;
-    # at a full rail that widened the page and a phone panned sideways.
+    # A piece that is wider than a phone (the terminal's columns, a figure
+    # that does not break) would widen the page and let it pan sideways.
     context = browser.new_context(viewport={'width': width, 'height': 812})
     context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))
     page = context.new_page()
@@ -243,14 +294,20 @@ def test_landing_bar_holds_still_when_it_marks_another_section(browser, phase4_s
                     const r = a.getBoundingClientRect(); return [a.textContent.trim(), r.left, r.width]; }),
             });
             const top = read();
-            const watch = document.getElementById('watch');
-            window.scrollTo({top: watch.getBoundingClientRect().top + scrollY, behavior: 'instant'});
-            await frame(); await frame();
-            return [top, read()];
+            const marks = [];
+            for (const id of ['review', 'watch']) {
+                const part = document.getElementById(id);
+                window.scrollTo({top: part.getBoundingClientRect().top + scrollY, behavior: 'instant'});
+                await frame(); await frame();
+                marks.push(read());
+            }
+            return [top, ...marks];
         }""")
-        top, watch = boxes
-        assert top['current'] == ['Product'] and watch['current'] == ['Watches']
-        assert watch['boxes'] == top['boxes']
+        top, harness, watch = boxes
+        # The chapters of the agent at work are one part of the page, the
+        # Watch another.
+        assert top['current'] == ['Product'] and harness['current'] == ['Harness'] and watch['current'] == ['Watches']
+        assert watch['boxes'] == top['boxes'] == harness['boxes']
         # The invisible second line does not reach the accessible name.
         expect(page.get_by_role('link', name='Product', exact=True)).to_have_count(1)
     finally:

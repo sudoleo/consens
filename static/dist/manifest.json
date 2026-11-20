@@ -1,5 +1,5 @@
 {
-  "sources": "c31a93c67fec",
+  "sources": "4926ec1d8ed3",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -39,6 +39,7 @@
     "static/css/file-viewer.css",
     "static/css/first-run.css",
     "static/css/foundation.css",
+    "static/css/landing-chat.css",
     "static/css/landing.css",
     "static/css/layout.css",
     "static/css/letter-clouds.css",

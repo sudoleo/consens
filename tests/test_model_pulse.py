@@ -232,11 +232,11 @@ def test_pulse_api_and_failure_are_honest(client):
     assert http.get("/api/model-pulse").status_code == 503
 
 
-def test_landing_has_the_benchmark_but_not_the_pulse_strip(client, monkeypatch):
+def test_landing_shows_no_pulse_strip_and_links_the_benchmark(client, monkeypatch):
     # The pulse is an archive, so the landing page shows no live strip and
     # does not read the ledger (a broken ledger cannot touch it). The
-    # benchmark stays (Max): it is static and says it tests the consensus
-    # engine, not the agent's answers.
+    # benchmark has its own page; the landing page, one chat since
+    # 2026-11-20, only links it from its footer.
     http, state = client
     import app.services.llm.agent_client as agent_client
     monkeypatch.setattr(agent_client, "agent_model_label", lambda: "Agent")
@@ -245,6 +245,6 @@ def test_landing_has_the_benchmark_but_not_the_pulse_strip(client, monkeypatch):
     assert response.status_code == 200
     page = response.text
     assert 'id="watch"' in page
-    assert 'id="benchmark"' in page and "not the agent’s answers" in page
+    assert 'id="benchmark"' not in page and 'href="/benchmark"' in page
     assert "lp-live-pulse" not in page and 'class="lp-hero-pulse"' not in page
     assert "Live from real runs" not in page

@@ -388,7 +388,7 @@ def test_the_landing_links_a_live_watch_and_never_a_paused_one():
     assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
 
     landing = read("templates/landing.html")
-    assert '{% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}"' in landing
+    assert '{% if live_watch_path %}<a class="lp-link lc-live" href="{{ live_watch_path }}"' in landing
 
 
 def test_the_landing_never_links_a_watch_page_nobody_curated():

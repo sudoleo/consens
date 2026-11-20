@@ -672,22 +672,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Runs erzeugt keinen Fehlerreport.
 
 ## Öffentliche Seiten
-- [ ] Demo-Einstieg auf `/` und `/app`: gleiches Play-Symbol, Theme-Kontrast,
-      abgerundete Form und sichtbarer Tastaturfokus. „Try the demo“ wird in der
-      App bis 640 px zu „Demo“; bei 320/390 px bleiben Demo und Senden innerhalb
-      des Composers. Touch-Ziele sind mindestens 44 px hoch. Klick/Enter startet
-      den bestehenden Demo-Ablauf, ohne dass der Einstieg doppelt auslöst.
+- [ ] Demo-Einstieg in `/app`: Play-Symbol, Theme-Kontrast, abgerundete Form
+      und sichtbarer Tastaturfokus. „Try the demo“ wird bis 640 px zu „Demo“;
+      bei 320/390 px bleiben Demo und Senden innerhalb des Composers.
+      Touch-Ziele sind mindestens 44 px hoch. Klick/Enter startet den
+      bestehenden Demo-Ablauf, ohne dass der Einstieg doppelt auslöst.
 - [ ] `/`, `/about`, `/ai-model-comparison`, `/consensus-engine`, `/benchmark`,
       `/privacy`, `/terms`, `/imprint` und öffentliche Share-/Unavailable-Seiten
       verwenden dieselbe Navigation, denselben Footer und die an `/app`
       angelehnten Tokens. Light/Dark folgen der gespeicherten App-Einstellung
       bzw. ohne Einstellung dem System-Theme.
 - [ ] Desktop und Mobile haben keinen horizontalen Overflow; Focus States sind
-      auf Links, Buttons und Formularfeldern klar sichtbar. Landingpage und
-      Consensus-Engine-Seite zeigen dieselbe aktuelle Consensus-/Differences-
-      Darstellung. Der Landingpage-Walkthrough verwendet die aktuellen
-      Modellnamen, nennt Detail-/Widerspruchsmarker „fine rule“ bzw. „heavier
-      amber rule“ und hält Einzelantworten im Agent Mode standardmäßig verborgen.
+      auf Links, Buttons und Formularfeldern klar sichtbar.
 - [ ] Agreement-Verdict, Claim-/Difference-Marker und Focus-Wash sind in App,
       Landing und Consensus-Engine-Mockup visuell identisch; Änderungen kommen
       aus `components-consensus-visuals.css`, ohne Drift einer Landing-Kopie.
@@ -839,15 +835,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Inline-Marker halten ihre Karte fest, deren „Contradictions“ öffnet die
       richtige Karte im Leser. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
-- [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
-      Notiz, Suche, Arbeitsplatz, „Wrote the file“, `$ python buy_vs_rent.py`
-      mit Ausgabe Zeile für Zeile, die sich danach einklappt, zwei Modell-Icons,
-      dann klappen die Schritte ein und die Antwort kommt: Diagramm, dessen
-      Linien mit dem Scroll wachsen, Excel-Datei, Marken, „Notes 3 · Answers 2“)
-      ohne Höhensprung der Karte; „Without the reviewers…“ erst mit den Marken.
-      Auf dem Handy und im flachen Fenster (unter 760 px Höhe) ist die Szene
-      nicht angeheftet und spielt, während die Karte hereinscrollt. Reduced
-      Motion zeigt den fertigen Turn mit ganzem Diagramm. Hell/Dunkel, Deutsch.
+- [ ] Landing als Chat (`/`, `/de/`): Unter dem Hero läuft eine Spalte, das
+      Eingabefeld ist die ganze Seite über unten angedockt und ruht am Ende
+      unter „Try it with your own question.“; ein Klick öffnet `/app` mit dem
+      Cursor im Feld. Beim Scrollen erscheinen die Stücke über dem Feld,
+      nichts darunter verschiebt sich. Im Kapitel „Review“ steht zuerst der
+      ganze Plan mit „Reviewing the answer…“, dann treten vier Tage zurück,
+      die rote Marke zieht sich über „The Stelvio Pass.“, die Notiz kommt
+      darunter, und erst danach die Korrektur. Die Watch-Karte wechselt beim
+      Weiterscrollen von „Start Watch“ zu „Watch running“ und zurück. Reduced
+      Motion und abgeschaltetes JavaScript zeigen die ganze Seite im
+      Endzustand. Hell/Dunkel, Deutsch, 390 px und 320 px ohne seitliches
+      Scrollen; die Leiste markiert „Harness“ und „Watches“.
 - [ ] Modellantwort-Sidebar mit sechs Antworten: 520–720 px Dockbreite ab
       1400 px, ruhige einzeilige Kopfzeile und 14-px-Lesetext. Chat und
       Composer bleiben neben der Sidebar sichtbar. Light/Dark, eingeklappte
@@ -936,9 +935,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       New chat erscheint erst angemeldet. Beide Buttons wirken flach und bleiben
       auch bei 320 px neben den Aktionen einer fertigen Antwort ohne Überlappung
       bedienbar. Light/Dark, Login/Logout und Fokusrückgabe nach Schließen prüfen.
-- [ ] Landing: Der Benchmark-Abschnitt steht hinter `#watch` (Etikett
-      „Benchmark“), ohne Live-Streifen; im Hero steht keine Pulse-Zeile
-      mehr. `/model-pulse` zeigt Best-answer-Raten (Picks ÷ Läufe der Familie)
+- [ ] Landing: kein Benchmark-Abschnitt und keine Pulse-Zeile; `/benchmark`
+      ist im Footer verlinkt. `/model-pulse` zeigt Best-answer-Raten (Picks ÷ Läufe der Familie)
       mit Band und Fair-Share-Tick; Zeitraum/Runs/„Only runs with“/Sortierung
       wechseln ohne Reload, die URL folgt, ohne JS funktioniert das Formular.
       Mit „Only runs with“ ist die Rivalen-Zeile markiert und jede andere zeigt

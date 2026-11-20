@@ -103,8 +103,7 @@ Premium ist: `agent_model_options()` setzt dort `premium: false` und
 dasselbe Modell Pro. Der Standard trägt die Registry-ID wie alle
 anderen Modelle (einmal in der Liste); die OpenRouter-ID wird für ältere Clients
 weiter aufgelöst. Er steht im eingebauten Katalog `agent_model_catalog.json`,
-damit der Agent auch ohne Live-Katalog startet; die Landing-Mockups zeigen sein
-Label (`agent_model_label()`). Hilfsagenten (Delegation) sind mit dem neuen Standard nicht geprüft;
+damit der Agent auch ohne Live-Katalog startet. Hilfsagenten (Delegation) sind mit dem neuen Standard nicht geprüft;
 die Delegation ist ohnehin standardmäßig aus.
 
 **Auto zeigt seine Stufe.** Im Picker, im (+)-Menü und auf der

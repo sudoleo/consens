@@ -13,9 +13,8 @@ download agrees:
 writes, in English and German, static/demo/buy-vs-rent.<lang>.png (the
 chart), .pdf (the spreadsheet as the shared converter would show it) and
 .xlsx (the spreadsheet itself: its 30 years are formulas over the
-assumptions, so a changed assumption recalculates), the chart as the landing
-page draws it (templates/partials/demo_chart_mockup.html), and prints the
-numbers the demo's texts quote.
+assumptions, so a changed assumption recalculates), and prints the numbers
+the demo's texts quote.
 
 The agent's calculation keeps one mistake on purpose, the one its reviewers
 mark: Saxony's property transfer tax has been 5.5 % since 2023, the agent
@@ -274,71 +273,6 @@ def chart(i: Inputs, lang: str) -> Image.Image:
         label = words["ahead"].format(year=year)
         draw.text((cx - s(20), cy - s(34)), label, font=font(24, b"SemiBold"), fill=INK, anchor="rb")
     return image.resize((WIDTH, HEIGHT), Image.LANCZOS)
-
-
-# ---- the chart as the landing page draws it --------------------------------
-MOCK_CHART = ROOT / "templates" / "partials" / "demo_chart_mockup.html"
-MOCK_TOP = 500_000
-
-
-def mock_chart(i: Inputs) -> str:
-    """The answer's chart as markup, for the Agent turn on the landing page.
-
-    A picture of 1600 px shown 570 px wide has letters of 8 px, and it stays
-    white on the dark page. Drawn as markup it is sharp at the size of the
-    mockup, takes the page's ink, and its lines can grow with the scroll
-    (landing.css .lp-agent-chart, landing-scenes.js). The numbers are this
-    model's and the words TEXT["en"]; their German stands in
-    app/i18n/de/page-home.json, and tests/test_demo_assets.py holds both to
-    the model. Every label is a block of its own, so the dictionary has one
-    entry a label, not one for the whole plot.
-    """
-    words = TEXT["en"]
-    rows = years(i)
-    up = lambda value: f"{value / MOCK_TOP * 100:.1f}%"  # noqa: E731
-    along = lambda year: f"{year / YEARS * 100:.2f}".rstrip("0").rstrip(".") + "%"  # noqa: E731
-    line = lambda values: " ".join(  # noqa: E731
-        f"{year},{(MOCK_TOP - value) / 1000:.1f}" for year, value in enumerate(values))
-    colour = lambda rgb: "#%02x%02x%02x" % rgb  # noqa: E731
-    ahead = ahead_from(rows)
-    grid = "".join(f"M0 {(MOCK_TOP - value) // 1000}H{YEARS}" for value in (0, MOCK_TOP // 2, MOCK_TOP))
-    # The origin is a plain 0 for both axes: "€0" has no word a dictionary
-    # could turn, and would stand beside "250 Tsd. €" on the German page.
-    ticks = "".join(f'<div class="lp-agent-chart-y" style="bottom:{up(value)}">'
-                    f'{thousands(value, "en") if value else 0}</div>'
-                    for value in (0, MOCK_TOP // 2, MOCK_TOP))
-    years_axis = "".join(
-        f'<div class="lp-agent-chart-x" style="left:{along(year)}">'
-        f'{year if year < YEARS else f"{year} {words["years"].lower()}"}</div>'
-        for year in range(0, YEARS + 1, 10))
-    ends = "".join(f'<div class="lp-agent-chart-end" style="bottom:{up(value)}">{thousands(value, "en")}</div>'
-                   for value in (rows[-1].buying, rows[-1].savings))
-    crossing = f"left:{along(ahead)};bottom:{up(rows[ahead].buying)}"
-    return "\n".join([
-        "{# Written by scripts/demo_assets.py (mock_chart) from the model of the demo.",
-        "   Change the model or the markup there and run it again, never this file. #}",
-        f'<figure class="lp-agent-chart" data-run-chart data-crossing="{ahead / YEARS:.3f}" data-stay="{i.stay / YEARS:.3f}"'
-        f' style="--chart-buying:{colour(BLUE)};--chart-renting:{colour(ORANGE)}">',
-        '  <figcaption class="lp-agent-chart-key">'
-        f'<div class="is-buying">{words["buying"]}</div>'
-        f'<div class="is-renting">{words["renting"]}</div></figcaption>',
-        '  <div class="lp-agent-chart-plot">',
-        f'    <svg viewBox="0 0 {YEARS} {MOCK_TOP // 1000}" preserveAspectRatio="none" focusable="false">'
-        f'<path class="lp-agent-chart-grid" d="{grid}"/>'
-        f'<path class="lp-agent-chart-stay" d="M{i.stay} 0V{MOCK_TOP // 1000}"/></svg>',
-        f'    <svg class="lp-agent-chart-lines" viewBox="0 0 {YEARS} {MOCK_TOP // 1000}" preserveAspectRatio="none" focusable="false">'
-        f'<polyline class="is-renting" points="{line([row.savings for row in rows])}"/>'
-        f'<polyline class="is-buying" points="{line([row.buying for row in rows])}"/></svg>',
-        f"    {ticks}",
-        f"    {years_axis}",
-        f"    {ends}",
-        f'    <div class="lp-agent-chart-stay-label" style="left:{along(i.stay)}">{words["stay"].format(years=i.stay)}</div>',
-        f'    <div class="lp-agent-chart-dot" style="{crossing}"></div>',
-        f'    <div class="lp-agent-chart-note" style="{crossing}">{words["ahead"].format(year=ahead)}</div>',
-        "  </div>",
-        "</figure>",
-        "",
-    ])
 
 
 # ---- the spreadsheet as its preview shows it --------------------------------
@@ -625,7 +559,6 @@ def main() -> int:
         chart(agent, lang).save(png, optimize=True)
         spreadsheet_pdf(agent, lang, png, OUT / f"buy-vs-rent.{lang}.pdf")
         workbook(agent, lang, OUT / f"buy-vs-rent.{lang}.xlsx")
-    MOCK_CHART.write_text(mock_chart(agent), encoding="utf-8", newline="\n")
     for name, inputs in (("agent (3.5 %)", agent), ("corrected (5.5 %)", replace(agent, tax=0.055)),
                          ("value +1.0 %", replace(agent, value_growth=0.01))):
         rows = years(inputs)
