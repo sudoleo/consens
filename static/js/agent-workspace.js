@@ -54,13 +54,17 @@
   const demoFiles = new Map();
   let demoBody = null;
   // Pictures the agent shared from its VM, loaded once per file as a data:
-  // URL (the CSP's img-src allows data:, not blob:). fileId -> { url, load }
+  // URL (the CSP's img-src allows data:, not blob:), an SVG as its source.
+  // fileId -> { url | svg, ready, load }
   const pictures = new Map();
   // How far below the screen a picture starts to load, so it is there when it scrolls in.
   const NEAR = '600px 0px';
   let watcher = null;
-  // Shown as pictures; any other file is a row with its download.
+  // Shown as pictures; any other file is a row with its download. An SVG
+  // keeps the type of a download (agent_vm_tools.share: served as an image,
+  // a page that opened it would run it) and is drawn from its bytes.
   const PICTURE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+  const isPicture = file => PICTURE_MIMES.has(file.mime) || file.picture === 'svg';
   const openState = { versions: new Set() };
   let confirmKey = '';
 
@@ -624,13 +628,22 @@
       else if (figure.dataset[name] !== value) figure.dataset[name] = value;
     }
   }
-  function readDataUrl(blob) {
+  function readBlob(blob, how) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
       reader.onerror = () => reject(new Error('Preview is not available in this browser.'));
-      reader.readAsDataURL(blob);
+      reader[how](blob);
     });
+  }
+  const readDataUrl = blob => readBlob(blob, 'readAsDataURL');
+  // A picture's bytes in its <img>: a photo as it came, an SVG drawn as an
+  // image for the theme on screen (diagram-render.js paint, which draws it
+  // again when the theme changes). Rejects when there is nothing to show.
+  function showPicture(img, entry) {
+    if (entry.svg === undefined) { img.src = entry.url; return Promise.resolve(); }
+    const drawings = window.ConsensusDiagram;
+    return drawings?.paint ? drawings.paint(img, entry.svg) : Promise.reject(new Error('No drawing'));
   }
   // Runs `load` once `element` comes near the screen; at once without an
   // IntersectionObserver.
@@ -651,10 +664,12 @@
   function picture(chatId, file) {
     let entry = pictures.get(file.id);
     if (!entry) {
-      entry = { url: '' };
+      entry = { url: '', ready: false };
       const blob = demoFiles.has(file.id) ? demoFetch(file.demo.preview || file.demo.file)
         : request(`/agent/chats/${chatId}/files/${file.id}?preview=1`).then(response => response.blob());
-      entry.load = blob.then(readDataUrl).then(url => { entry.url = url; return url; });
+      entry.load = (file.picture === 'svg'
+        ? blob.then(bytes => readBlob(bytes, 'readAsText')).then(svg => { entry.svg = svg; })
+        : blob.then(readDataUrl).then(url => { entry.url = url; })).then(() => { entry.ready = true; return entry; });
       // A failed load (chat changed, file removed) may be tried again later.
       entry.load.catch(() => { if (pictures.get(file.id) === entry) pictures.delete(file.id); });
       pictures.set(file.id, entry);
@@ -685,7 +700,8 @@
     const figure = node('figure', 'agent-vm-picture'); figure.dataset.filesKey = key;
     // In the answer's text the page's words are its own (data-i18n-skip); this bar is ours (i18n.js).
     figure.setAttribute('data-i18n-ui', '');
-    // Its own shape when the store knows it (agent_files.picture_size): the
+    // Its own shape when the store knows it (agent_files.picture_size, for an
+    // SVG app/core/svg.py): the
     // field it shows until it arrives is the picture's, so nothing moves
     // when it comes. Files without a size keep the 16:10 field.
     const width = Number(file.width), height = Number(file.height);
@@ -698,29 +714,31 @@
     open.setAttribute('aria-label', `Open ${name}`);
     const img = node('img'); img.alt = name; img.decoding = 'async';
     open.append(img);
+    const failed = () => {
+      figure.classList.remove('is-loading'); figure.classList.add('is-failed');
+      open.append(node('span', 'agent-vm-picture-failed', 'Picture couldn’t load'));
+    };
     const loaded = pictures.get(file.id);
-    if (loaded?.url) img.src = loaded.url;
+    if (loaded?.ready) showPicture(img, loaded).catch(failed);
     else {
       // Until it is drawn, the skeleton's field with its light passing, then
       // the picture fades in. One that cannot come says so in the field.
       // It loads once its place comes near the screen.
       figure.classList.add('is-loading');
-      whenNear(figure, () => picture(chatId, file).load.then(url => {
+      whenNear(figure, () => picture(chatId, file).load.then(entry => {
         img.addEventListener('load', () => {
           figure.classList.remove('is-loading');
           fadeIn(img);
         }, { once: true });
-        img.src = url;
-      }, () => {
-        figure.classList.remove('is-loading'); figure.classList.add('is-failed');
-        open.append(node('span', 'agent-vm-picture-failed', 'Picture couldn’t load'));
-      }));
+        return showPicture(img, entry);
+      }).catch(failed));
     }
     // The viewer pages through the pictures of the same line or of the
     // pictures under the answer, as through a gallery (attachments.js).
     const own = !demoFiles.has(file.id);
     figure._picture = { fileId: file.id, name: file.name, mime: file.mime, size: file.size, title: name,
-      page: web?.page || '', host: web?.host || '', ...(own ? {} : { removable: false }) };
+      page: web?.page || '', host: web?.host || '', ...(file.picture === 'svg' ? { picture: 'svg' } : {}),
+      ...(own ? {} : { removable: false }) };
     open.addEventListener('click', () => {
       const set = figure.closest('.md-picture-line, .agent-answer-pictures');
       const figures = set ? [...set.querySelectorAll('.agent-vm-picture')].filter(item => item._picture) : [figure];
@@ -796,7 +814,7 @@
       if (card) own.push(card);
     }
     const shared = files.filter(file => ['vm_file', 'web_image'].includes(file.kind) && file.turn_id === turnId);
-    const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
+    const shown = shared.filter(file => isPicture(file) && ['ready', 'partial'].includes(file.status));
     // In and under the answer text when there is one, else with the other files.
     if (body) fillPictures(body, chatId, shown, scope, live && answerWriting());
     else if (shown.length) {
@@ -1042,7 +1060,7 @@
     }
     demoBody = body;
     for (const file of files) demoFiles.set(file.id, file);
-    const shown = files.filter(file => PICTURE_MIMES.has(file.mime));
+    const shown = files.filter(isPicture);
     for (const file of shown) picture('', file);
     fillPictures(body, '', shown, 'demo', writing);
     const rows = files.filter(file => !shown.includes(file));

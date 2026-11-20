@@ -23,6 +23,7 @@ import nh3
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
+from app.core.svg import is_svg
 from app.services.source_catalog import canonical_source_url
 
 _MD = (
@@ -269,19 +270,8 @@ CODE_LANGUAGES = frozenset("""
 """.split())
 _CODE_CLASSES = {"code": {"class": {"language-mermaid"} | {f"language-{name}" for name in CODE_LANGUAGES}}}
 
-# What the app reads as an SVG (diagram-render.js isSvg): an <svg> element
-# after at most a byte order mark, the XML declaration, comments and a
-# doctype without an internal subset.
-_SVG_PROLOG = re.compile(r"(?:\uFEFF|\s|<\?xml\b[^>]*\?>|<!--.*?-->|<!DOCTYPE\s+svg\b[^>\[]*>)*",
-                         re.IGNORECASE | re.DOTALL)
-_SVG_ROOT = re.compile(r"<svg[\s>]")
 _SVG_ELEMENT_START = re.compile(r" {0,3}<svg[\s>]")
 _SVG_TAG = re.compile(r"""<(/?)svg\b(?:"[^"]*"|'[^']*'|[^'">])*?(/?)>""", re.IGNORECASE)
-
-
-def is_svg(source) -> bool:
-    text = str(source or "")
-    return bool(_SVG_ROOT.match(text, _SVG_PROLOG.match(text).end()))
 
 
 def _svg_element(state, start_line, end_line, silent):

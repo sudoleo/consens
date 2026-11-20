@@ -508,14 +508,29 @@
     // A gallery's pictures load once each, and its neighbours before they
     // are asked for: paging is a slideshow, not a download each time.
     let galleryFiles = new Map();
+
+    // A stored file as the picture it shows, a data: URL, or "": a picture
+    // by its type, or an SVG the agent shared (att.picture "svg"), which is
+    // served as a download and drawn here as an image that runs nothing
+    // (diagram-render.js), for the theme on screen.
+    async function storedPicture(att, file) {
+      if (att.picture === "svg") {
+        const drawings = window.ConsensusDiagram;
+        if (!drawings) return "";
+        const entry = drawings.request(await readBlob(file.blob, "readAsText"));
+        await entry.done;
+        return entry.state === "drawn" ? "data:image/svg+xml;base64," + entry.picture.data : "";
+      }
+      return String(file.mime || att.mime).indexOf("image/") === 0 ? readDataUrl(file.blob) : "";
+    }
+
     function storedFile(att) {
       if (!viewerGallery) return window.App.agentWorkspace.openFile(att.fileId);
       let entry = galleryFiles.get(att.fileId);
       if (!entry) {
         entry = { done: false };
         entry.load = window.App.agentWorkspace.openFile(att.fileId).then(async function (file) {
-          const mime = file.mime || att.mime;
-          const image = mime.indexOf("image/") === 0 ? await readDataUrl(file.blob) : "";
+          const image = await storedPicture(att, file);
           entry.done = true;
           return Object.assign({}, file, { image: image });
         });
@@ -545,8 +560,7 @@
       }
       storedFile(att).then(async function (file) {
         const mime = file.mime || att.mime;
-        const image = file.image !== undefined ? file.image
-          : mime.indexOf("image/") === 0 ? await readDataUrl(file.blob) : "";
+        const image = file.image !== undefined ? file.image : await storedPicture(att, file);
         if (token !== viewerToken) return;
         viewerBody.innerHTML = "";
         if (image) {
@@ -555,7 +569,7 @@
           img.alt = att.name;
           img.src = image;
           viewerBody.appendChild(img);
-          fitPicture(img, false);
+          fitPicture(img, att.picture === "svg");
           // A picture from the web names the page it came from (agent_web_images.py).
           if (att.page && att.host) {
             const source = document.createElement("a");
@@ -657,7 +671,8 @@
       viewerTitle.textContent = att.title || att.name;
       showGalleryPlace(att);
       const mime = String(att.mime || "");
-      setStage(Boolean(att.fileId || att.data) && !att.previewOnly && (mime.indexOf("image/") === 0 || mime === "application/pdf"));
+      setStage(Boolean(att.fileId || att.data) && !att.previewOnly
+        && (mime.indexOf("image/") === 0 || mime === "application/pdf" || att.picture === "svg"));
 
       if (att.fileId && window.App?.agentWorkspace?.openFile) {
         showStoredAttachment(att);

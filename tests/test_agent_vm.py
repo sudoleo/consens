@@ -1316,15 +1316,17 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     script = Agent([[("vm_share_file", {"path": "/tmp/chart.png"}),
                      ("vm_share_file", {"path": "notes.txt", "name": "Results.txt"})],
                     [("vm_share_file", {"path": "/tmp/chart.png"}), ("vm_share_file", {"path": "/tmp/fake.png"}),
-                     ("vm_share_file", {"path": "big.bin"}), ("vm_share_file", {"path": "/nope"})]])
+                     ("vm_share_file", {"path": "big.bin"}), ("vm_share_file", {"path": "/nope"})],
+                    [("vm_share_file", {"path": "/tmp/logo.svg"})]])
     loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
     D = chat_path(chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
+    logo = b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 12"><path d="M1 1"/></svg>'
     fake_vm.vms[NAME]["files"].update({
-        "/tmp/chart.png": png, f"{D}/notes.txt": b"mean 42\n", "/tmp/fake.png": b"<svg onload=alert(1)>",
-        f"{D}/big.bin": b"x" * (agent_vm_tools.SHARE_BYTES + 1)})
+        "/tmp/chart.png": png, f"{D}/notes.txt": b"mean 42\n", "/tmp/fake.png": b"<html><script>alert(1)</script>",
+        f"{D}/big.bin": b"x" * (agent_vm_tools.SHARE_BYTES + 1), "/tmp/logo.svg": logo})
     events = list(loop.run())
-    chart, notes, again, fake, big, missing = results(loop)
+    chart, notes, again, fake, big, missing, drawing = results(loop)
     assert "vm_share_file" in script.offered[0]
     assert chart["shown_as"] == "picture" and chart["file"]["mime"] == "image/png" and chart["file"]["name"] == "chart.png"
     # A picture is placed in the answer text by its ref, like show_image's.
@@ -1339,17 +1341,24 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     assert big == {"error": f"{D}/big.bin is larger than 5 MB. Share a smaller file (compress, split or "
                             "shrink it)."}
     assert missing == {"error": "No file at /nope."}
+    # An SVG is a picture by its bytes, drawn by the app (diagram-render.js), and stays a
+    # download by its type: nothing ever serves it as image/svg+xml, which a page would run.
+    assert drawing["shown_as"] == "picture" and drawing["markdown"] == "![logo.svg](picture:f2)"
+    assert drawing["file"]["mime"] == "application/octet-stream"
     saved = {file["name"]: file for file in files.list(UID, chat_id)}
-    assert set(saved) == {"chart.png", "Results.txt", "fake.png"}
+    assert set(saved) == {"chart.png", "Results.txt", "fake.png", "logo.svg"}
     assert {(file["kind"], file["turn_id"]) for file in saved.values()} == {("vm_file", loop.turn_id)}
     assert saved["chart.png"]["origin"] == {"source": "vm", "path": "/tmp/chart.png", "ref": "f1"}
     assert saved["Results.txt"]["origin"] == {"source": "vm", "path": f"{D}/notes.txt"}
+    assert saved["logo.svg"]["origin"] == {"source": "vm", "path": "/tmp/logo.svg", "ref": "f2"}
+    assert (saved["logo.svg"]["picture"], saved["logo.svg"]["width"], saved["logo.svg"]["height"]) == ("svg", 128, 64)
+    assert "picture" not in saved["fake.png"] and "preview" not in saved["logo.svg"]
     assert files.download(UID, chat_id, chart["file"]["id"])[1] == png
     # The browser hears of each new file once (agent-workspace.js refreshes).
     shared = [file["name"] for event in events if event.get("type") == "resources" for file in event["files"]]
-    assert shared == ["chart.png", "Results.txt", "fake.png"]
+    assert shared == ["chart.png", "Results.txt", "fake.png", "logo.svg"]
     assert [event["path"] for event in tool_events(events, "vm_share_file") if event["status"] == "succeeded"] == [
-        "/tmp/chart.png", f"{D}/notes.txt", "/tmp/chart.png", "/tmp/fake.png"]
+        "/tmp/chart.png", f"{D}/notes.txt", "/tmp/chart.png", "/tmp/fake.png", "/tmp/logo.svg"]
 
 
 def test_a_shared_office_file_brings_the_pdf_the_app_previews_it_by(store, fake_vm, tmp_path, monkeypatch):

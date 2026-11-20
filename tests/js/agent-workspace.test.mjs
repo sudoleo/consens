@@ -318,6 +318,51 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // An SVG is served as a download (agent_vm_tools.share): the app draws it
+  // from its bytes as an image that runs nothing, in the place of its size.
+  it('draws an SVG the agent shared as a picture from its bytes, never as the file it is served as', async () => {
+    const LOGO = { id: 'f'.repeat(32), name: 'logo.svg', mime: 'application/octet-stream', size: 120, status: 'ready',
+      kind: 'vm_file', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', picture: 'svg', width: 128, height: 64,
+      origin: { source: 'vm', path: '/tmp/logo.svg', ref: 'f1' } };
+    const NOTES = { ...LOGO, id: '7'.repeat(32), name: 'notes.svg', picture: undefined, width: undefined, height: undefined };
+    const source = '<svg viewBox="0 0 24 12" onload="window.pwned=1"><title>Logo</title><path d="M1 1h22" stroke="#217863"/></svg>';
+    const files = [LOGO, NOTES];
+    const loaded = loadScripts(['static/js/diagram-render.js', 'static/js/agent-workspace.js'], { body: ANSWER, before(window) {
+      window.TextEncoder = TextEncoder;
+      window.auth = { currentUser: { uid: 'owner', getIdToken: async () => 'token' } };
+      window.App = {
+        agentChat: { isSelected: () => true }, showPopup: vi.fn(), attachments: { openStored: vi.fn() },
+        runRegistry: { isAuthCurrent: () => true, visible: () => null, isExecuting: () => false,
+          getSelectedConversationBasis: () => ({ chatId: CHAT, turnId: TURN_TWO, currentTurn: { id: TURN_TWO } }) },
+        agentGoogle: { refreshActions: vi.fn() },
+      };
+      window.fetch = vi.fn(async url => url.includes('/files/')
+        ? { ok: true, blob: async () => new window.Blob([source], { type: 'application/octet-stream' }) }
+        : reply(files));
+    } });
+    const { window, document, dom } = loaded;
+    await window.App.agentWorkspace.refresh(CHAT);
+    // The picture under the answer, the other .svg (no picture by its bytes) a download row.
+    const figures = document.querySelectorAll('.agent-vm-picture');
+    expect(figures).toHaveLength(1);
+    expect(document.querySelector('.agent-files-list').textContent).toContain('notes.svg');
+    const figure = figures[0];
+    expect(figure.classList.contains('has-size')).toBe(true);
+    expect(figure.style.getPropertyValue('--picture-width')).toBe('128');
+    const img = figure.querySelector('img');
+    await vi.waitFor(() => expect(img.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/));
+    const drawn = Buffer.from(img.getAttribute('src').split(',')[1], 'base64').toString('utf8');
+    expect(drawn).toContain('<title>Logo</title>');
+    expect(drawn).not.toContain('onload');
+    expect(img.dataset.svgDrawn).toBe('light');
+    expect(window.pwned).toBeUndefined();
+    // The viewer is told to draw it the same way.
+    figure.querySelector('.agent-vm-picture-open').click();
+    expect(window.App.attachments.openStored.mock.calls[0][0]).toMatchObject({ fileId: LOGO.id, picture: 'svg',
+      mime: 'application/octet-stream' });
+    dom.window.close();
+  });
+
   // Without its size a picture jumps from the 16:10 field to its own size when it arrives.
   it('keeps the place of a picture of known size in its own shape, older ones in the 16:10 field', async () => {
     const SIZED = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',

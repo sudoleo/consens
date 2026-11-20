@@ -81,6 +81,7 @@ import time
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core import svg
 from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
@@ -1814,21 +1815,28 @@ class VMTools:
                 name += posixpath.splitext(path)[1]
             mime = file_mime(raw, name)
             origin = {"source": "vm", "path": path}
+            extra = {"kind": "vm_file", "turn_id": self.loop.turn_id, "origin": origin}
+            # An SVG stays a download by its type (file_mime: a page that
+            # opened it would run its script as the app's); the app draws it
+            # from its bytes as a picture that runs nothing (diagram-render.js),
+            # at the size it keeps a place of (app/core/svg.py).
+            drawn = None if mime.startswith("image/") else svg.picture(raw)
+            if drawn:
+                extra.update(picture="svg", width=drawn[0], height=drawn[1])
             # A picture is placed in the answer by its ref, like show_image's
             # (agent_web_images.picture_markdown); f1, f2 … per message.
-            if mime.startswith("image/"):
+            if mime.startswith("image/") or drawn:
                 origin["ref"] = f"f{sum(1 for item in self.shared.values() if 'ref' in item) + 1}"
             # A presentation, document or spreadsheet opens in the app's
             # preview as its PDF (agent_office.py, file-viewer.js).
             preview = None
-            if not mime.startswith("image/") and mime != "application/pdf":
+            if not mime.startswith("image/") and not drawn and mime != "application/pdf":
                 preview = self._office_preview(raw, posixpath.splitext(path)[1][1:].lower(), cancellation)
             # The agent made it: nothing for the store to read out. The bytes
             # are served as a download only (routers/agent_files.py).
             meta = self.files.save(self.loop.uid, self.loop.chat_id, raw=raw, name=name, mime=mime,
                                    extraction={"status": "ready", "parts": [], "warnings": []},
-                                   cancellation=cancellation, preview=preview,
-                                   extra={"kind": "vm_file", "turn_id": self.loop.turn_id, "origin": origin})
+                                   cancellation=cancellation, preview=preview, extra=extra)
             self.shared[key] = {field: meta[field] for field in ("id", "name", "mime", "size")}
             if "ref" in origin:
                 self.shared[key]["ref"] = origin["ref"]

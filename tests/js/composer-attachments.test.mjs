@@ -292,6 +292,31 @@ describe("composer attachment tray", () => {
     await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
   });
 
+  // An SVG the agent shared is served as a download (agent_vm_tools.share).
+  it("shows an SVG the agent shared as the picture diagram-render.js draws of it, with its download", async () => {
+    const { window, document } = boot();
+    const source = '<svg viewBox="0 0 24 12" onload="window.pwned=1"><path d="M1 1h22"/></svg>';
+    const logo = { fileId: "f".repeat(32), name: "logo.svg", mime: "application/octet-stream", size: 70,
+      title: "logo.svg", picture: "svg" };
+    window.App.agentWorkspace = { openFile: vi.fn(async () => ({
+      blob: new window.Blob([source], { type: "application/octet-stream" }), mime: "application/octet-stream" })) };
+    const drawn = [];
+    window.ConsensusDiagram = { request: text => {
+      drawn.push(text);
+      return { state: "drawn", done: Promise.resolve(), picture: { data: window.btoa('<svg xmlns="http://www.w3.org/2000/svg"/>') } };
+    } };
+    const body = document.getElementById("attachmentViewerBody");
+    window.App.attachments.openStored({ ...logo, gallery: [logo], index: 0 });
+    expect(document.getElementById("attachmentViewerModal").classList.contains("is-stage")).toBe(true);
+    await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
+    expect(drawn).toEqual([source]);
+    expect(body.querySelector(".attachment-viewer-image").src).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(body.querySelector(".attachment-viewer-image").classList.contains("is-drawing")).toBe(true);
+    expect([...body.querySelectorAll(".attachment-viewer-action")].map(button => button.textContent))
+      .toEqual(["Download", "Remove from chat"]);
+    expect(window.pwned).toBeUndefined();
+  });
+
   // A picture in the viewer zooms (image-zoom.js).
   it("zooms into a picture, starts each picture fitted and pages by swipe only when it is fitted", async () => {
     const { window, document } = boot();

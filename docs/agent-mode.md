@@ -6610,10 +6610,14 @@ also Minuten.
   Styles, Filtern und Animationen, aber ohne Skript und ohne Nachladen
   (`docs/codebase-map.md` „SVG-Bilder“). Der Prompt bekam nur die Hälfte
   eines Satzes dazu: „and an ```svg code block as the picture it draws“.
-  Eine SVG-Datei aus dem Arbeitsplatz bleibt bewusst ein Download
-  (`file_mime` nimmt nie ein Bild nach dem Namen): Als `image/svg+xml`
-  gespeichert, könnte jeder Weg, der ein Bild einbettet oder öffnet, ihr
-  Skript in der Seite ausführen.
+  Eine SVG-Datei, die der Agent mit `vm_share_file` teilt, ist seit demselben
+  Tag ebenfalls ein Bild (Max: „Ja, umsetzen“): Das Werkzeug antwortet wie bei
+  einem PNG mit `shown_as: picture` und der Bildmarke, der Agent setzt sie in
+  den Text. Gespeichert und ausgeliefert wird sie aber weiter als Download
+  (`application/octet-stream`): Als `image/svg+xml` könnte jeder Weg, der ein
+  Bild einbettet oder öffnet, ihr Skript in der Seite ausführen. Der Browser
+  zeichnet sie aus ihren Bytes wie ein SVG der Antwort. Ansehen
+  (`vm_view_image`) kann der Agent sie nicht; er hat ihren Quelltext.
 - **Offen:** ob Modelle es treffend nutzen oder übertreiben, zeigt erst Prod.
   Fotos aus dem Web bleiben, wie sie sind (`search_pictures`, `show_image`).
 

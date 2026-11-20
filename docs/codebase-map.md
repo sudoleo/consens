@@ -2701,9 +2701,21 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     nie gewischt, runde Ecken. Ein Klick öffnet den Bildbetrachter mit
     „Copy code“ (Quelle des Modells) und „Download“ (`<titel>.svg`;
     `App.attachments.openStored` mit `actions`, `App.attachments.save`);
-    beides gilt auch für Mermaid (Download = das gezeichnete SVG). SVG-Dateien
-    aus dem Arbeitsplatz (`vm_share_file`) bleiben ein Download: Sie werden
-    nie als `image/svg+xml` gespeichert oder ausgeliefert.
+    beides gilt auch für Mermaid (Download = das gezeichnete SVG).
+    **SVG-Dateien aus dem Arbeitsplatz (seit 2026-11-20):** `vm_share_file`
+    erkennt ein SVG an seinen Bytes (`app/core/svg.py` `picture`: UTF-8,
+    höchstens `MAX_CHARS`, kein `<!ENTITY`, `<svg>`-Wurzel), gibt ihm eine
+    Bildmarke (`f1` …, `shown_as: picture`) und legt `picture: "svg"` mit
+    `width`/`height` ab (`svg.size`, dieselbe Rechnung wie `measure`; beide
+    Seiten lesen `tests/fixtures/svg_sizes.json`). Der Typ bleibt
+    `application/octet-stream` und die Auslieferung ein Download
+    (`file_mime`): Als `image/svg+xml` würde jeder Weg, der die Datei öffnet,
+    ihr Skript als consens.io ausführen. Der Browser zeichnet sie aus ihren
+    Bytes: `agent-workspace.js` (`isPicture`, `showPicture`) liest den Text und
+    übergibt ihn `ConsensusDiagram.paint(img, source)`, das in jedes `<img>`
+    zeichnet und es beim Themenwechsel neu zeichnet (`img[data-svg-drawn]`);
+    der Bildbetrachter (`attachments.js` `storedPicture`) zeichnet sie ebenso,
+    als Zeichnung (`fitPicture(…, true)`), mit Download und Entfernen.
   - **Mermaid** 12.3.0 liegt als ES-Module unter
     `static/vendor/mermaid/<version>/dist/` und wird per `import()` geholt, wenn
     eine Antwort zum ersten Mal ein Diagramm enthält (Kern plus eine
@@ -7870,7 +7882,9 @@ Antworttext (bis es gezeichnet ist, ein Feld im Skelett-Ton mit wanderndem Licht
 alter Chats; eines, das nicht kommt, sagt „Picture couldn’t load“; seit
 2026-11-07 in der Form des Bildes selbst: `AgentFiles.save` legt bei
 PNG/JPEG/WebP/GIF `width`/`height` ab, aufrecht wie gezeichnet
-(`agent_files.picture_size`, nur der Kopf, EXIF-Drehung tauscht die Seiten),
+(`agent_files.picture_size`, nur der Kopf, EXIF-Drehung tauscht die Seiten;
+seit 2026-11-20 auch für ein geteiltes SVG, `app/core/svg.py`, das als
+Download gespeichert und im Browser gezeichnet wird, siehe „SVG-Bilder“),
 `public_file` gibt sie dem Browser, nie dem Modell; `pictureCard` setzt
 `.has-size` mit `--picture-width`/`--picture-height`, das Feld ist so breit, wie
 das Bild gezeichnet wird, und nichts springt, wenn es kommt. Ältere Dateien

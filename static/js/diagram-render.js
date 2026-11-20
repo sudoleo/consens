@@ -6,8 +6,9 @@
 // adopted here). Both are images, never markup in the page.
 // Mermaid comes from static/vendor, imported when an answer first holds a
 // diagram: its core and one kind of diagram are about 230 KB compressed.
-// An SVG needs no library.
-// Export: window.ConsensusDiagram.{key, isSvg, request, settled, warm, render}.
+// An SVG needs no library; paint() draws one into any <img> (a file the
+// agent shared from its workspace).
+// Export: window.ConsensusDiagram.{key, isSvg, request, settled, warm, render, paint}.
 // =====================================================================
 
 (function initConsensusDiagram() {
@@ -1088,6 +1089,25 @@
     }
   }
 
+  // An <img> that shows an SVG source, such as a file the agent shared
+  // (agent-workspace.js): drawn for the theme on screen and again when it
+  // changes (start()). Resolves with the picture; rejects when the source
+  // is none, and the <img> stays as it was.
+  function paint(img, source) {
+    const theme = themeName();
+    img._svgSource = source;
+    const entry = request(source, theme);
+    const show = () => {
+      if (entry.state !== "drawn") throw new Error("no picture");
+      if (img._svgSource === source) {
+        img.src = `data:image/svg+xml;base64,${entry.picture.data}`;
+        img.dataset.svgDrawn = theme;
+      }
+      return entry.picture;
+    };
+    return entry.state === "pending" ? entry.done.then(show) : Promise.resolve().then(show);
+  }
+
   // A code block the server rendered (public pages) becomes a place: a
   // diagram, or a picture (public_markdown.py names a block "svg" only when
   // its code is one <svg> element).
@@ -1117,13 +1137,16 @@
       document.querySelectorAll(".md-diagram.is-drawn").forEach(place => {
         if (place.dataset.drawn !== theme) fill(place);
       });
+      document.querySelectorAll("img[data-svg-drawn]").forEach(img => {
+        if (img.dataset.svgDrawn !== theme && img._svgSource) paint(img, img._svgSource).catch(() => {});
+      });
     };
     const watcher = new MutationObserver(repaint);
     watcher.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     if (document.body) watcher.observe(document.body, { attributes: true, attributeFilter: ["class"] });
   }
 
-  window.ConsensusDiagram = { key, isSvg, request, settled, warm, render };
+  window.ConsensusDiagram = { key, isSvg, request, settled, warm, render, paint };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

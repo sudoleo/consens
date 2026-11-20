@@ -1,0 +1,89 @@
+{
+ "_readme": "Sources and the size the app draws them at: static/js/diagram-render.js measure and app/core/svg.py size read the same cases (tests/js/diagram-svg.test.mjs, tests/test_svg.py).",
+ "cases": [
+  [
+   "<svg viewBox=\"0 0 24 24\"><path d=\"M1 1\"/></svg>",
+   [
+    128,
+    128
+   ]
+  ],
+  [
+   "<svg width=\"2in\" height=\"1in\" viewBox=\"0 0 10 5\"></svg>",
+   [
+    192,
+    96
+   ]
+  ],
+  [
+   "<svg width=\"400\" height=\"300\"><rect width=\"400\" height=\"300\"/></svg>",
+   [
+    400,
+    300
+   ]
+  ],
+  [
+   "<svg viewBox=\"0 0 20000 10000\"></svg>",
+   [
+    4096,
+    2048
+   ]
+  ],
+  [
+   "<svg></svg>",
+   [
+    300,
+    150
+   ]
+  ],
+  [
+   "<svg width=\"100%\" viewBox=\"0 0 640 260\"></svg>",
+   [
+    640,
+    260
+   ]
+  ],
+  [
+   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- logo -->\n<svg VIEWBOX=\"0 0 320 120\" data-note=\"a > b\"></svg>",
+   [
+    320,
+    120
+   ]
+  ],
+  [
+   "<svg width=\"50\"></svg>",
+   [
+    128,
+    64
+   ]
+  ],
+  [
+   "<svg height=\"40mm\" viewBox=\"0 0 300 100\"></svg>",
+   [
+    454,
+    151
+   ]
+  ],
+  [
+   "<svg width=\"12.5pt\" height=\"25pt\"></svg>",
+   [
+    64,
+    128
+   ]
+  ],
+  [
+   "<svg width=\"640\" height=\"auto\" viewBox=\"0 0 4 3\"></svg>",
+   [
+    640,
+    480
+   ]
+  ],
+  [
+   "<svg viewBox=\"0, 0, 801, 401\"></svg>",
+   [
+    801,
+    401
+   ]
+  ]
+ ]
+}

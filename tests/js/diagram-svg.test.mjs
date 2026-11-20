@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
+
+// The same cases app/core/svg.py reads (tests/test_svg.py): the server
+// keeps a picture's place at the size the app draws it at.
+const SIZES = JSON.parse(readFileSync("tests/fixtures/svg_sizes.json", "utf8")).cases;
 
 // An SVG of an answer drawn as a picture (diagram-render.js). jsdom draws
 // no image, so a picture never gets paper here and its look is tested in a
@@ -181,5 +187,29 @@ describe("an SVG picture", () => {
     });
     expect(text).toContain("<title>Spark</title>");
     expect(text).not.toContain('width="128"');
+  });
+
+  it("is drawn at the size the server keeps its place at", async () => {
+    const { window } = boot();
+    for (const [source, size] of SIZES) {
+      const entry = window.ConsensusDiagram.request(source, "light");
+      await entry.done;
+      expect([entry.picture.width, entry.picture.height], source).toEqual(size);
+    }
+  });
+
+  it("paints any <img>, again in the other theme, and leaves it be for what is no picture", async () => {
+    const { window, document } = boot({ body: "<img id='a' alt=''><img id='b' alt=''>" });
+    const [img, other] = document.querySelectorAll("img");
+    await expect(window.ConsensusDiagram.paint(img, ICON)).resolves.toMatchObject({ title: "Spark", width: 128 });
+    expect(img.dataset.svgDrawn).toBe("light");
+    expect(Buffer.from(img.src.split(",")[1], "base64").toString("utf8")).toContain('color="#0a0a0a"');
+    document.documentElement.classList.add("dark-mode");
+    await window.ConsensusDiagram.request(ICON, "dark").done;
+    await settle();
+    expect(img.dataset.svgDrawn).toBe("dark");
+    expect(Buffer.from(img.src.split(",")[1], "base64").toString("utf8")).toContain('color="#f5f5f5"');
+    await expect(window.ConsensusDiagram.paint(other, "<p>no picture</p>")).rejects.toThrow();
+    expect(other.hasAttribute("src")).toBe(false);
   });
 });
