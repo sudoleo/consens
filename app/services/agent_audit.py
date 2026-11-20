@@ -2938,16 +2938,22 @@ class AnswerAudit:
 
     def _finding_sources(self, findings):
         """{id: the reviewers' sources for that finding}, which a corrected
-        sentence may link (agent_review_feedback.shape_rule); none in
-        a chat with Google data, where no address from it is ever opened
-        (agent_answer_links)."""
+        sentence may link (agent_review_feedback.shape_rule): each note's
+        "source" and the http(s) addresses its text names (source_url), as
+        the request offers both. None in a chat with Google data, where no
+        address from it is ever opened (agent_answer_links)."""
+        from app.services.agent_review_feedback import _urls
         loop = self.tools.loop
         google = getattr(loop, "google_tools", None) or (
             callable(getattr(loop, "_chat_google_data", None)) and loop._chat_google_data())
         if google:
             return {}
-        return {finding["id"]: {note["source"] for note in finding["notes"] if note.get("source")}
-                for finding in findings}
+        sources = {}
+        for finding in findings:
+            named = sources.setdefault(finding["id"], set())
+            for note in finding["notes"]:
+                named.update(filter(None, map(source_url, [note.get("source"), *_urls(str(note.get("note") or ""))])))
+        return sources
 
     def _corrections(self, model, message, cancellation, seconds, items, sources, cells, requests):
         """The pass's requests on one helper session (_correction_request)

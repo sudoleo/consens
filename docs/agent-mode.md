@@ -1204,7 +1204,14 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   ein Titel danach und `<…>` darum gehören nicht zur Adresse, ein Schema in
   jeder Schreibung, `www.` als Link (mit `http://` davor), und Schema und
   Host klein (`_address`): Derselbe Link anders geschrieben ist dieselbe
-  Adresse, für die Regel wie für `new_links`. Eine neue Adresse gilt nur, wenn
+  Adresse, für die Regel wie für `new_links`. Verglichen wird die Seite
+  (`_page`): http oder https, ein Schrägstrich am Ende, ein Fragment,
+  Prozent-Kodierung und Klick-Tracker (`utm_…`, `fbclid`, `gclid`,
+  `msclkid`) zählen nicht, denn die Suche von OpenAI hängt jeder Seite
+  `utm_source=openai` an; eine andere Query oder ein anderer Pfad ist eine
+  andere Seite. Quellen eines Befunds sind das Feld `source` jeder Notiz und
+  die http(s)-Adressen in ihrem Text (`_finding_sources` über `source_url`),
+  wie die Anfrage beide anbietet. Eine neue Adresse gilt nur, wenn
   die Seite öffentlich ist und nicht fehlt (`new_links`, `check_links`: wie
   die Prüfung der Links der Antwort, nur 404/410 fehlt), geprüft für alle
   neuen Adressen einer Anfrage gemeinsam, drei zugleich (`PARALLEL`) über die

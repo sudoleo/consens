@@ -42,6 +42,7 @@ import logging
 import re
 import threading
 import unicodedata
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from app.core.observability import safe_exception
 
@@ -556,8 +557,8 @@ def sentence_spans(answer):
     return spans
 
 
-# What a correction must keep of its place: the links' addresses (a new one
-# would pass the check of the answer's links, agent_answer_links), the
+# What a correction must keep of its place: the pages its links lead to (a
+# new one would pass the check of the answer's links, agent_answer_links), the
 # pictures it places, and the Markdown it opens and closes. A link is what
 # the page's Markdown (marked with GFM, then DOMPurify) makes one: a
 # destination "](…)" up to a space, so a title after it ("…", '…') and "<…>"
@@ -601,6 +602,9 @@ _EMPHASIS_RUN = re.compile(r"\*+|_+")
 # either. "3~5 days, by air 1~2" strikes "5 days, by air 1"; "~~~" is text.
 _STRIKE = re.compile(r"(~~?)(?=[^\s~])[\s\S]*?[^\s~]\1(?=[^~]|$)")
 _TILDES = re.compile(r"~+")
+# Query parameters that only say where a click came from: OpenAI's search
+# hands every page out with "utm_source=openai", a model copies it or not.
+_TRACKER = re.compile(r"utm_\w+|fbclid|gclid|msclkid", re.IGNORECASE)
 
 
 def _address(raw):
@@ -613,6 +617,23 @@ def _address(raw):
         host = re.match(r"[^/?#]*", rest).group()
         address = f"{scheme.lower()}://{host.lower()}{rest[len(host):]}"
     return address
+
+
+def _page(address):
+    """The page an http(s) ``address`` (_address) leads to, for comparing
+    links: http or https, a slash at the end, a fragment, percent-encoding
+    and click trackers (_TRACKER) aside, as url_key holds two cited pages
+    the same. A reviewer's source and a model's link to it differ in just
+    these. Another query or path is another page."""
+    try:
+        parts = urlsplit(address)
+    except ValueError:
+        return address
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return address
+    query = "&".join(pair for pair in parts.query.split("&")
+                     if pair and not _TRACKER.fullmatch(pair.partition("=")[0]))
+    return urlunsplit(("https", parts.netloc, unquote(parts.path).rstrip("/") or "/", unquote(query), ""))
 
 
 def _autolink(match):
@@ -996,8 +1017,8 @@ def shape_rule(before, after, sources=(), cell=False):
     fragment nor far longer, at most one sentence more (a correction, not a
     paragraph in its place), ending as a sentence where ``before`` did (links
     cited after its end count as ended), with its pictures and Markdown
-    closed, striking through nothing ``before`` did not, and with its links (_urls, by address however written): each to
-    an address it had or to one of ``sources`` (the reviewers' sources for
+    closed, striking through nothing ``before`` did not, and with its links (_urls, by the page however written,
+    _page): each to a page it had or to one of ``sources`` (the reviewers' sources for
     this finding: a better page for the corrected figure, which new_links
     still has to find), and at most as many of its own addresses gone as
     sources came in. A source may also be added: the models cite the page a
@@ -1022,9 +1043,9 @@ def shape_rule(before, after, sources=(), cell=False):
         return "sentence_end"
     if _RAW_LINK.search(after) and not _RAW_LINK.search(before):
         return "links"
-    own, linked = set(_urls(before)), set(_urls(after))
+    own, linked = {_page(url) for url in _urls(before)}, {_page(url) for url in _urls(after)}
     added = linked - own
-    if not added <= {_address(source) for source in sources or ()} or len(own - linked) > len(added):
+    if not added <= {_page(_address(source)) for source in sources or ()} or len(own - linked) > len(added):
         return "links"
     if sorted(_PICTURE.findall(after)) != sorted(_PICTURE.findall(before)):
         return "pictures"
@@ -1040,13 +1061,14 @@ def shape_rule(before, after, sources=(), cell=False):
 
 
 def new_links(results, items):
-    """{id: the addresses a corrected sentence links that its first version
-    did not} (a reviewer's source, shape_rule), as _urls reads both."""
+    """{id: the addresses a corrected sentence links, as it writes them, to
+    a page (_page) its first version did not link} (a reviewer's source,
+    shape_rule), as _urls reads both."""
     found = {}
     for key, result in results.items():
         if result[0] == "corrected":
-            had = set(_urls(items[key][2]))
-            added = sorted({url for url in _urls(result[1]) if url not in had})
+            had = {_page(url) for url in _urls(items[key][2])}
+            added = sorted({url for url in _urls(result[1]) if _page(url) not in had})
             if added:
                 found[key] = added
     return found

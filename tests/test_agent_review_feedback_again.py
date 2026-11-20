@@ -344,6 +344,37 @@ def test_the_reviewers_source_however_written_is_the_source(link):
     assert fb.new_links({"s1": ("corrected", after)}, {"s1": (0, len(TICKETS), TICKETS)}) == {"s1": [SOURCE]}
 
 
+@pytest.mark.parametrize("written", [
+    SOURCE + "/", SOURCE.replace("https://", "http://"), SOURCE + "#fares", SOURCE + "?utm_source=openai",
+    SOURCE.replace("rates-2026", "rates%2D2026"),
+], ids=["trailing-slash", "http", "fragment", "tracker", "percent-encoded"])
+def test_the_reviewers_source_and_the_link_to_it_are_one_page_however_either_is_written(written):
+    """OpenAI's search hands every page out with "?utm_source=openai", a
+    model drops the slash or the fragment: the link leads to the page the
+    reviewer named, whichever of the two is written which way. new_links
+    still opens it as the sentence writes it."""
+    after = f"Tickets to the top cost 36.10 euros, see [rates]({written})."
+    assert one(TICKETS, after, {SOURCE})[0] == {"s1": ("corrected", after)}
+    assert fb.new_links({"s1": ("corrected", after)}, {"s1": (0, len(TICKETS), TICKETS)}) == {"s1": [written]}
+    plain = f"Tickets to the top cost 36.10 euros, see [rates]({SOURCE})."
+    assert one(TICKETS, plain, {written})[0] == {"s1": ("corrected", plain)}
+
+
+def test_another_query_or_path_is_another_page():
+    for written in (SOURCE + "?year=2025", SOURCE + "/2025", SOURCE.replace("rates", "Rates")):
+        after = f"Tickets to the top cost 36.10 euros, see [rates]({written})."
+        assert one(TICKETS, after, {SOURCE})[1] == {"s1": "links"}, written
+
+
+def test_the_sentences_own_link_with_a_slash_or_a_tracker_is_no_new_one():
+    before = f"The [visitor count]({OWN}) is 7 million."
+    items = {"s1": (0, len(before), before)}
+    for written in (OWN + "/", OWN + "?utm_source=openai", OWN.replace("https://", "http://"), OWN + "#2026"):
+        after = f"The [visitor count]({written}) is 6.3 million."
+        assert one(before, after)[0] == {"s1": ("corrected", after)}, written
+        assert fb.new_links({"s1": ("corrected", after)}, items) == {}, written
+
+
 def test_a_link_written_another_way_is_the_link_the_sentence_had():
     """The rule and new_links read the same addresses: the sentence's own
     link in another spelling is no new one and needs no check."""
@@ -562,6 +593,16 @@ def test_a_request_whose_sentences_all_lost_their_place_settled_nothing(store, m
     assert request["outcome"] == "rejected" and "place" in request["rejected"].values()
     counted = agent_audit_metrics.turn_counters(turn, agent_audit_metrics.capture(loop))["correction"]
     assert counted["models"] == {agent_audit_metrics.label(loop.model.model): {"unsettled": 1}}
+
+
+def test_a_page_the_reviewer_names_in_the_note_is_a_source_too(store):
+    """The request lets a link point to a source a reviewer named for the
+    finding; a reviewer names one in its note as often as in "source"."""
+    loop = feedback_loop(store, Audit(live={"anthropic": corrector()}))
+    other = "https://example.org/fares"
+    notes = [{"note": f"The 2026 rates ({RATES}) and [fares]({other}) say 36.10 euros."},
+             {"note": "See javascript:alert(1) or https://user:pw@example.org/x.", "source": SOURCE}]
+    assert loop.comparison.auditor._finding_sources([{"id": "s1", "notes": notes}]) == {"s1": {RATES, other, SOURCE}}
 
 
 # --- A chat with Google data takes no reviewer's source ----------------------------
