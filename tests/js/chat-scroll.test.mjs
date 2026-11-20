@@ -355,6 +355,95 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
+  // Following is asked for: "Latest message" during a run, never Send, an
+  // opened chat or the streamed text itself.
+  const followed = () => {
+    const app = boot({ executing: true });
+    const end = () => app.document.documentElement.scrollHeight - 800;
+    const attached = () => app.document.body.classList.contains("chat-scroll-attached");
+    app.window.App.revealSentMessage(); app.tick();
+    app.grow(1000); app.tick();
+    const button = app.document.querySelector(".chat-scroll-latest");
+    expect(button.hidden).toBe(false);
+    button.click(); app.tick();
+    expect([app.window.scrollY, attached()]).toEqual([end(), true]);
+    return { app, end, attached, button };
+  };
+
+  it("stays at the end of an answer still written once Latest message was pressed, until the reader scrolls up", () => {
+    const { app, end, attached, button } = followed();
+    // A new line: the window goes with it over a few frames, never past the end.
+    app.grow(26); app.tick(1);
+    expect(app.window.scrollY).toBeGreaterThan(end() - 26);
+    expect(app.window.scrollY).toBeLessThan(end());
+    app.tick();
+    expect(app.window.scrollY).toBe(end());
+    app.grow(900); app.tick(80);
+    expect([app.window.scrollY, button.hidden]).toEqual([end(), true]);
+    // The reader takes the page back; the way to the end is offered again.
+    app.wheel();
+    const held = app.window.scrollY;
+    app.grow(400); app.tick(80);
+    expect([app.window.scrollY, attached(), button.hidden]).toEqual([held, false, false]);
+    app.dom.window.close();
+  });
+
+  it("follows in one step with reduced motion", () => {
+    const app = boot({ executing: true, reduced: true });
+    app.window.App.revealSentMessage(); app.tick();
+    app.grow(1000); app.tick();
+    app.document.querySelector(".chat-scroll-latest").click(); app.tick();
+    app.grow(600); app.tick(1);
+    expect(app.window.scrollY).toBe(app.document.documentElement.scrollHeight - 800);
+    app.dom.window.close();
+  });
+
+  it("lets go of the end a moment after the run is over", () => {
+    const { app, end, attached } = followed();
+    // The row under the answer comes a moment after the run: still followed.
+    app.stop();
+    app.grow(52); app.tick(30);
+    expect([app.window.scrollY, attached()]).toEqual([end(), true]);
+    app.tick(100);
+    expect(attached()).toBe(false);
+    const held = app.window.scrollY;
+    app.grow(300); app.tick(80);
+    expect(app.window.scrollY).toBe(held);
+    app.dom.window.close();
+  });
+
+  it("ends the following with any sign of the reader, not with a wheel towards the end", () => {
+    const key = (app, name) => app.window.dispatchEvent(new app.window.KeyboardEvent("keydown", { key: name }));
+    const signs = {
+      "a typed letter": app => key(app, "a"),
+      "the scrollbar's handle": app => app.scroll(app.window.scrollY - 300),
+      "a touch": app => app.window.dispatchEvent(new app.window.Event("touchstart")),
+      "a pointer": app => app.window.dispatchEvent(new app.window.Event("pointerdown")),
+      "the next message": app => { app.window.App.revealSentMessage(); },
+    };
+    for (const [name, sign] of Object.entries(signs)) {
+      const { app, attached } = followed();
+      sign(app);
+      expect(attached(), name).toBe(false);
+      app.dom.window.close();
+    }
+    const { app, end, attached } = followed();
+    key(app, "Shift");
+    app.wheel(100);
+    app.grow(200); app.tick();
+    expect([app.window.scrollY, attached()]).toEqual([end(), true]);
+    app.dom.window.close();
+  });
+
+  it("does not follow an answer that is already written", () => {
+    const app = boot();
+    app.window.App.revealSentMessage(); app.tick();
+    app.grow(1000); app.tick();
+    app.document.querySelector(".chat-scroll-latest").click(); app.tick();
+    expect(app.document.body.classList.contains("chat-scroll-attached")).toBe(false);
+    app.dom.window.close();
+  });
+
   it("gives the reader control even before the first frame", () => {
     const app = boot();
     app.window.App.revealSentMessage(); app.wheel(); app.tick();

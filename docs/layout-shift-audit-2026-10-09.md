@@ -24,6 +24,12 @@ Font-URL nicht), 20 (Scrollbar-Rinne). Nachgemessen: kein Wort bewegt sich
 mehr bei Stream/Review/Ende, Gast-Reload ohne Layout-Shift-Eintrag.
 Offen: 5 (nur noch geometrieneutral, kein Sprung), 12, 15, 21–28.
 
+Nachtrag 2026-11-20 zu 13: Von selbst läuft weiterhin nichts mit. Wer
+„Latest message“ drückt, während die Antwort noch schreibt, bleibt danach an
+ihrem Ende, bis er scrollt, tippt, markiert oder die Seite berührt
+(`chat-scroll.js` `attach`). Die Zeile unter der Antwort wartet seitdem auf
+das letzte eingeblendete Wort (`stream-reveal.js` `pending`).
+
 ## P1 — „Markierungen erscheinen → Text springt“
 
 Alles feuert in einem synchronen Aufruf: `agent-chat.js` (~576–586) →

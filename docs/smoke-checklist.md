@@ -2058,11 +2058,14 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Bookmark löschen: sofort weich ausgeblendet, ohne auf DELETE zu warten.
   Eine verzögerte Liste darf es nicht zurückbringen; bei einem Löschfehler kommt
   der Eintrag mit verständlicher Meldung zurück und kann erneut gelöscht werden.
-- [ ] Im Agent- und Consensus-Chat eine Folgefrage nach einer langen Antwort senden:
-  sanfter Sprung ans Ende; die wachsende Antwort folgt beim Mitlesen unten.
-- [ ] Währenddessen hochscrollen, Text markieren oder einen Dialog öffnen:
-  kein Zurückziehen. „Latest message“ führt wieder ans Ende; Chat-/Kontowechsel
-  und Hintergrundantworten bewegen die neue Ansicht nicht.
+- [ ] Im Agent-Chat eine Folgefrage nach einer langen Antwort senden: Die Frage
+  fährt einmal nach oben, die Antwort wächst darunter, nichts läuft von selbst mit.
+- [ ] „Latest message“ drücken, während die Antwort noch schreibt: Das Fenster
+  bleibt am Textende, neue Zeilen gleiten herein, der Knopf bleibt weg.
+  Hochscrollen, Tippen, Text markieren oder ein Dialog beenden das; danach kein
+  Zurückziehen, der Knopf kommt wieder. Unter einer fertigen Antwort springt er
+  nur einmal. Chat-/Kontowechsel und Hintergrundantworten bewegen die neue
+  Ansicht nicht.
 - [ ] Mobil den Composer vergrößern/Viewport ändern und Reduced Motion aktivieren:
   letzte Antwort bleibt erreichbar, reduzierte Bewegung verzichtet auf Animation.
 

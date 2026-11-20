@@ -16,7 +16,7 @@
 }
 .chat-scroll-latest:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .chat-scroll-latest[hidden], body.is-hero .chat-scroll-latest { display: none; }
-body.chat-scroll-following .container { overflow-anchor: none; }
+body:is(.chat-scroll-following, .chat-scroll-attached) .container { overflow-anchor: none; }
 @keyframes chat-latest-enter {
   from { opacity: 0; transform: translate(-50%, 4px); }
   to { opacity: 1; transform: translate(-50%, 0); }

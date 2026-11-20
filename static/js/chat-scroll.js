@@ -1,6 +1,9 @@
 // Conversation scrolling like ChatGPT/Claude: Send moves the new question to
 // the top once, the answer grows into reserved space below it, and nothing
 // scrolls on its own while text streams, checks arrive or a run ends.
+// Following is the reader's choice: "Latest message" pressed while the run
+// still writes keeps the window at the end of the answer (attach) until the
+// reader scrolls, types, selects or touches the page, or the run is over.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
@@ -154,7 +157,7 @@
   // starts it again, instead of a check in every frame while idle.
   const SHOW_FAR = 160, SHOW_AFTER_MS = 500;
   let farSince = null, showFrame = 0;
-  function away() { return !valid() || !!jump || occupied() || maxTop() - window.scrollY <= NEAR_END; }
+  function away() { return !valid() || !!jump || attached || occupied() || maxTop() - window.scrollY <= NEAR_END; }
   function syncButton() {
     if (button) {
       if (away()) { button.hidden = true; farSince = null; }
@@ -174,11 +177,58 @@
     jump = null;
     place = null;
     cancelFrame();
+    detach();
     syncButton();
   }
   function write(top) {
     // Each frame is immediate; a native smooth scroll must not outlive our cancellation.
     window.scrollTo({ top, left: window.scrollX, behavior: "instant" });
+    // Our own move, not the reader's (the scroll listener below).
+    if (attached) attachY = window.scrollY;
+  }
+  // The window stays at the end of an answer that is still written, because
+  // the reader asked for it ("Latest message" during the run, finish()). The
+  // end is caught up over a few frames, so a new line glides in instead of
+  // moving the text a line at a stroke. What comes under the answer a moment
+  // after the run (its row, a card) still belongs to it: the following ends
+  // ATTACH_TAIL_MS later.
+  const ATTACH_EASE_MS = 90, ATTACH_TAIL_MS = 1500;
+  let attached = false, attachFrame = 0, attachLast = 0, attachEnd = 0, attachY = 0;
+  function working() {
+    return Boolean(context?.runId && App.runRegistry?.isExecuting?.(context.runId));
+  }
+  function detach() {
+    if (!attached) return;
+    attached = false;
+    if (attachFrame) window.cancelAnimationFrame(attachFrame);
+    attachFrame = 0;
+    document.body.classList.remove("chat-scroll-attached");
+  }
+  function attach() {
+    attached = true; attachLast = 0; attachEnd = 0; attachY = window.scrollY;
+    document.body.classList.add("chat-scroll-attached");
+    follow();
+  }
+  function follow() {
+    if (attached && !attachFrame) attachFrame = window.requestAnimationFrame(followStep);
+  }
+  function followStep(now) {
+    attachFrame = 0;
+    if (!attached) return;
+    if (!valid() || occupied()) { detach(); syncButton(); return; }
+    if (!working()) {
+      if (!attachEnd) attachEnd = now + ATTACH_TAIL_MS;
+      else if (now >= attachEnd) { detach(); syncButton(); return; }
+    }
+    const end = maxTop(), y = window.scrollY, gap = end - y;
+    if (gap > .5) {
+      const elapsed = attachLast ? Math.min(50, now - attachLast) : 16;
+      const step = motion.matches ? gap : Math.max(1, gap * (1 - Math.exp(-elapsed / ATTACH_EASE_MS)));
+      write(Math.min(end, Math.ceil(y + step)));
+    }
+    attachLast = gap > .5 ? now : 0;
+    // The frames go on while there is an end to reach or a tail to end.
+    if (gap > .5 || attachEnd) attachFrame = window.requestAnimationFrame(followStep);
   }
   function preserveAbove(element, anchor = null) {
     if (!element?.isConnected || !valid() || occupied() || window.scrollY <= 0) return null;
@@ -207,7 +257,11 @@
     };
   }
   function finish() {
-    jump = null; started = null; place = null; syncButton();
+    // At the end because the reader asked, while the answer is still written.
+    const stay = jump === "latest" && working();
+    jump = null; started = null; place = null;
+    if (stay) attach();
+    syncButton();
   }
   // How long an opened conversation keeps its newest question in place while
   // late layout settles (fonts, marks, the activity line, file rows).
@@ -253,6 +307,7 @@
   function changed() {
     updateReserve();
     if (!valid()) { pause(); return; }
+    follow();
     syncButton();
   }
   function ensure() {
@@ -303,6 +358,7 @@
   function start(kind) {
     if (!valid()) return;
     cancelFrame();
+    detach();
     jump = kind;
     destination = null;
     syncButton();
@@ -329,6 +385,7 @@
     project(App.runRegistry?.visible());
     if (!valid() || occupied()) return;
     cancelFrame();
+    detach();
     jump = "open";
     destination = null;
     place = pendingPlace || held;
@@ -342,6 +399,11 @@
   }
   function interrupt(event) {
     if (event.target?.closest?.(".chat-scroll-latest")) return;
+    // The following ends with any sign of the reader, also a typed letter
+    // (not a modifier held alone); only a wheel towards the end goes with it.
+    const along = event.type === "wheel" && event.deltaY > 0;
+    const modifier = event.type === "keydown" && ["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(event.key);
+    if (attached && !along && !modifier) { detach(); syncButton(); }
     if (event.type === "keydown" && !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Tab", "Escape"].includes(event.key)) return;
     if (jump) pause();
   }
@@ -351,7 +413,14 @@
   // A reader who scrolls up leaves the room the floor held below the window:
   // it goes now, not with the turn's next change. After the run none comes,
   // and scrolling back down found the white under the turn again.
-  window.addEventListener("scroll", () => { if (peak) updateReserve(); syncButton(); }, { passive: true });
+  // A move up that was not ours is the reader's (the scrollbar's handle,
+  // which sends no pointer event): the following ends.
+  const ATTACH_SLACK = 8;
+  window.addEventListener("scroll", () => {
+    if (attached && window.scrollY < attachY - ATTACH_SLACK) detach();
+    if (peak) updateReserve();
+    syncButton();
+  }, { passive: true });
   let width = window.innerWidth;
   window.addEventListener("resize", () => {
     // Another width sets the turn anew; the phone's keyboard does not.

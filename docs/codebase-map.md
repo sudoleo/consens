@@ -3678,6 +3678,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
   beim Drücken bestand (gemessen an der Reserve-Unterkante); Text, der während
   des Sprungs ankommt, verlängert ihn nicht, ein wachsender Composer schon.
+  Mitlaufen gibt es nur auf Wunsch (seit 2026-11-20): Wird der Knopf gedrückt,
+  während der Lauf des sichtbaren Chats noch schreibt (`working()`), bleibt
+  das Fenster nach dem Sprung am Ende der Antwort (`attach`,
+  `body.chat-scroll-attached`, der Knopf zeigt sich so lange nicht).
+  `followStep` holt das Ende pro Frame ein (`ATTACH_EASE_MS`, mit Reduced
+  Motion in einem Schritt), damit eine neue Zeile hereingleitet, statt den Text
+  zeilenweise zu versetzen. Es endet mit jedem Zeichen des Lesers: Rad nach
+  oben, Berührung, Zeiger, jede Taste außer einem allein gehaltenen Modifier,
+  Markierung, Dialog, ein Scroll nach oben, der nicht von uns kam (Griff der
+  Bildlaufleiste, `ATTACH_SLACK`), ein neuer Sprung (Senden, Öffnen), ein
+  anderer Chat; sonst `ATTACH_TAIL_MS` (1,5 s) nach dem Laufende, damit die
+  Zeile unter der Antwort noch mitkommt. Senden, Öffnen und der Stream selbst
+  starten es nie.
   Gespeicherte Ansichten binden die
   Animation an Bookmark und Auth-Generation; neue Auswahl und Leseinteraktionen
   brechen sie ab. `getSelectedConversationIdentity()` liest dafür nur ID/Modus,

@@ -1,5 +1,6 @@
 """Real built chat: send, stream, reading interruption and view ownership."""
 from pathlib import Path
+import re
 import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
@@ -41,7 +42,9 @@ def test_agent_review_and_completion_keep_visible_answer_still(browser, phase4_s
             page.locator('#agentAnswerActivity summary').click()
         page.wait_for_timeout(400)
         if at_end:
-            page.evaluate('() => App.chatScroll.latest()')
+            # At the end by hand: "Latest message" during a run would follow
+            # the answer from here on (chat-scroll.js attach).
+            page.evaluate('() => scrollTo({top: document.documentElement.scrollHeight, behavior: "instant"})')
             page.wait_for_function('() => document.documentElement.scrollHeight - innerHeight - scrollY < 3')
         else:
             page.evaluate("""() => {
@@ -171,16 +174,26 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         expect(latest).not_to_be_visible()
         if width < 1100:
             assert page.evaluate("document.activeElement.id !== 'questionInput'")
-        # Reaching the end does not resume following.
-        before = page.evaluate("scrollY")
+        # Pressed while the answer is still written: from here on the window
+        # stays at its end, and the way there is not offered meanwhile.
+        reached_end = "() => document.documentElement.scrollHeight - innerHeight - scrollY < 3"
+        expect(page.locator("body")).to_have_class(re.compile(r"\bchat-scroll-attached\b"))
         page.evaluate("__streamHandlers.delta.append('\\n\\n' + 'Additional material.\\n\\n'.repeat(20))")
+        page.wait_for_function("() => document.getElementById('agentAnswerBody').textContent.split('Additional material.').length > 20")
+        page.wait_for_function(reached_end)
+        expect(latest).not_to_be_visible()
+        # The reader scrolls up: nothing follows any more, and the way to the
+        # end is offered again.
+        page.mouse.move(width / 2, 300)
+        page.mouse.wheel(0, -400)
+        page.wait_for_function("() => !document.body.classList.contains('chat-scroll-attached')")
+        page.wait_for_timeout(300)
+        before = page.evaluate("scrollY")
+        page.evaluate("__streamHandlers.delta.append('\\n\\n' + 'Later material.\\n\\n'.repeat(20))")
+        page.wait_for_function("() => document.getElementById('agentAnswerBody').textContent.split('Later material.').length > 20")
         page.wait_for_timeout(600)
         assert abs(page.evaluate("scrollY") - before) < 3
         expect(latest).to_be_visible()
-        # The jump keeps the end it was pressed for; on a slow runner the text
-        # was still landing then and ran past the near-end band. Press once
-        # all of it is there.
-        page.wait_for_function("() => document.getElementById('agentAnswerBody').textContent.split('Additional material.').length > 20")
         latest.focus()
         latest.press("Enter")
         page.wait_for_function(await_bottom)
