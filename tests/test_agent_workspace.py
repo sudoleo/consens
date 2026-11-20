@@ -1415,9 +1415,13 @@ def test_display_sh_waits_a_bounded_time_and_asks_only_a_chrome_that_starts():
     gives this script."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     wait = display[display.index("# A Chrome started here is ready once it answers"):]
-    assert 'limit=15\n[ -n "$started" ] && [ "$mode" != "--restart" ] && limit=40\nuntil=$((SECONDS + limit))' in wait
+    assert 'limit=15\n[ -n "$started" ] && [ "$mode" != "--restart" ] && limit=40\n' in wait
+    assert "until=$((SECONDS + limit))" in wait
     assert 'while [ "$SECONDS" -lt "$until" ]' in wait
     assert '{ [ -z "$started" ] || answers 2; }' in wait and "seq 150" not in display
+    # A Chrome that ended meanwhile is not waited for to the limit: every
+    # other caller waits for this script's lock (38 s on a test Sprite).
+    assert '[ -n "$started" ] && [ "$SECONDS" -ge $((began + 3)) ] && [ -z "$(browser_pid)" ] && break' in wait
     start = display[display.index('started=""'):display.index("# A Chrome started here is ready once it answers")]
     assert start.index('if [ -z "$(browser_pid)" ]; then\n  started=1') < start.index('"$here/cdp.py"')
     browser = (VM_FILES / "browser" / "browser.py").read_text(encoding="utf-8")
@@ -1430,8 +1434,10 @@ def test_a_chrome_that_is_still_starting_is_waited_for_never_ended():
     display.sh's wait, the live view said "not reachable", and the next call
     would have ended it for its silence and started the same wait again. A
     Chrome under a minute old that does not answer yet is waited for like
-    one started here; the relay tries a start that gave up once more with
-    --keep, which ends nothing."""
+    one started here (the relay's second try of a start that gave up:
+    test_a_relay_without_its_browser_says_so). On a test Sprite 2026-11-20
+    a stopped Chrome 0 s old kept its process through display.sh's 51 s,
+    and one 62 s old was restarted in 16 s."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     decide = display[display.index('pid="$(browser_pid)"'):display.index('[ -n "$why" ] && stop_chrome')]
     assert 'age="$(ps -o etimes= -p "$1" 2>/dev/null | tr -d \' \')"\n  [ -n "$age" ] && [ "$age" -lt 60 ]' in decide
@@ -1439,8 +1445,6 @@ def test_a_chrome_that_is_still_starting_is_waited_for_never_ended():
             'else why="no answer on its debugging pipe"; fi') in decide
     # Before the choice, so the wait at the end knows of it.
     assert decide.index('started=""') < decide.index('if starting "$pid"')
-    relay = (VM_FILES / "browser" / "relay.py").read_text(encoding="utf-8")
-    assert 'if not run("display.sh") and not run("display.sh", "--keep"):\n        state("error")' in relay
 
 
 def test_a_chrome_that_no_longer_answers_starts_anew():
@@ -1679,10 +1683,101 @@ def test_the_open_view_starts_a_chrome_that_ended_again(monkeypatch):
 
 def test_a_relay_without_its_browser_says_so(monkeypatch, capfd):
     relay = load("relay")
-    monkeypatch.setattr(relay, "run", lambda script, *args: script == "install.sh")
+    tried = []
+    monkeypatch.setattr(relay, "run", lambda script, *args: tried.append((script, *args)) or script == "install.sh")
     monkeypatch.setattr(relay.os.path, "exists", lambda path: True)
+    monkeypatch.setattr(relay, "running", lambda: None)
     assert relay.main() == 1
     assert [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()] == ["starting", "error"]
+    # A start that gave up is tried once more, in the way that ends nothing.
+    assert tried == [("install.sh",), ("display.sh",), ("display.sh", "--keep")]
+
+
+def test_the_relay_shows_a_running_browser_at_once_and_looks_at_it_after(monkeypatch, capfd):
+    """On a VM whose browser runs, install.sh's and display.sh's checks took
+    0.3 of the relay's 0.8 s before the picture (test Sprite 2026-11-20).
+    With the VNC server and cdp.py answering, "ready" is the first state,
+    and display.sh's look at Chrome (rules, a Chrome that no longer answers)
+    follows it once."""
+    import io
+    import socket
+    import threading
+    relay = load("relay")
+    scripts, started = [], []
+    monkeypatch.setattr(relay, "run", lambda script, *args: scripts.append((script, *args)) or True)
+    monkeypatch.setattr(relay.subprocess, "Popen", lambda argv, **options: started.append((argv, options)))
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    monkeypatch.setattr(relay, "running", lambda: socket.create_connection(server.getsockname(), timeout=10))
+
+    def vnc():
+        connection, _ = server.accept()
+        try:
+            connection.sendall(b"RFB 003.008\n")
+            while connection.recv(65536):
+                pass
+        except OSError:
+            pass
+        connection.close()
+    server_thread = threading.Thread(target=vnc, daemon=True)
+    server_thread.start()
+
+    class Stream:
+        def __init__(self, raw):
+            self.buffer = type("Buffer", (), {"raw": raw})()
+    monkeypatch.setattr(relay.sys, "stdin", Stream(io.BytesIO(b"")))
+    monkeypatch.setattr(relay.sys, "stdout", Stream(io.BytesIO()))
+    monkeypatch.setattr(relay, "watch", lambda done: None)
+    assert relay.main() == 0
+    server_thread.join(10)
+    server.close()
+    states = [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines() if "state" in line]
+    assert states == ["ready"] and scripts == []
+    # In a session of its own: the view may close before display.sh is
+    # through, and one cut off between ending Chrome and starting it leaves
+    # none (two relays in a row started two Chromes on a test Sprite).
+    [(argv, options)] = started
+    assert argv[0] == "bash" and argv[1].endswith("display.sh") and len(argv) == 2
+    assert options["start_new_session"] is True and options["stdin"] == relay.subprocess.DEVNULL
+
+
+def test_a_browser_runs_only_while_chrome_answers_and_its_screen_takes_a_connection(monkeypatch, tmp_path):
+    """The short way needs both: Chrome answering with its tabs (cdp.py
+    alone outlived a killed Chrome on a test Sprite, and the view would show
+    an empty screen as ready) and the VNC server taking the connection.
+    Sockets a VM's sleep left behind are files nobody listens on. Anything
+    else is the long way, which says what it starts."""
+    relay = load("relay")
+    marker = tmp_path / "setup-done"
+    monkeypatch.setattr(relay, "MARKER", str(marker))
+    asked, chrome, screen = [], [OSError("refused")], [OSError("refused")]
+
+    def cdp_get(path, timeout=3):
+        asked.append((path, timeout))
+        if isinstance(chrome[0], Exception):
+            raise chrome[0]
+        return chrome[0]
+
+    def connect_vnc():
+        if isinstance(screen[0], Exception):
+            raise screen[0]
+        return screen[0]
+    monkeypatch.setattr(relay, "cdp_get", cdp_get)
+    monkeypatch.setattr(relay, "connect_vnc", connect_vnc)
+    # Not set up yet: install.sh comes first, and nothing is asked.
+    assert relay.running() is None and asked == []
+    marker.write_text("")
+    assert relay.running() is None and asked == [(relay.TARGETS, relay.RUNNING_SECONDS)]
+    # Chrome answers, the screen's socket is a file from before the VM slept.
+    chrome[0] = b"[]"
+    assert relay.running() is None
+    screen[0] = object()
+    assert relay.running() is screen[0]
+    # A Chrome that is busy or half an answer (http.client's errors are no OSError).
+    import http.client
+    chrome[0] = http.client.IncompleteRead(b"")
+    assert relay.running() is None
 
 
 # --- Sprites calls ---------------------------------------------------------------------

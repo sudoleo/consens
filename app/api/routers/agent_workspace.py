@@ -407,6 +407,31 @@ async def _connect(uid, seconds, url, kind="view"):
         raise
 
 
+def _no_answer(exc):
+    """Whether the exec socket's handshake got no usable answer (broke off,
+    refused, ran out of time), as against the provider's own refusal with a
+    status. A VM waking from its pause breaks the first handshake off (test
+    Sprite 2026-11-20: after 12 min of idle the first try failed, the second
+    a second later held; agent_vm._connect_exec tries twice for the same
+    reason). The view then opens the VM once more the long way, whose
+    requests wait for its wake and say when it does not start, instead of
+    ending with an error for the user to retry."""
+    from websockets.exceptions import InvalidHandshake, InvalidStatus
+    return isinstance(exc, (OSError, EOFError, InvalidHandshake)) and not isinstance(exc, InvalidStatus)
+
+
+async def _opened(websocket, uid, seconds, start):
+    """``(url, repaired)``: the VM open for the view (_waking), after its
+    repair where the provider did not start it (_repairing)."""
+    try:
+        return await _waking(websocket, uid, seconds, start), False
+    except agent_vm.VMUnavailable as exc:
+        if not agent_vm.unresponsive(exc):
+            raise
+        start.end()
+        return await _repairing(websocket, uid, seconds, start), True
+
+
 def _until(uid):
     """About when the browser's start ends (agent_workspace.start_until), for
     the view's progress bar: {"until": ISO time} or {}.
@@ -650,16 +675,20 @@ async def workspace_view(websocket: WebSocket):
     # also that of the account's provisioning when it sets it up right now.
     start = agent_workspace.Start(uid, "browser")
     try:
+        url, repaired = await _opened(websocket, uid, seconds, start)
         try:
-            url = await _waking(websocket, uid, seconds, start)
-        except agent_vm.VMUnavailable as exc:
-            if not agent_vm.unresponsive(exc):
+            view_id, upstream = await _connect(uid, seconds, url)
+        except Exception as exc:
+            if not _no_answer(exc):
                 raise
-            start.end()
-            url = await _repairing(websocket, uid, seconds, start)
+            logging.info("Agent workspace view handshake failed once category=%s", safe_exception(exc))
+            # _connect forgot the last contact: this open asks the VM itself.
+            url, again = await _opened(websocket, uid, seconds, start)
+            repaired = repaired or again
+            view_id, upstream = await _connect(uid, seconds, url)
+        if repaired:
             # The wait for the repair is not the view's time.
             started = time.monotonic()
-        view_id, upstream = await _connect(uid, seconds, url)
     except WebSocketDisconnect:
         start.end()
         return
@@ -795,7 +824,14 @@ async def workspace_terminal(websocket: WebSocket):
     started = time.monotonic()
     try:
         url = await asyncio.to_thread(_open_terminal, uid, seconds, size)
-        terminal_id, upstream = await _connect(uid, seconds, url, "terminal")
+        try:
+            terminal_id, upstream = await _connect(uid, seconds, url, "terminal")
+        except Exception as exc:
+            if not _no_answer(exc):
+                raise
+            logging.info("Agent workspace terminal handshake failed once category=%s", safe_exception(exc))
+            url = await asyncio.to_thread(_open_terminal, uid, seconds, size)
+            terminal_id, upstream = await _connect(uid, seconds, url, "terminal")
     except Exception as exc:
         logging.warning("Agent workspace terminal unavailable category=%s", safe_exception(exc))
         await _state(websocket, "error")

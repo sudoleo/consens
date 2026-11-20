@@ -64,6 +64,15 @@ def test_rest_shortens_the_hold_and_does_nothing_else(monkeypatch, capsys):
     # Every other call still holds the VM awake for AWAKE_FOR.
     answer, holds, _ = main_answers(browser, monkeypatch, capsys, {"action": "rm -rf /"})
     assert answer["status"] == "refused" and holds == ["10m"]
+    # The rest after the server's warm-up before the user opens the workspace
+    # (agent_workspace._warm) leaves more than the app's pace of asking again
+    # (workspace-view.js WARM_MS): a VM that paused in between took 6.6 s to
+    # take the view's connection (test Sprite 2026-11-20).
+    answer, holds, helped = main_answers(browser, monkeypatch, capsys, {"action": "rest", "for": "view"})
+    assert answer["status"] == "ok" and holds == ["5m"] and browser.WARM_FOR == "5m" and helped == []
+    assert int(browser.WARM_FOR[:-1]) * 60 > agent_workspace.WARM_EVERY_SECONDS
+    _, holds, _ = main_answers(browser, monkeypatch, capsys, {"action": "rest", "for": "ever"})
+    assert holds == ["2m"]
 
 
 # --- A7: the resident helper heals Chrome itself ---------------------------------

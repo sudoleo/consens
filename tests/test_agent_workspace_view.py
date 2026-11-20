@@ -375,6 +375,44 @@ def test_a_vm_that_nothing_brings_back_ends_the_view_with_its_reason(view_api, f
     assert closed.value.code == workspace_router.CLOSE_STUCK
 
 
+def test_a_handshake_a_waking_vm_breaks_off_is_tried_again_the_long_way(view_api, fake_vm, monkeypatch):
+    """A VM reached a moment ago is opened without a request that waits for
+    its wake (agent_workspace._ready), so the exec socket's handshake meets a
+    VM that paused meanwhile, and a waking VM breaks the first one off (test
+    Sprite 2026-11-20). The view opens it once more the long way instead of
+    ending with an error; the provider's refusal with a status stays one."""
+    from websockets.exceptions import InvalidMessage, InvalidStatus
+    client, _, gateway, _ = view_api
+    agent_workspace.open_workspace(fake_vm.backend(), UID)
+    agent_vm._touch(NAME)
+    fake_vm.calls.clear()
+    tries = []
+
+    async def connect(url):
+        tries.append(url)
+        if len(tries) == 1:
+            raise InvalidMessage("did not receive a valid HTTP response")
+        gateway.url = url
+        return gateway
+    monkeypatch.setattr(workspace_router, "connect_upstream", connect)
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(3)] == ["connecting", "starting", "ready"]
+        assert ws.receive_bytes() == b"RFB 003.008\n"
+    assert len(tries) == 2
+    # First nothing but the relay's address, then the VM itself is asked.
+    assert [call[0] for call in fake_vm.calls if call[0] != "close"] == ["exec_url", "ensure", "read", "exec_url"]
+
+    async def refused(url):
+        tries.append(url)
+        raise InvalidStatus(type("Response", (), {"status_code": 404})())
+    monkeypatch.setattr(workspace_router, "connect_upstream", refused)
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "error"]
+    assert len(tries) == 3
+
+
 def test_the_app_warms_the_workspace_before_the_user_opens_it(view_api, fake_vm, monkeypatch):
     """The view waited for the VM's wake and Chrome's start after the click
     (15 to 30 s from cold). The app asks for the workspace beforehand

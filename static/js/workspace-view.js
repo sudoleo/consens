@@ -344,15 +344,20 @@
   // Never while the view is open (it keeps the workspace awake itself) or
   // the tab is hidden.
   let warmedAt = 0;
+  // Read once: warm runs with every move of the pointer.
+  let opened = null;
   function openedBefore() {
-    try { return localStorage.getItem(OPENED_KEY) === '1'; } catch (error) { return false; }
+    if (opened === null) {
+      try { opened = localStorage.getItem(OPENED_KEY) === '1'; } catch (error) { opened = false; }
+    }
+    return opened;
   }
   function warm(intent = false) {
+    const now = Date.now();
+    if (warmedAt && now - warmedAt < WARM_MS) return;
     if (view || document.hidden || !window.auth?.currentUser) return;
     if (!document.body.classList.contains('viewer-has-workspace')) return;
     if (!intent && !openedBefore()) return;
-    const now = Date.now();
-    if (warmedAt && now - warmedAt < WARM_MS) return;
     warmedAt = now;
     post('/agent/workspace/warm', { intent: Boolean(intent) }).catch(() => {});
   }
@@ -1299,6 +1304,7 @@
       return;
     }
     view = build();
+    opened = true;
     try { localStorage.setItem(OPENED_KEY, '1'); } catch (error) { /* per browser only */ }
     // The account it shows (onAuthState closes it for any other).
     view.uid = window.auth?.currentUser?.uid || null;
@@ -1464,9 +1470,11 @@
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('online', nudge);
   // The user is back in the tab or at work in the app: the workspace stays
-  // within reach (warm paces itself, WARM_MS).
+  // within reach (warm paces itself, WARM_MS). A pointer that moves again
+  // after a pause counts: it comes seconds before the click, and a paused
+  // workspace needs them to wake.
   document.addEventListener('visibilitychange', () => warm());
-  for (const type of ['pointerdown', 'keydown']) {
+  for (const type of ['pointerdown', 'pointermove', 'keydown']) {
     document.addEventListener(type, () => warm(), { capture: true, passive: true });
   }
   // The account is known (auth-session-state.js): a takeover from before a

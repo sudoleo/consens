@@ -1169,9 +1169,15 @@ describe("the workspace before it is opened, and one that does not start", () =>
       env.document.dispatchEvent(new env.window.Event("pointerdown"));
       await vi.advanceTimersByTimeAsync(50);
       expect(warms(env.window)).toEqual([false]);
+      // Back after a pause: the pointer moves seconds before it clicks, and a
+      // paused workspace needs them (6.6 s to wake, test Sprite 2026-11-20).
       now += 241_000;
-      env.document.dispatchEvent(new env.window.Event("keydown"));
+      env.document.dispatchEvent(new env.window.Event("pointermove"));
       await vi.waitFor(() => expect(warms(env.window)).toEqual([false, false]));
+      env.document.dispatchEvent(new env.window.Event("pointermove"));
+      env.document.dispatchEvent(new env.window.Event("keydown"));
+      await vi.advanceTimersByTimeAsync(50);
+      expect(warms(env.window)).toEqual([false, false]);
     } finally {
       vi.useRealTimers();
     }

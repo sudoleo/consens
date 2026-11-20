@@ -224,9 +224,15 @@ fi
 # this script.
 limit=15
 [ -n "$started" ] && [ "$mode" != "--restart" ] && limit=40
+began=$SECONDS
 until=$((SECONDS + limit))
 while [ "$SECONDS" -lt "$until" ]; do
   [ -S "$cdp" ] && runs "$hub" && [ -S "$dir/vnc.sock" ] && { [ -z "$started" ] || answers 2; } && exit 0
+  # A Chrome that ended while it was waited for answers no more: the caller
+  # hears it now and whoever waits for this script's lock goes on, instead
+  # of both waiting out the limit (not in its first seconds, when cdp.py
+  # has yet to start it).
+  [ -n "$started" ] && [ "$SECONDS" -ge $((began + 3)) ] && [ -z "$(browser_pid)" ] && break
   sleep 0.1
 done
 echo "The browser did not start." >&2

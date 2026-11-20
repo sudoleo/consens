@@ -7,7 +7,9 @@ view's bytes arrive on stdin, the VNC server's leave on stdout. Before that,
 stderr says how far it is, one JSON line each: {"state": "setup"} while
 install.sh installs the browser (once), {"state": "starting"} while display.sh
 starts it, {"state": "ready"} once the VNC server answers, or
-{"state": "error"}. It ends with stdin (the view closed) or the VNC server.
+{"state": "error"}. Where the browser runs already, "ready" is the first
+state and display.sh's look at it follows the picture (running). It ends
+with stdin (the view closed) or the VNC server.
 
 While the view is open it keeps Chrome running: a Chrome that ended, by a
 crash or because the user closed its window, starts again within
@@ -187,28 +189,68 @@ def pipe(read, write, done):
     done.set()
 
 
-def main():
+RUNNING_SECONDS = 1
+
+
+def running():
+    """The VNC server's connection when the browser is up already: Chrome
+    answers with its tabs (what display.sh asks it too; cdp.py alone may
+    outlive a Chrome that was killed, test Sprite 2026-11-20) and the VNC
+    server takes a connection. The view then has its picture without
+    install.sh's and display.sh's checks before it (0.4 instead of 0.8 s on
+    a running VM, same test); main runs display.sh right after. None where
+    either is missing or slow: sockets a VM's sleep left behind refuse, and
+    the long way says what it starts."""
     if not os.path.exists(MARKER):
-        state("setup")
-    if not run("install.sh"):
-        state("error")
-        return 1
-    state("starting")
-    # A second try where the first gave up: after the VM's cold start the
-    # screen may come up later than display.sh waits for it, and --keep
-    # starts what is missing without ending what the first try started.
-    if not run("display.sh") and not run("display.sh", "--keep"):
-        state("error")
-        return 1
+        return None
     try:
-        vnc = connect_vnc()
+        cdp_get(TARGETS, timeout=RUNNING_SECONDS)
+        return connect_vnc()
+    except Exception:
+        return None
+
+
+def look_after():
+    """display.sh once, after the picture of a browser that runs already:
+    what it would have done before it (new rules restart Chrome once, a
+    missing window manager starts). In a session of its own: the view may
+    close before it is through, and a display.sh cut off between ending
+    Chrome and starting it would leave none (test Sprite 2026-11-20: two
+    relays in a row started two)."""
+    try:
+        subprocess.Popen(["bash", os.path.join(HERE, "display.sh")], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError:
-        state("error")
-        return 1
+        pass
+
+
+def main():
+    vnc = running()
+    mend = vnc is not None
+    if vnc is None:
+        if not os.path.exists(MARKER):
+            state("setup")
+        if not run("install.sh"):
+            state("error")
+            return 1
+        state("starting")
+        # A second try where the first gave up: after the VM's cold start the
+        # screen may come up later than display.sh waits for it, and --keep
+        # starts what is missing without ending what the first try started.
+        if not run("display.sh") and not run("display.sh", "--keep"):
+            state("error")
+            return 1
+        try:
+            vnc = connect_vnc()
+        except OSError:
+            state("error")
+            return 1
     vnc.settimeout(None)
     state("ready")
     stdin, stdout = sys.stdin.buffer.raw, sys.stdout.buffer.raw
     done = threading.Event()
+    if mend:
+        look_after()
 
     def to_vm(data):
         vnc.sendall(data)

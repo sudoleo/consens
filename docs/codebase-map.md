@@ -7821,9 +7821,13 @@ Nachricht liest `HEALED_NOTE` (`restored_by`, `Claim.healed`). **Vorwärmen und
 kurzer Weg (seit 2026-11-20):** `POST /agent/workspace/warm`
 (`agent_workspace.warm_later`/`_warm`, von `workspace-view.js` `warm` beim
 Kontostatus, bei Aktivität in der App und mit `intent` am Arbeitsplatz-Knopf)
-weckt die VM, startet Chrome und hält sie zwei Minuten wach, bevor der Nutzer
+weckt die VM, startet Chrome und hält sie fünf Minuten wach (`browser.py`
+`WARM_FOR`, länger als der Takt der App), bevor der Nutzer
 sie öffnet; nie eine neue VM, nie unter einer Nachricht, höchstens alle
-`WARM_EVERY_SECONDS`, Notaus `AGENT_WORKSPACE_WARM=off`. `open_workspace`
+`WARM_EVERY_SECONDS`, Notaus `AGENT_WORKSPACE_WARM=off`. Das Relay zeigt
+einen Browser, der schon läuft, ohne `install.sh` und `display.sh` davor
+(`relay.py` `running`: Chrome antwortet, der VNC-Server nimmt an) und lässt
+`display.sh` danach in eigener Sitzung nachsehen (`look_after`). `open_workspace`
 fragt eine VM nicht noch einmal, die der Prozess auf Stand gebracht und in
 den letzten `WAKE_AFTER_SECONDS` erreicht hat (`_ready`,
 `agent_vm.reached_within`; `lose_contact`, eine 502 und `mark_restored` heben

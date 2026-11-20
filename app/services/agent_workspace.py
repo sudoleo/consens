@@ -807,8 +807,10 @@ def _provision(store, uid, factory):
 # app asks for the VM while the user is still elsewhere in it: when it
 # loads, while they use it, and when they reach for the workspace's button
 # (``intent``). The VM is woken, its tools brought up to date, its Chrome
-# started and held awake as after a message (the helper's warm and rest);
-# a VM that does not start is restored before the user asks for it
+# started and held awake until past the app's next asking (the helper's
+# warm and rest, browser.py WARM_FOR): a VM that paused in between took
+# 6.6 s to take the view's connection, a running one 0.3 s (test Sprite
+# 2026-11-20). A VM that does not start is restored before the user asks for it
 # (open_workspace, heal_later). Never a VM that is not there (a warm-up
 # makes none), never past the day's VM time or the safety rules, and
 # without the user's hand on the button only for an account that opened
@@ -880,8 +882,11 @@ def _warm(store, uid, intent, factory):
         name = open_workspace(vm, uid, db=store.db)
         agent_browser.helper(vm, name, {"action": "warm"}, WARM_SECONDS, ProviderCancellation())
         # As in _provision: a message that began meanwhile keeps its hold.
+        # "for": "view" leaves the VM awake past the app's next asking
+        # (browser.py WARM_FOR, longer than WARM_EVERY_SECONDS).
         if not in_use(store, uid):
-            agent_browser.helper(vm, name, {"action": "rest"}, agent_browser.REST_SECONDS, ProviderCancellation())
+            agent_browser.helper(vm, name, {"action": "rest", "for": "view"}, agent_browser.REST_SECONDS,
+                                 ProviderCancellation())
         logging.info("Agent workspace warmed seconds=%.1f intent=%s", time.monotonic() - began, bool(intent))
     except Exception as exc:
         logging.info("Agent workspace warm-up failed category=%s", safe_exception(exc))

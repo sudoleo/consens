@@ -1560,11 +1560,14 @@ geändert hat:
 - **Vorwärmen** (`POST /agent/workspace/warm`, `agent_workspace.warm_later`,
   `workspace-view.js` `warm`): Die App bittet um den Arbeitsplatz, bevor der
   Nutzer ihn öffnet: wenn der Kontostatus ankommt, wenn der Tab wieder
-  sichtbar wird, bei Tasten und Klicks in der App und mit `intent`, sobald
-  Zeiger oder Fokus auf dem Arbeitsplatz-Knopf liegen (dann lädt auch noVNC).
-  Der Server weckt die VM, bringt ihre Werkzeuge auf Stand, startet Chrome und
-  hält sie wie nach einer Nachricht zwei Minuten wach (`warm` und `rest` des
-  Helfers). Eine VM, die nicht startet, wird so repariert, bevor jemand auf
+  sichtbar wird, bei Tasten, Klicks und Zeigerbewegungen in der App und mit
+  `intent`, sobald Zeiger oder Fokus auf dem Arbeitsplatz-Knopf liegen (dann
+  lädt auch noVNC). Der Server weckt die VM, bringt ihre Werkzeuge auf Stand,
+  startet Chrome und hält sie fünf Minuten wach (`warm`, dann `rest` mit
+  `"for": "view"`; `browser.py` `WARM_FOR`). Das ist länger als der Takt der
+  App (4 min), damit die VM durchläuft, solange jemand in der App arbeitet:
+  Eine pausierte VM brauchte an der Test-Sprite 6,6 s, bis sie die Verbindung
+  der Ansicht annahm, eine laufende 0,3 s. Eine VM, die nicht startet, wird so repariert, bevor jemand auf
   sie wartet. Grenzen: nie eine VM anlegen, nie unter einer Nachricht, nie
   während eine Ansicht des Kontos offen ist oder der Nutzer den Browser hat
   (der Start sieht nach Chrome und würde einen trägen neu starten), nie
@@ -1581,7 +1584,16 @@ geändert hat:
   Anfrage weckt sie. Eine Anfrage ganz ohne Antwort (`agent_vm.lose_contact`),
   eine 502 und ein Restore heben das auf. Die Ansicht liest Sicherheitsregeln
   und Tageszeit nebeneinander und belegt die Ansicht (`claim_view`), während
-  der Exec-Socket aufgeht (`_connect`).
+  der Exec-Socket aufgeht (`_connect`). Bricht dessen Handshake ab (eine
+  aufwachende VM tut das beim ersten Versuch, `_no_answer`), öffnet die
+  Ansicht die VM einmal auf dem langen Weg neu, statt mit `error` zu enden.
+- **Relay** (`relay.py` `running`, `look_after`): Antwortet Chrome mit seinen
+  Tabs und nimmt der VNC-Server die Verbindung an, kommt `ready` sofort, ohne
+  `install.sh` und `display.sh` davor; `display.sh` sieht danach einmal nach,
+  in eigener Sitzung, damit ein schnelles Schließen der Ansicht es nicht
+  mitten im Neustart von Chrome abbricht. Fehlt eines von beiden (Chrome
+  beendet, nur Socket-Dateien nach einem Schlaf der VM), geht es den langen
+  Weg mit `starting`.
 - **Reparatur in der Ansicht** (`_repairing`): Bekommt die Ansicht die 502
   des Gateways, endet sie nicht mit „not reachable“, sondern sagt
   `repairing` mit einer Schätzung (`REPAIR_SECONDS` = 150 s) und wartet, bis
@@ -1593,11 +1605,39 @@ geändert hat:
   einen Fehler, der zweite Versuch fand ihn laufend. Ein Chrome, der jünger
   als eine Minute ist und noch nicht antwortet, gilt als startend: Er wird
   nicht mehr beendet, und `display.sh` wartet bis 40 s auf ihn (bei
-  `--restart` weiter 15 s, mehr wartet `browser.py` nicht). Das Relay
-  versucht einen gescheiterten Start einmal mit `--keep` nach, und die
-  Ansicht verbindet nach `error` einmal von selbst neu.
+  `--restart` weiter 15 s, mehr wartet `browser.py` nicht). Endet der Chrome,
+  auf den es wartet, gibt es sofort auf, statt die Frist und mit ihr seine
+  Sperre abzusitzen. Das Relay versucht einen gescheiterten Start einmal mit
+  `--keep` nach, und die Ansicht verbindet nach `error` einmal von selbst neu.
 - **Ehrliche Restzeit** (`start-progress.js`): Mehr als 10 s über der
   Schätzung steht „Taking longer than usual…“ statt „Almost done…“.
+
+Gemessen an drei frischen Test-Sprites (2026-11-20, von einem Rechner in
+Deutschland aus, alle gelöscht; `agent_vm.backend()` und
+`agent_workspace.prepare`, ohne Firestore):
+
+| Schritt | Zeit |
+| --- | --- |
+| Setup einer neuen VM (`prepare`) | 64–80 s |
+| Erste Ansicht danach (`install.sh`, Bildschirm, Chrome) | 35–43 s, davon Chrome 2–6 s |
+| Relay bis zu den ersten VNC-Bytes, alles läuft, langer Weg | 0,61–0,86 s |
+| dasselbe auf dem kurzen Weg | 0,45–0,62 s (einmal 1,27 s direkt nach Chromes Start) |
+| davon Handshake des Exec-Sockets | meist 0,2–0,4 s |
+| `ensure` und Versionslesen, die der kurze Weg in `open_workspace` spart | 0,14 s und 0,12 s |
+| Vorwärmen einer laufenden VM (`warm` + `rest`) | 1,1 s, das erste Mal 7 s |
+| Ansicht 150 s nach dem letzten Aufruf (VM pausiert) | 7,1 s, davon 6,6 s Handshake |
+| Ansicht nach 12 min Leerlauf | 3,0 s; der erste Handshake brach ab, Chrome lief noch |
+| Chrome beendet, Bildschirm läuft: langer Weg | 0,8 s |
+| Gestoppter Chrome, 0 s alt: `display.sh` | wartet 51 s, beendet ihn nicht |
+| Gestoppter Chrome, 62 s alt: `display.sh` | startet ihn in 16 s neu |
+| Chrome endet, während `display.sh` wartet | Abbruch nach 6 s statt 40 s |
+
+Der Status der Sprite (`cold`) sagt dabei nichts: Er stand auch bei einer
+laufenden VM so da. `/tmp` ist ein eigenes Volume mit 15 GB frei, Chrome
+legt dort unter 1 MB ab; `/dev/shm` hat 64 MB, `--disable-dev-shm-usage`
+bleibt also nötig. Offen ist die Zeit vom Klick bis zum Bild im Browser
+(dazu kommen die Wege über Render und der VNC-Handshake) und ein echter
+Kaltstart, den keine Probe erreicht hat.
 
 Nicht gebaut, mit Grund: VMs dauerhaft wach halten (jede Stunde kostet, und
 die Liste der Sprites nennt für die Organisation `running_limit` 10); Bildschirm

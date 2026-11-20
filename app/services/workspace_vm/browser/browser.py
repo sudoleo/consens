@@ -134,6 +134,12 @@ POLL_SECONDS = 0.05
 AWAKE_TASK = "consens-browser-awake"
 AWAKE_FOR = "10m"
 REST_FOR = "2m"
+# What the server's rest leaves after its warm-up before the user opens the
+# workspace (agent_workspace._warm, rest with "for": "view"): longer than the
+# app's pace of asking again, so the VM runs on while the user is at work in
+# the app. A paused VM took 6.6 s to take a connection again, 150 s after
+# its last call (test Sprite 2026-11-20).
+WARM_FOR = "5m"
 # The resident helper (serve): its socket, the lock one
 # of them holds while it runs, how long it waits for a call (as long as a
 # call keeps the VM awake), how long a call waits to connect and then for
@@ -3144,7 +3150,7 @@ def main():
     # the VM's network counters and the fingerprint of Chrome's policy.
     answer.update(net=net_counters(), policy=policy_print())
     if resting:
-        stay_awake(REST_FOR)
+        stay_awake(WARM_FOR if request.get("for") == "view" else REST_FOR)
     else:
         stay_awake()
     if not answer_once(answer):
