@@ -32,6 +32,11 @@ describe("the pull request card", () => {
     github.render(answer, { key: "c:t", proposal: proposal(), chatId: "c", turnId: "t" });
     const card = answer.nextElementSibling;
     expect(card.className).toBe("agent-pr-card");
+    // The Watch card's family: the glyph, the state, the title as headline,
+    // where it goes below it; its buttons styled by the card alone.
+    expect([...card.children].slice(0, 4).map(child => child.className))
+      .toEqual(["agent-pr-glyph", "agent-pr-title", "agent-pr-name", "agent-pr-target"]);
+    expect(card.querySelector(".agent-pr-create").className).toBe("agent-pr-create");
     expect(card.querySelector(".agent-pr-title").textContent).toBe("Pull request ready for review");
     expect(card.querySelector(".agent-pr-target").textContent).toBe("maxl/app · consens/fix-1a2b → main");
     expect([...card.querySelectorAll(".agent-pr-files li")].map(li => li.textContent))

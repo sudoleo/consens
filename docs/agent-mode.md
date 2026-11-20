@@ -4924,7 +4924,16 @@ Intervall (nur die der Stufe) und Uhrzeit, „Start“ ruft `POST /agent/watches
 mit Chat, Turn, Zeitplan und der Zeitzone des Browsers; den Auftrag liest der
 Server vom gespeicherten Turn, nie aus der Anfrage. Ob der Chat eine Watch
 hat, was ihr letzter Lauf fand und wann sie wieder läuft, liest die Karte aus
-`GET /agent/watches?chat_id=`; „End Watch“ beendet sie.
+`GET /agent/watches?chat_id=`; „End Watch“ beendet sie. Eine pausierte
+Watch zeigt ihren letzten Lauf statt eines eigenen Satzes: „Watch paused“
+und „Resume“ sagen den Rest, und hat ein Lauf sie pausiert, steht dort der
+Grund (`needs_you`).
+
+Aussehen (`static/css/watch-card.css`, auch auf der Landing): Zustand und
+Zeitplan als leise Zeile über dem Auftrag, der Auftrag als Überschrift, das
+Auge im getönten Kreis links trägt die einzige Farbe (Vorschlag Tinte, läuft
+Hausgrün, pausiert der Pausenton, beendet grau, Ziel erreicht ein grüner
+Haken). Ein gefüllter Knopf, die übrigen getönt.
 
 **Warum keine direkte Anlage:** Inhalte aus Seiten, Mails oder Dateien dürfen
 keine wiederkehrenden Läufe starten, die im Namen des Nutzers handeln und sein

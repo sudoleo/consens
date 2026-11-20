@@ -74,6 +74,24 @@ describe("Agent Watch card", () => {
     expect(card().querySelector(".agent-watch-end").hidden).toBe(true);
   });
 
+  it("is built for watch-card.css alone, which the landing shares", async () => {
+    // The landing shows the same card without the app's sheets: no app-wide
+    // button class may carry its look, and the state and when it runs share
+    // the quiet line above the task.
+    const { render, card } = boot();
+    render({ proposal: PROPOSAL });
+    await settle();
+    expect([...card().children].map(child => child.className)).toEqual(["agent-watch-glyph", "agent-watch-head",
+      "agent-watch-question", "agent-watch-goal", "agent-watch-schedule", "agent-watch-status", "agent-watch-actions"]);
+    expect([...card().querySelector(".agent-watch-head").children].map(child => child.className))
+      .toEqual(["agent-watch-title", "agent-watch-settings"]);
+    expect(card().querySelector(".agent-watch-glyph").getAttribute("aria-hidden")).toBe("true");
+    expect([...card().querySelectorAll(".agent-watch-glyph svg > *")].map(shape => shape.getAttribute("class")))
+      .toEqual(["agent-watch-eye", "agent-watch-pupil", "agent-watch-tick"]);
+    expect([...card().querySelectorAll(".agent-watch-actions button")].map(button => button.className))
+      .toEqual(["agent-watch-start", "agent-watch-resume", "agent-watch-change", "agent-watch-end"]);
+  });
+
   it("starts with only the chat, the turn and the schedule", async () => {
     const { window, server, render, card, text } = boot();
     render({ proposal: PROPOSAL });
@@ -132,7 +150,8 @@ describe("Agent Watch card", () => {
     await settle();
     // Hourly is not on this account: the shortest it has.
     expect(card().querySelector(".agent-watch-settings").textContent).toBe("Every 6 hours");
-    card().querySelector(".agent-watch-link").click();
+    card().querySelector(".agent-watch-change").click();
+    expect(card().querySelector(".agent-watch-change").getAttribute("aria-expanded")).toBe("true");
     const select = card().querySelector(".agent-watch-interval");
     const time = card().querySelector(".agent-watch-time");
     expect([...select.options].map(option => option.value)).toEqual(["every_6_hours", "daily", "weekly"]);
@@ -163,7 +182,23 @@ describe("Agent Watch card", () => {
     expect(server.calls.some(call => call.url === "/agent/watches/w1/stop" && call.method === "POST")).toBe(true);
     expect(card().dataset.state).toBe("ended");
     expect(text(".agent-watch-title")).toBe("Watch ended");
+    expect(card().dataset.ended).toBe("user");
     expect(card().querySelector(".agent-watch-end").hidden).toBe(true);
+    expect(card().querySelector(".agent-watch-settings").hidden).toBe(true);
+  });
+
+  it("marks a Watch that reached its goal, for its green tick", async () => {
+    const done = { id: "w1", chat_id: CHAT, turn_id: "t1", task: TASK, goal: "Registration is open", status: "done",
+      ended: "goal", interval: "daily", next_run_at: null,
+      last_run: { at: new Date().toISOString(), outcome: "done", summary: "Registration opened this morning." } };
+    const { render, card, text } = boot({ watches: [done] });
+    render({ proposal: PROPOSAL });
+    await settle();
+    expect(card().dataset.state).toBe("ended");
+    expect(card().dataset.ended).toBe("goal");
+    expect(text(".agent-watch-title")).toBe("Watch reached its goal");
+    expect(text(".agent-watch-status")).toMatch(/: Registration opened this morning\.$/);
+    expect(card().querySelector(".agent-watch-status").dataset.tone).toBe("");
   });
 
   it("ends the Watch from a card the Agent prepared again for the same task", async () => {
@@ -207,7 +242,9 @@ describe("Agent Watch card", () => {
     await settle();
     expect(card().dataset.state).toBe("paused");
     expect(text(".agent-watch-title")).toBe("Watch paused");
-    expect(text(".agent-watch-status")).toBe("Paused. It runs again once you resume it.");
+    // "Watch paused" and Resume say it; the line says what the last run did
+    // (a run that paused it says why there).
+    expect(text(".agent-watch-status")).toMatch(/: nothing new\.$/);
     expect(card().querySelector(".agent-watch-resume").hidden).toBe(false);
     expect(card().querySelector(".agent-watch-end").hidden).toBe(false);
     card().querySelector(".agent-watch-resume").click();
@@ -220,6 +257,7 @@ describe("Agent Watch card", () => {
     await settle();
     expect(card().dataset.state).toBe("watching");
     expect(text(".agent-watch-status")).toBe("The server is busy. Try again in a moment.");
+    expect(card().querySelector(".agent-watch-status").dataset.tone).toBe("error");
   });
 
   it("does not offer a second Watch in a chat that has one, or past the account's limit", async () => {
@@ -246,6 +284,7 @@ describe("Agent Watch card", () => {
     await settle();
     expect(card().dataset.state).toBe("proposal");
     expect(text(".agent-watch-status")).toBe("Watch not started. Runs this often need a higher plan.");
+    expect(card().querySelector(".agent-watch-status").dataset.tone).toBe("error");
   });
 
   it("shows no card for a proposal from before Watches ran the Agent, and leaves with its answer", async () => {

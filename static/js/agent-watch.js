@@ -58,18 +58,23 @@
     return value && App.format?.relative ? App.format.relative(value) : '';
   }
 
-  function icon() {
+  // The eye of the Watch pill under an answer, and the tick it turns into
+  // once the goal is met (watch-card.css colours it by state).
+  function glyph() {
+    const box = node('span', 'agent-watch-glyph');
+    box.setAttribute('aria-hidden', 'true');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('aria-hidden', 'true');
-    // The eye of the Watch pill under an answer.
-    for (const [tag, attrs] of [['path', { d: 'M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z' }],
-      ['circle', { cx: '12', cy: '12', r: '2.5' }]]) {
+    svg.setAttribute('focusable', 'false');
+    for (const [tag, attrs] of [['path', { class: 'agent-watch-eye', d: 'M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z' }],
+      ['circle', { class: 'agent-watch-pupil', cx: '12', cy: '12', r: '2.5' }],
+      ['path', { class: 'agent-watch-tick', d: 'M6.5 12.5l3.6 3.6L17.5 8.5' }]]) {
       const shape = document.createElementNS(svg.namespaceURI, tag);
       for (const [name, value] of Object.entries(attrs)) shape.setAttribute(name, value);
       svg.append(shape);
     }
-    return svg;
+    box.append(svg);
+    return box;
   }
 
   function node(tag, className, text) {
@@ -186,8 +191,11 @@
   function create(key) {
     const card = node('section', 'agent-watch-card');
     const title = node('span', 'agent-watch-title');
-    const head = node('div', 'agent-watch-head');
-    head.append(icon(), title);
+    // The state and when it runs share the quiet line above the task.
+    const settings = node('span', 'agent-watch-settings');
+    settings.setAttribute('data-i18n-skip', '');
+    const head = node('p', 'agent-watch-head');
+    head.append(title, settings);
     title.id = `agentWatchTitle${serial += 1}`;
     card.setAttribute('aria-labelledby', title.id);
     // The task, its goal and a run's finding are the model's words: the
@@ -196,21 +204,20 @@
     task.setAttribute('data-i18n-skip', '');
     const goal = node('p', 'agent-watch-goal');
     goal.setAttribute('data-i18n-skip', '');
-    const settings = node('p', 'agent-watch-settings');
-    settings.setAttribute('data-i18n-skip', '');
     const status = node('p', 'agent-watch-status');
     status.setAttribute('role', 'status');
     status.setAttribute('data-i18n-skip', '');
     const view = { key, card, title, task, goal, settings, status, proposal: null, choice: null,
       chatId: '', turnId: '', busy: false, message: '', changing: false };
-    // The one primary button of every watch surface.
-    view.start = button('wd-button is-primary agent-watch-start', 'Start Watch', () => start(view));
-    view.change = button('text-link agent-watch-link', 'Change', () => { view.changing = !view.changing; sync(view); });
-    view.end = button('text-link agent-watch-link agent-watch-end', 'End Watch', () => act(view, 'stop'));
-    view.resume = button('wd-button is-primary agent-watch-resume', 'Resume', () => act(view, 'resume'));
+    // Styled by watch-card.css alone, which the landing shares: no app-wide
+    // button class, so the card looks the same wherever it stands.
+    view.start = button('agent-watch-start', 'Start Watch', () => start(view));
+    view.change = button('agent-watch-change', 'Change', () => { view.changing = !view.changing; sync(view); });
+    view.end = button('agent-watch-end', 'End Watch', () => act(view, 'stop'));
+    view.resume = button('agent-watch-resume', 'Resume', () => act(view, 'resume'));
     const actions = node('div', 'agent-watch-actions');
     actions.append(view.start, view.resume, view.change, view.end);
-    card.append(head, task, goal, settings, scheduleControls(view), status, actions);
+    card.append(glyph(), head, task, goal, scheduleControls(view), status, actions);
     return view;
   }
 
@@ -276,6 +283,8 @@
     const state = own ? ({ active: 'watching', paused: 'paused' }[own.status] || 'ended')
       : other ? 'taken' : full ? 'full' : 'proposal';
     view.card.dataset.state = state;
+    view.card.dataset.ended = state === 'ended' ? own.ended || '' : '';
+    view.card.setAttribute('aria-busy', String(view.busy));
     view.title.textContent = state === 'watching' ? App.t('Watch running') : state === 'paused' ? App.t('Watch paused')
       : state === 'ended' ? App.t(own.ended === 'goal' ? 'Watch reached its goal' : 'Watch ended') : App.t('Watch');
     const shownWatch = own || { ...proposal, ...view.choice, timezone: timezone() };
@@ -286,13 +295,15 @@
     view.settings.textContent = state === 'watching' && own.next_run_at
       ? App.t('{schedule} · next run {when}', { schedule, when: when(own.next_run_at) }) : schedule;
     view.settings.hidden = state === 'ended';
-    // What just went wrong comes first, then what the last run did.
+    // What just went wrong comes first, then what the last run did; a run
+    // that paused the Watch says why there (needs_you). "Watch paused" and
+    // Resume say the rest.
     view.status.textContent = state === 'proposal' ? view.message
-      : state === 'paused' ? view.message || App.t('Paused. It runs again once you resume it.')
-      : state === 'watching' || state === 'ended' ? view.message || lastRunLine(own)
+      : state === 'watching' || state === 'paused' || state === 'ended' ? view.message || lastRunLine(own)
         : state === 'taken' ? App.t('This chat already has a Watch. End it first to start this one.')
           : App.t('All your Watches are in use. End one in its chat first.');
     view.status.hidden = !view.status.textContent;
+    view.status.dataset.tone = view.message && view.status.textContent === view.message ? 'error' : '';
     const offer = state === 'proposal' || state === 'full' || state === 'taken';
     view.start.hidden = !offer;
     view.start.disabled = view.busy || state !== 'proposal';

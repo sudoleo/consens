@@ -1,0 +1,231 @@
+/* ==========================================================================
+   The Watch card — a Watch the Agent prepared, under its answer
+
+   Imported by style.css (/app, agent-watch.js builds it) and landing.css
+   (the landing's chat shows the same card with the same classes). Tokens
+   only from typography.css and foundation.css and the surface scale both
+   variables.css and public-tokens.css define, so it reads the same on both.
+
+   One family with the cards above the composer (.agent-hold-card): a
+   frameless raised block, the glyph in a tinted round left of the words,
+   and everything else on one edge beside it. The task is the headline; the
+   state is a quiet word above it, and its colour sits only on the glyph:
+   ink while it is a proposal, the house green while it runs, the pause tone
+   while paused, grey once ended, a green tick once it reached its goal.
+   One filled button, the app's one (components-input.css .btn: 36px,
+   --radius-sm, --button-bg), the others tinted like a hold card's answers
+   (.agent-ask-choice). Both are drawn here again from the same tokens,
+   because the landing loads neither sheet.
+
+   Markup (agent-watch.js create):
+     section.agent-watch-card[data-state][data-ended]
+       span.agent-watch-glyph > svg (path.agent-watch-eye, circle.agent-watch-pupil, path.agent-watch-tick)
+       p.agent-watch-head > span.agent-watch-title + span.agent-watch-settings (the schedule, while it runs with its next run)
+       p.agent-watch-question   the task
+       p.agent-watch-goal       "Done when: …" or "Runs until you end it"
+       div.agent-watch-schedule > select.agent-watch-interval + input.agent-watch-time
+       p.agent-watch-status     a refusal (data-tone="error"), the last run, why Start waits
+       div.agent-watch-actions  > .agent-watch-start, .agent-watch-resume, .agent-watch-change, .agent-watch-end
+   ========================================================================== */
+
+.agent-watch-card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: start;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 32rem;
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-4) var(--space-4) 18px;
+  border-radius: var(--radius-lg);
+  background: var(--raise);
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+  text-align: left;
+}
+
+.agent-watch-card > * { grid-column: 2; min-width: 0; margin: 0; }
+.agent-watch-card p { margin: 0; }
+
+/* ---- The glyph: an eye in a tinted round, a tick once the goal is met ---- */
+.agent-watch-card > .agent-watch-glyph {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+  transition: color var(--dur-state) var(--ease-standard);
+}
+.agent-watch-glyph svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.agent-watch-pupil { fill: none; transition: fill var(--dur-state) var(--ease-standard); }
+.agent-watch-tick { display: none; }
+.agent-watch-card[data-state="watching"] .agent-watch-glyph { color: var(--agree); }
+.agent-watch-card[data-state="watching"] .agent-watch-pupil { fill: currentColor; }
+.agent-watch-card[data-state="paused"] .agent-watch-glyph { color: var(--partial); }
+.agent-watch-card[data-state="ended"] .agent-watch-glyph { color: var(--ink-3); }
+.agent-watch-card[data-ended="goal"] .agent-watch-glyph { color: var(--agree); }
+.agent-watch-card[data-ended="goal"] :is(.agent-watch-eye, .agent-watch-pupil) { display: none; }
+.agent-watch-card[data-ended="goal"] .agent-watch-tick { display: inline; stroke-width: 1.9; }
+
+/* ---- The words: state, task, goal on one edge beside the glyph ----------- */
+/* The state, then when it runs, as one quiet line that wraps like text. */
+.agent-watch-card .agent-watch-head {
+  min-height: 16px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.agent-watch-title { font-weight: var(--font-weight-medium); }
+/* The dot keeps to the word before it; screen readers skip it. */
+.agent-watch-settings::before { content: "\00a0· " / ""; }
+/* While "Change" is open, its two fields are the schedule. */
+.agent-watch-card:has(> .agent-watch-schedule:not([hidden])) .agent-watch-settings { display: none; }
+.agent-watch-card .agent-watch-question {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.011em;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.agent-watch-card .agent-watch-goal {
+  margin-top: 2px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+/* What the last run found is news: the ink of the answer. A refusal takes
+   the dispute tone, a reason to wait the quiet one. */
+.agent-watch-card .agent-watch-status {
+  margin-top: var(--space-3);
+  color: var(--ink-3);
+  font-size: var(--font-size-ui);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.agent-watch-card[data-state="watching"] .agent-watch-status,
+.agent-watch-card[data-state="paused"] .agent-watch-status,
+.agent-watch-card[data-state="ended"] .agent-watch-status {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+}
+.agent-watch-card .agent-watch-status[data-tone="error"] { color: var(--dispute); font-size: var(--font-size-ui); }
+
+/* ---- "Change": how often and when, two fields in the page's own tone ---- */
+.agent-watch-schedule { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.agent-watch-schedule select,
+.agent-watch-schedule input {
+  box-sizing: border-box;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color-scheme: inherit;
+}
+.agent-watch-schedule select { padding-right: 10px; cursor: pointer; }
+
+/* ---- The decision: one filled button, the others tinted ------------------- */
+.agent-watch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.agent-watch-actions:not(:has(> :not([hidden]))) { display: none; }
+.agent-watch-start,
+.agent-watch-resume,
+.agent-watch-change,
+.agent-watch-end {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-normal);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-press) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
+}
+.agent-watch-start,
+.agent-watch-resume { background: var(--button-bg); color: var(--button-text); }
+.agent-watch-change,
+.agent-watch-end { padding: 0 14px; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.agent-watch-change[aria-expanded="true"] { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-watch-start:hover:not(:disabled),
+  .agent-watch-resume:hover:not(:disabled) { background: var(--button-bg-hover); }
+  .agent-watch-change:hover:not(:disabled),
+  .agent-watch-end:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+}
+.agent-watch-card button:disabled { opacity: .5; cursor: default; }
+/* Starting: the pressed button says so in its place and breathes. */
+.agent-watch-card[aria-busy="true"] .agent-watch-start:disabled { opacity: .72; cursor: progress; }
+@media (prefers-reduced-motion: no-preference) {
+  .agent-watch-card[aria-busy="true"] .agent-watch-start:disabled { animation: agent-watch-busy var(--dur-beat) var(--ease-standard) infinite alternate; }
+}
+@keyframes agent-watch-busy { to { opacity: .45; } }
+
+.agent-watch-card :is(button, select, input):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* Under a finger: room to hit, as every filled button has. */
+@media (pointer: coarse) {
+  .agent-watch-start,
+  .agent-watch-resume,
+  .agent-watch-change,
+  .agent-watch-end,
+  .agent-watch-schedule select,
+  .agent-watch-schedule input { min-height: 44px; }
+}
+
+@media (forced-colors: active) {
+  .agent-watch-start,
+  .agent-watch-resume,
+  .agent-watch-change,
+  .agent-watch-end,
+  .agent-watch-schedule select,
+  .agent-watch-schedule input { border: 1px solid ButtonText; }
+}
+
+/* Last, so no button's display outweighs it. */
+.agent-watch-card [hidden] { display: none; }

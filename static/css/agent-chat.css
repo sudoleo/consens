@@ -1649,40 +1649,8 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
 .agent-memory-list li.is-undone { color: var(--ink-3); }
 .agent-memory-verb { color: var(--ink-2); }
 
-/* ---- A Watch the Agent prepared (agent-watch.js) ----------------------------
-   One raised block under the answer: the task the Agent runs again, when it
-   is done, on which schedule, and the one button that starts it, the other
-   ways as text links (.text-link). Frameless like the shell; the state lives
-   in the words ("Watch running", "Watch ended"), not in a colour. */
-.agent-watch-card {
-  max-width: 66ch;
-  margin: 14px 0 6px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: var(--raise);
-  color: var(--ink-2);
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-}
-.agent-watch-card p { margin: 0; }
-.agent-watch-card [hidden] { display: none; }
-.agent-watch-head { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-watch-head svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.agent-watch-title { font-weight: var(--font-weight-medium); }
-.agent-watch-card[data-state="watching"] .agent-watch-head { color: var(--ink-2); }
-.agent-watch-card .agent-watch-question { margin-top: 6px; color: var(--ink); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
-.agent-watch-card .agent-watch-goal { margin-top: 2px; overflow-wrap: anywhere; }
-.agent-watch-card :is(.agent-watch-settings, .agent-watch-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
-.agent-watch-start { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.agent-watch-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* "Change": how often and when, two plain controls in one row. */
-.agent-watch-schedule { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.agent-watch-schedule :is(select, input) {
-  min-height: 36px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm);
-  background: var(--ground); color: var(--ink); font: inherit; font-size: var(--font-size-sm);
-}
-.agent-watch-schedule :is(select, input):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* A Watch the Agent prepared (agent-watch.js) has its own file,
+   watch-card.css, which the landing shares. */
 /* A Watch's scheduled run in the chat (thread-history.js): one quiet line
    above its task, which the Watch sent, not the user, with its time. */
 .thread-watch-run { margin: 0 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
@@ -1705,29 +1673,48 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
 }
 
 /* ---- A pull request the Agent prepared (agent-github.js) ------------------
-   The Watch card's block: where it goes (repository, new branch -> base),
-   its title, the changed files, the diff folded, then the one button. The
-   state lives in the words; nothing here is coloured. */
+   The Watch card's family (watch-card.css): the glyph in a tinted round,
+   coloured by state, the state as a quiet line, the pull request's title as
+   the headline, where it goes (repository, new branch -> base) in mono
+   below, the changed files, the diff folded, then capsules, one filled. */
 .agent-pr-card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: start;
+  box-sizing: border-box;
+  width: 100%;
   max-width: 66ch;
-  margin: 14px 0 6px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-4) var(--space-4) 18px;
+  border-radius: var(--radius-lg);
   background: var(--raise);
-  color: var(--ink-2);
+  color: var(--ink-3);
   font-size: var(--font-size-sm);
-  line-height: 1.45;
+  line-height: var(--line-height-ui);
 }
+.agent-pr-card > * { grid-column: 2; min-width: 0; margin: 0; }
 .agent-pr-card p { margin: 0; }
-.agent-pr-card [hidden] { display: none; }
-.agent-pr-title { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.agent-pr-card .agent-pr-target { margin-top: 6px; font-family: var(--font-mono); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
-.agent-pr-card .agent-pr-name { margin-top: 4px; color: var(--ink); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
-.agent-pr-card .agent-pr-body { margin-top: 2px; font-size: var(--font-size-sm); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: auto; }
-.agent-pr-files { margin: 8px 0 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: var(--font-size-xs); }
+.agent-pr-card > .agent-pr-glyph {
+  grid-column: 1; grid-row: 1 / span 2; display: grid; place-items: center; width: 32px; height: 32px; margin-top: 3px;
+  border-radius: 50%; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink);
+  transition: color var(--dur-state) var(--ease-standard);
+}
+.agent-pr-glyph svg { display: block; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.agent-pr-card[data-state="succeeded"] .agent-pr-glyph { color: var(--agree); }
+.agent-pr-card[data-state="failed"] .agent-pr-glyph { color: var(--dispute); }
+.agent-pr-card:is([data-state="executing"], [data-state="discarded"]) .agent-pr-glyph { color: var(--ink-3); }
+.agent-pr-title { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 16px; }
+.agent-pr-card .agent-pr-name {
+  margin-top: 2px; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold);
+  line-height: 22px; letter-spacing: -0.011em; overflow-wrap: anywhere; text-wrap: pretty;
+}
+.agent-pr-card .agent-pr-target { margin-top: 2px; font-family: var(--font-mono); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.agent-pr-card .agent-pr-body { margin-top: var(--space-3); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: auto; }
+.agent-pr-files { margin: var(--space-3) 0 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: var(--font-size-xs); }
 .agent-pr-files li { overflow-wrap: anywhere; }
 .agent-pr-card .agent-pr-more { color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-pr-diff { margin-top: 8px; }
+.agent-pr-diff { margin-top: var(--space-2); }
 .agent-pr-diff > summary { width: fit-content; color: var(--ink-3); font-size: var(--font-size-xs); cursor: pointer; }
 .agent-pr-diff > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
 .agent-pr-diff-text {
@@ -1735,11 +1722,34 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
   background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink-2);
   font: var(--font-size-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.agent-pr-card .agent-pr-status { margin-top: 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-pr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
+.agent-pr-card .agent-pr-status { margin-top: var(--space-3); color: var(--ink-3); font-size: var(--font-size-ui); text-wrap: pretty; }
+.agent-pr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); }
 .agent-pr-actions:not(:has(> :not([hidden]))) { display: none; }
-.agent-pr-create { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+/* The Watch card's buttons (watch-card.css): Create is the app's filled
+   button, Discard tinted like a hold card's answers. */
+.agent-pr-create,
+.agent-pr-link {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 36px;
+  margin: 0; padding: 0 16px; border: 0; border-radius: var(--radius-sm); box-shadow: none;
+  font-family: var(--font-sans); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight); white-space: nowrap; cursor: pointer; touch-action: manipulation;
+  transition: background-color var(--dur-press) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
+}
+.agent-pr-create { background: var(--button-bg); color: var(--button-text); }
+.agent-pr-link { padding: 0 14px; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-pr-create:hover:not(:disabled) { background: var(--button-bg-hover); }
+  .agent-pr-link:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+}
+@media (pointer: coarse) { .agent-pr-create, .agent-pr-link { min-height: 44px; } }
+@media (forced-colors: active) { .agent-pr-create, .agent-pr-link { border: 1px solid ButtonText; } }
+.agent-pr-card button:disabled { opacity: .5; cursor: default; }
+.agent-pr-card[aria-busy="true"] .agent-pr-create:disabled { opacity: .72; cursor: progress; }
+@media (prefers-reduced-motion: no-preference) {
+  .agent-pr-card[aria-busy="true"] .agent-pr-create:disabled { animation: agent-hold-busy var(--dur-beat) var(--ease-standard) infinite alternate; }
+}
 .agent-pr-card :is(button, a):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.agent-pr-card [hidden] { display: none; }
 /* GitHub and the workspace in Settings (agent-github.js, workspace-view.js): title, its
    sentence and the status each on a line of their own, the actions as quiet links (.text-link). */
 :is(.agent-github-settings, .agent-workspace-settings, .agent-sign-ins-settings) > strong {

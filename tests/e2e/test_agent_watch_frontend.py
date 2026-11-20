@@ -100,6 +100,20 @@ def test_agent_watch_card_starts_the_prepared_watch_and_ends_it(browser, phase4_
         expect(card.locator(".agent-watch-question")).to_have_text(TASK)
         expect(card.locator(".agent-watch-goal")).to_have_text("Done when: " + GOAL)
         expect(card.locator(".agent-watch-settings")).to_have_text("Daily at 08:00")
+        # watch-card.css: the glyph in its round left of the words, the task
+        # the headline, the start the app's one filled button.
+        look = page.evaluate("""() => {
+          const card = document.querySelector('#agentAnswer .agent-watch-card');
+          const glyph = card.querySelector('.agent-watch-glyph').getBoundingClientRect();
+          const task = card.querySelector('.agent-watch-question');
+          const start = card.querySelector('.agent-watch-start');
+          return { glyphRight: glyph.right, taskLeft: task.getBoundingClientRect().left, glyph: glyph.width,
+                   taskSize: getComputedStyle(task).fontSize, startHeight: start.getBoundingClientRect().height,
+                   startRadius: getComputedStyle(start).borderTopLeftRadius };
+        }""")
+        assert look["glyph"] == 32 and look["taskLeft"] - look["glyphRight"] == 12, look
+        assert look["taskSize"] == "16px" and look["startRadius"] == "10px", look
+        assert look["startHeight"] in (36, 44), look
         # The card sits under the answer it is introduced by.
         answer_box = page.locator("#agentAnswerBody").bounding_box()
         card_box = card.bounding_box()

@@ -154,6 +154,24 @@
     succeeded: 'Pull request created', failed: 'Pull request not created', discarded: 'Pull request discarded' };
   const MARKS = { added: '+', deleted: '−', modified: '~' };
 
+  // The pull request glyph in its tinted round (agent-chat.css colours it
+  // by state, as watch-card.css does the Watch's eye).
+  function glyph() {
+    const box = node('span', 'agent-pr-glyph');
+    box.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('focusable', 'false');
+    for (const [tag, attrs] of [['circle', { cx: '6', cy: '6', r: '2.5' }], ['circle', { cx: '18', cy: '18', r: '2.5' }],
+      ['path', { d: 'M6 8.5v12.5' }], ['path', { d: 'M18 15.5V9a2.5 2.5 0 0 0-2.5-2.5H12' }], ['path', { d: 'm14 4.5-2 2 2 2' }]]) {
+      const shape = document.createElementNS(svg.namespaceURI, tag);
+      for (const [name, value] of Object.entries(attrs)) shape.setAttribute(name, value);
+      svg.append(shape);
+    }
+    box.append(svg);
+    return box;
+  }
+
   function create(key) {
     const card = node('section', 'agent-pr-card');
     const title = node('p', 'agent-pr-title');
@@ -173,11 +191,12 @@
     const link = node('a', 'text-link agent-pr-open');
     link.target = '_blank'; link.rel = 'noopener noreferrer';
     const view = { key, card, title, target, name, description, files, more, details, diff, status, link, busy: false };
-    view.create = button('wd-button is-primary agent-pr-create', 'Create pull request', () => decide(view, 'create'));
-    view.discard = button('text-link agent-pr-link', 'Discard', () => decide(view, 'discard'));
+    view.create = button('agent-pr-create', 'Create pull request', () => decide(view, 'create'));
+    view.discard = button('agent-pr-link', 'Discard', () => decide(view, 'discard'));
     const actions = node('div', 'agent-pr-actions');
     actions.append(view.create, view.discard, link);
-    card.append(title, target, name, description, files, more, details, status, actions);
+    // Its title is the headline under the state, where it goes below that.
+    card.append(glyph(), title, name, target, description, files, more, details, status, actions);
     return view;
   }
   function place(body, card) {
@@ -190,6 +209,7 @@
     const proposal = view.proposal;
     const expired = proposal.status === 'pending' && String(proposal.approval_until || '') < new Date().toISOString();
     view.card.dataset.state = proposal.status;
+    view.card.setAttribute('aria-busy', String(view.busy));
     view.title.textContent = TITLES[proposal.status] || TITLES.pending;
     view.target.textContent = `${proposal.repo} · ${proposal.branch} → ${proposal.base}`;
     view.name.textContent = proposal.title || '';

@@ -2547,13 +2547,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`agent_watch.INSTRUCTIONS`); kein eigenes SSE-Event. `App.agentWatch.render(body,
   {key, proposal, chatId, turnId})` zeigt die Karte unter einer
   abgeschlossenen Antwort (`agent-chat.js` reicht den Vorschlag nur bei
-  `status: completed` durch): Auftrag, „Done when: …“, Zeitplan;
+  `status: completed` durch): Zustand und Zeitplan als leise Zeile, der
+  Auftrag als Überschrift, „Done when: …“;
   „Change“ = Intervall-Auswahl (nur die der Stufe, aus `GET
   /agent/watches?chat_id=`) und Uhrzeit; „Start“ = `POST /agent/watches`
   mit nur `chat_id`, `turn_id`, Zeitplan und Zeitzone des Browsers (den
-  Auftrag liest der Server vom gespeicherten Turn). Zustände `proposal`,
-  `watching` (nächster Lauf, letzter Befund, „End Watch“), `ended`, `taken`
-  (der Chat hat schon eine), `full`. Vorschläge von vor 2026-11-03
+  Auftrag liest der Server vom gespeicherten Turn). Zustände
+  (`data-state`) `proposal`, `watching` (nächster Lauf, letzter Befund,
+  „End Watch“), `paused` (letzter Lauf, „Resume“), `ended` (`data-ended`
+  `goal` oder `user`), `taken` (der Chat hat schon eine), `full`; eine
+  Ablehnung steht mit `data-tone="error"` in `.agent-watch-status`. Die
+  Stile liegen in `static/css/watch-card.css` (Import in `static/style.css`
+  und `landing.css`, nur Tokens aus `typography.css`, `foundation.css` und
+  der Oberflächenskala beider Token-Dateien), damit die Landing dieselbe
+  Karte mit denselben Klassen zeigt; das Markup je Zustand steht im Kopf
+  der Datei. Familie der Karten über dem Composer (`.agent-hold-card`):
+  Glyph im getönten Kreis links (Auge, Farbe nach Zustand, Haken beim
+  Ziel), eine Textkante, der gefüllte Knopf der App, die übrigen getönt.
+  Die Pull-Request-Karte (`agent-github.js`, `agent-chat.css`) folgt ihr.
+  Vorschläge von vor 2026-11-03
   (`question`/`goals`) zeigen keine Karte. Die Watch-Pille und „New Watch“
   auf `/app/watches` öffnen `watch-sheet.js`. Ablauf:
   [agent-mode.md](agent-mode.md) „Watch“. `MOCK_LLM`: „Watch: <Auftrag>“

@@ -1,5 +1,5 @@
 {
-  "sources": "ac7859e8b40e",
+  "sources": "c31a93c67fec",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -59,6 +59,7 @@
     "static/css/topics.css",
     "static/css/typography.css",
     "static/css/variables.css",
+    "static/css/watch-card.css",
     "static/css/workspace-view.css",
     "static/demo.js",
     "static/firebase.js",
@@ -609,20 +610,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.2da874e0dac7.js",
+      "src": "/static/dist/app.598a5cca8c28.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.0c2b504858af.css",
-    "landing": "/static/dist/landing.b129874028e2.css",
+    "app": "/static/dist/app.035dcb65dfa2.css",
+    "landing": "/static/dist/landing.0015085c444f.css",
     "public": "/static/dist/public.a2ed1b7cf984.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "2ee7b9ebe60e",
+      "hash": "a1c33109c8ea",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -664,13 +665,14 @@
         "static/css/status-palette.css",
         "static/css/typography.css",
         "static/css/variables.css",
+        "static/css/watch-card.css",
         "static/css/workspace-view.css",
         "static/style.css"
       ]
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "316667717122",
+      "hash": "b1f01b720af8",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -681,7 +683,8 @@
         "static/css/send-glow.css",
         "static/css/skeleton.css",
         "static/css/status-palette.css",
-        "static/css/typography.css"
+        "static/css/typography.css",
+        "static/css/watch-card.css"
       ]
     },
     "public": {
@@ -702,10 +705,10 @@
     }
   },
   "previous_assets": [
+    "app.0c2b504858af.css",
     "app.0d5e6cee567e.css",
-    "app.e8b4e858f19c.css",
+    "app.2da874e0dac7.js",
     "app.446ae404ae6f.js",
-    "app.eb47cec3c5e6.js",
     "auth.cf1dba1d8c12.js",
     "auth.c4661857697c.js",
     "demo.274397f8bb1b.js",
@@ -714,8 +717,8 @@
     "firebase.f3687b87ae59.js",
     "head.15346e59e34c.js",
     "head.0e2c4abc9007.js",
+    "landing.b129874028e2.css",
     "landing.0fcd3ca7c011.css",
-    "landing.e41ebf7d6c40.css",
     "public.ce9b752e83ab.css",
     "public.95e10823f698.css"
   ]
