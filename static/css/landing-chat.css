@@ -602,39 +602,119 @@
 /* --------------------------------------------------------------------------
    The field, docked under the thread as in /app. The thread runs out softly
    behind it instead of being cut by its edge.
+
+   While it rides along it is one row high, as the composer of /app under a
+   chat: (+), the question, the reviewers, Send. Under the last line of the
+   page it stands in two rows (.is-end, set by landing-chat.js; without
+   script it stays one row). The dock keeps the room the taller form takes
+   (--lc-rise, measured by the script) above the one-row field, so the field
+   grows into room that is already there and nothing on the page moves.
    -------------------------------------------------------------------------- */
 .lc-dock {
   position: sticky;
   bottom: 0;
   z-index: 20;
-  padding: 10px 0 max(16px, env(safe-area-inset-bottom));
+  padding: calc(10px + var(--lc-rise, 0px)) 0 max(16px, env(safe-area-inset-bottom));
+  /* The kept room lies over the thread: a click there is the thread's. */
+  pointer-events: none;
+  /* On its way between the forms the question reaches past the field for a
+     few frames; on a phone that would widen the page and let it pan. */
+  overflow-x: clip;
 }
+.lc-dock.is-end { padding-top: 10px; }
 .lc-dock::before {
   content: "";
   position: absolute;
-  inset: -40px 0 0;
+  top: calc(var(--lc-rise, 0px) - 40px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: linear-gradient(to top, var(--ground) calc(100% - 52px), transparent);
   pointer-events: none;
+  transition: top var(--dur-state) var(--ease-standard);
 }
+.lc-dock.is-end::before { top: -40px; }
+/* Where the dock comes to rest: in view only once the field has left the
+   foot of the window for its place under the last line. */
+.lc-dock-rest { display: block; height: 1px; margin-top: -1px; }
+
 .lc-composer {
+  flex-wrap: nowrap;
   width: var(--lc-col);
   margin: 0 auto;
-  padding: 15px 12px 11px 18px;
+  padding: 9px 10px;
+  background: none;
+  box-shadow: none;
+  isolation: isolate;
   cursor: pointer;
-  transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
+  pointer-events: auto;
+  transition: transform var(--dur-state) var(--ease-standard);
 }
-/* The words of an empty field: its placeholder, in the second ink. */
-.lc-composer .lp-composer-text { min-height: 0; padding-bottom: 8px; color: var(--ink-3); }
-.lc-composer .lp-composer-row { margin-left: -8px; }
-.lc-composer .lp-run-chip { margin-left: 0; }
-.lc-composer .lp-send { width: 36px; height: 36px; }
+/* The face of the field is drawn apart from its box: between the two forms
+   the box has its new size at once, and the face grows to it from where the
+   old edge stood (--lc-from, set by landing-chat.js for the first frame). */
+.lc-composer::before {
+  content: "";
+  position: absolute;
+  top: var(--lc-from, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--lp-field);
+  box-shadow: var(--lp-field-lift), 0 0 0 1px var(--lp-field-line);
+  transition: top var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
+}
+/* One row: the tools stand beside the question instead of under it. */
+.lc-composer .lp-composer-row { display: contents; }
+.lc-composer .lp-icon-btn { order: 0; }
+/* The words of an empty field: its placeholder, in the second ink, cut with
+   an ellipsis where the row is too short, as the one-row field of /app. */
+.lc-composer .lp-composer-text {
+  order: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--ink-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lc-ask-short { display: none; }
+.lc-composer .lp-composer-models { order: 2; margin-left: 0; }
+.lc-composer .lp-run-chip { order: 3; margin-left: 0; }
+.lc-composer .lp-send { order: 4; width: 36px; height: 36px; }
 .lc-composer .lp-send svg { width: 14px; height: 14px; }
+/* Two rows under the last line: the question, then the tools. */
+.lc-dock.is-end .lc-composer { flex-wrap: wrap; padding: 15px 12px 11px 18px; }
+.lc-dock.is-end .lp-composer-row { display: flex; margin-left: -8px; }
+.lc-dock.is-end .lp-composer-text {
+  order: 0;
+  flex: 1 1 100%;
+  overflow: visible;
+  padding-bottom: 8px;
+  white-space: normal;
+}
+.lc-dock.is-end .lp-composer-models { margin-left: auto; }
+/* Each part glides from its place in one form to its place in the other.
+   The script puts it back where it stood (.is-placing, no transition) and
+   lets go. */
+.lc-composer :is(.lp-composer-text, .lp-icon-btn, .lp-composer-models, .lp-run-chip, .lp-send) {
+  transition: translate var(--dur-state) var(--ease-standard);
+}
+.lc-composer.is-placing::before,
+.lc-composer.is-placing :is(.lp-composer-text, .lp-icon-btn, .lp-composer-models, .lp-run-chip, .lp-send) {
+  transition: none;
+}
 .lc-composer:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) {
-  .lc-composer:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
-  }
+  .lc-composer:hover { transform: translateY(-2px); }
+  .lc-composer:hover::before { box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line); }
+}
+/* The face is a background and a shadow, which this mode drops. */
+@media (forced-colors: active) {
+  .lc-composer::before { border: 1px solid CanvasText; }
 }
 .lc-foot { padding: 0 var(--page-gutter) clamp(36px, 7vh, 72px); }
 
@@ -684,10 +764,14 @@
   .lc-term-row { grid-template-columns: 4ch 16ch 4ch 6ch; }
   .lc-book { grid-template-columns: minmax(0, 1fr); }
   .lc-book img { height: 150px; min-height: 0; }
-  /* The docked field stays one row on a phone: (+), the reviewers' words,
-     Send. landing.css gives the words a line of their own, which a field
-     that rides along the whole page cannot afford. */
+  /* Two rows on a phone are the question and one row of tools: (+), the
+     reviewers' words, Send. landing.css gives the words a line of their
+     own, which makes three. */
   .lc-composer .lp-composer-row { flex-wrap: nowrap; }
-  .lc-composer .lp-composer-row .lp-run-chip { order: 0; flex: 0 0 auto; margin-left: auto; padding-inline: 6px; }
+  .lc-composer .lp-composer-row .lp-run-chip { order: 3; flex: 0 0 auto; margin-left: auto; padding-inline: 6px; }
   .lc-composer .lp-composer-row .lp-send { margin-left: 0; }
+  /* The one row has no room here for the reviewers' words, nor for the
+     question: it shows the placeholder of the composer in /app instead. */
+  .lc-dock:not(.is-end) :is(.lp-run-chip, .lc-ask) { display: none; }
+  .lc-dock:not(.is-end) .lc-ask-short { display: inline; }
 }

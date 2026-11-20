@@ -2,6 +2,7 @@
 public input previews stay aligned with the app's start screen: one field,
 one row."""
 from pathlib import Path
+import re
 
 import pytest
 from playwright.sync_api import expect
@@ -59,10 +60,34 @@ def test_landing_field_is_docked_like_the_app_composer(browser, phase4_server, w
             expect(models).to_be_visible()
         else:
             expect(models).to_be_hidden()
-        # One row at every width: (+), the reviewers' words and Send.
-        centres = field.evaluate("""el => ['.lp-icon-btn', '.lp-run-chip', '.lp-send']
+        # While it rides along the field is one row high, as the composer of
+        # /app: (+), the question, Send, and nothing in it is cut.
+        dock = page.locator('.lc-dock')
+        ended = re.compile(r'(^|\s)is-end(\s|$)')
+        expect(dock).not_to_have_class(ended)
+        centres = field.evaluate("""el => ['.lp-icon-btn', '.lp-composer-text', '.lp-send']
             .map(selector => { const r = el.querySelector(selector).getBoundingClientRect(); return r.top + r.height / 2; })""")
         assert max(centres) - min(centres) <= 2, centres
+        assert field.bounding_box()['height'] <= 58
+        assert field.locator('.lp-composer-text').evaluate('el => el.scrollWidth <= el.clientWidth + 1')
+        # A phone has no room in that row for the question and the
+        # reviewers' words: it shows the placeholder of the app's composer.
+        if width > 600:
+            expect(field.locator('.lp-run-chip')).to_be_visible()
+            expect(field.locator('.lc-ask')).to_be_visible()
+            expect(field.locator('.lc-ask-short')).to_be_hidden()
+        else:
+            expect(field.locator('.lp-run-chip')).to_be_hidden()
+            expect(field.locator('.lc-ask')).to_be_hidden()
+            expect(field.locator('.lc-ask-short')).to_have_text('Enter your question')
+        # The room the two rows will take is the thread's until then.
+        box = field.bounding_box()
+        above = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id || null',
+            [box['x'] + box['width'] / 2, box['y'] - 12])
+        assert above != 'landingField'
+        places = """() => ({ footer: Math.round(document.querySelector('footer').getBoundingClientRect().top + scrollY),
+            page: document.documentElement.scrollHeight })"""
+        riding = page.evaluate(places)
 
         def docked():
             return field.evaluate("""el => { const r = el.getBoundingClientRect();
@@ -80,8 +105,21 @@ def test_landing_field_is_docked_like_the_app_composer(browser, phase4_server, w
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}-{"still" if reduced else "motion"}'
         field.screenshot(path=str(output / f'docked-{suffix}.png'))
-        # At the end it rests under the last line of the page.
+        # At the end it rests under the last line of the page, in two rows:
+        # the question above the tools, with the reviewers' words at every
+        # width. It grew into room the dock had kept: nothing else moved.
         page.evaluate("window.scrollTo({top: document.documentElement.scrollHeight, behavior: 'instant'})")
+        expect(dock).to_have_class(ended)
+        page.wait_for_function("""() => { const field = document.getElementById('landingField');
+            return !field.classList.contains('is-placing')
+                && getComputedStyle(field.querySelector('.lp-send')).translate === 'none'; }""")
+        expect(field.locator('.lc-ask')).to_be_visible()
+        expect(field.locator('.lc-ask-short')).to_be_hidden()
+        expect(field.locator('.lp-run-chip')).to_be_visible()
+        assert field.evaluate("""el => el.querySelector('.lp-composer-text').getBoundingClientRect().bottom
+            <= el.querySelector('.lp-icon-btn').getBoundingClientRect().top + 1""")
+        assert page.evaluate(places) == riding
+        field.screenshot(path=str(output / f'at-rest-{suffix}.png'))
         assert page.evaluate("""() => {
             const last = document.querySelector('.lc-beat--end').getBoundingClientRect();
             const field = document.getElementById('landingField').getBoundingClientRect();

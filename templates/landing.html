@@ -471,14 +471,18 @@
     </div>
 
     <!-- The field of the app, docked under the thread the whole way down and
-         at rest under the last line. It is the one call to action of the page: a
-         click opens /app with the caret in the real composer (?focus=1). Its
-         name is the words it shows (WCAG 2.5.3): the marks and the arrow
-         are pictures beside them. -->
+         at rest under the last line. While it rides along it is one row
+         high, as the composer of /app; at rest it stands in two rows
+         (landing-chat.js, once the mark under the dock is in view). It is the
+         one call to action of the page: a click opens /app with the caret in
+         the real composer (?focus=1). Its name is the words it shows (WCAG
+         2.5.3): the marks and the arrow are pictures. One row on a phone has
+         no room for the question, so it shows the placeholder of the composer
+         in /app there (landing-chat.css draws one of the two). -->
     <div class="lc-dock">
       <a id="landingField" class="lp-composer lc-composer" href="/app?focus=1"
          data-umami-event="landing_hero_open_app">
-        <span class="lp-composer-text">What would you want a second opinion on?</span>
+        <span class="lp-composer-text"><span class="lc-ask">What would you want a second opinion on?</span><span class="lc-ask-short">Enter your question</span></span>
         <span class="lp-composer-row">
           <span class="lp-icon-btn" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -491,6 +495,7 @@
         </span>
       </a>
     </div>
+    <span class="lc-dock-rest" aria-hidden="true"></span>
 
     <p class="lp-composer-foot lc-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
   </main>

@@ -41,6 +41,22 @@ def test_the_docked_field_is_the_one_way_into_the_app():
     assert '["landingField", "navCtaButton"]' in SCRIPT and '"skipLandingRedirect", "1"' in SCRIPT
 
 
+def test_the_docked_field_is_one_row_until_it_rests():
+    # One row is what the style sheet draws by itself; the two rows stand
+    # under the class the script sets once the dock rests.
+    assert ".lc-composer .lp-composer-row { display: contents; }" in STYLES
+    assert ".lc-dock.is-end .lc-composer { flex-wrap: wrap;" in STYLES
+    # The mark that says the dock rests stands right under it.
+    assert '</a>\n    </div>\n    <span class="lc-dock-rest" aria-hidden="true"></span>' in LANDING
+    # The room the two rows take is kept above the one-row field and lets
+    # clicks through to the thread.
+    assert "padding: calc(10px + var(--lc-rise, 0px)) 0 max(16px, env(safe-area-inset-bottom));" in STYLES
+    assert "pointer-events: none;" in STYLES.split(".lc-dock {", 1)[1].split("}", 1)[0]
+    # A reader who asked for less motion still gets both forms: the field
+    # is set up before the script stops for them.
+    assert SCRIPT.index("observe(rest)") < SCRIPT.index("if (reduced) return;")
+
+
 def test_the_page_stands_whole_without_the_script():
     # Nothing in the markup is hidden or waiting for a state.
     assert " hidden" not in LANDING

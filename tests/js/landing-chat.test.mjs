@@ -22,7 +22,8 @@ const PAGE = `
     <p id="after" data-reveal data-after-review>The agent corrected its answer</p>
   </article>
   <section id="card" data-reveal data-watch data-state="watching"></section>
-  <div class="lc-dock"><a id="landingField" href="/app?focus=1">Field</a></div>
+  <div class="lc-dock"><a id="landingField" href="/app?focus=1"><span class="lp-composer-text">Field</span><span class="lp-send"></span></a></div>
+  <span class="lc-dock-rest"></span>
 </main>`;
 
 // jsdom has no layout and no IntersectionObserver: the test keeps the
@@ -58,7 +59,10 @@ function page({ reduced = false } = {}) {
   // Where the docked field begins: the window's height less the field (no
   // height in jsdom) and the 24 px of air above it.
   const line = window.innerHeight - 24;
-  return { window, document: window.document, observers, runTimer, timers, frames, runFrame, line };
+  // The script watches the mark under the dock first; the observers of the
+  // thread (the pieces the scroll moves, then the pieces that appear) follow.
+  return { window, document: window.document, docking: observers[0], observers: observers.slice(1),
+    runTimer, timers, frames, runFrame, line };
 }
 
 // A piece whose top the test moves, as the scroll would.
@@ -67,6 +71,10 @@ function place(piece, top, height = 80) {
   piece.getBoundingClientRect = () => ({ top: box.top, height: box.height, bottom: box.top + box.height });
   return box;
 }
+
+// What the observer of the mark under the dock reports: in the window (the
+// dock rests) or not, and then where the mark stands against the window's top.
+const rests = (isIntersecting, top = 900) => ({ isIntersecting, boundingClientRect: { top } });
 
 // What the observer of the pieces reports: in the window or not, and for one
 // that is not, where its lower edge stands against the window's top.
@@ -90,11 +98,57 @@ describe("landing page as one chat", () => {
   });
 
   it("leaves the page in its last frame for a reader who asked for less motion", () => {
-    const { document, observers } = page({ reduced: true });
+    const { document, observers, docking } = page({ reduced: true });
     expect(document.documentElement.classList.contains("lc-js")).toBe(false);
     expect(document.getElementById("card").dataset.state).toBe("watching");
     expect(document.getElementById("review").dataset.phase).toBeUndefined();
     expect(observers).toHaveLength(0);
+    // Only the docked field is watched: it takes its two forms, without the glide.
+    const dock = document.querySelector(".lc-dock");
+    docking.callback([rests(false)]);
+    docking.callback([rests(true)]);
+    expect(dock.classList.contains("is-end")).toBe(true);
+    expect(document.getElementById("landingField").classList.contains("is-placing")).toBe(false);
+  });
+
+  it("keeps the docked field one row high until the dock rests under the last line", () => {
+    const { document, docking } = page();
+    const dock = document.querySelector(".lc-dock");
+    expect(dock.classList.contains("is-end")).toBe(false);
+    docking.callback([rests(false)]);
+    expect(dock.classList.contains("is-end")).toBe(false);
+    docking.callback([rests(true)]);
+    expect(dock.classList.contains("is-end")).toBe(true);
+    // On into the footer: the mark has left the window at its top, the dock still rests.
+    docking.callback([rests(false, -300)]);
+    expect(dock.classList.contains("is-end")).toBe(true);
+    docking.callback([rests(false)]);
+    expect(dock.classList.contains("is-end")).toBe(false);
+  });
+
+  it("lets the parts of the field glide from their place in one form to their place in the other", () => {
+    const { document, docking, runFrame } = page();
+    const dock = document.querySelector(".lc-dock");
+    const field = document.getElementById("landingField");
+    const send = field.querySelector(".lp-send");
+    // Send stands lower and further right in the two rows than in the one.
+    send.getBoundingClientRect = () => (dock.classList.contains("is-end")
+      ? { left: 660, top: 60, width: 36, height: 36 } : { left: 650, top: 9, width: 36, height: 36 });
+    field.getBoundingClientRect = () => (dock.classList.contains("is-end")
+      ? { left: 0, top: 753, width: 720, height: 101 } : { left: 0, top: 800, width: 720, height: 54 });
+    // Where the visit starts there is no change to watch.
+    docking.callback([rests(false)]);
+    expect(field.classList.contains("is-placing")).toBe(false);
+
+    docking.callback([rests(true)]);
+    expect(dock.classList.contains("is-end")).toBe(true);
+    expect(field.classList.contains("is-placing")).toBe(true);
+    expect(send.style.translate).toBe("-10.0px -51.0px");
+    expect(field.style.getPropertyValue("--lc-from")).toBe("47.0px");
+    runFrame();
+    expect(field.classList.contains("is-placing")).toBe(false);
+    expect(send.style.translate).toBe("");
+    expect(field.style.getPropertyValue("--lc-from")).toBe("");
   });
 
   it("arms the page and lets a piece in once it has cleared the field", () => {

@@ -705,8 +705,10 @@ work. Several check it.“ / „Eine KI arbeitet, mehrere prüfen.“; Meta-Tite
 Darunter läuft eine Spalte (`.lc-thread`, 720 px) mit fünf Kapiteln und den
 Modellfamilien, und das Eingabefeld von `/app` ist über die ganze Seite unten
 angedockt (`.lc-dock`, `position: sticky`): der Link `#landingField` auf
-`/app?focus=1`, neben dem Knopf der Leiste der einzige Weg in die App. Am Ende
-ruht es unter „Try it with your own question.“. Neben dem Faden steht nichts.
+`/app?focus=1`, neben dem Knopf der Leiste der einzige Weg in die App. Solange
+es mitläuft, ist es eine Zeile hoch wie der Composer von `/app` ((+), Frage,
+Prüfer, Senden); am Ende ruht es zweizeilig unter „Try it with your own
+question.“ (`.lc-dock.is-end`). Neben dem Faden steht nichts.
 
 Der Faden spielt EINE Frage durch, eine Reise mit dem Auto (5 Tage Südtirol und
 Gardasee, 1.500 € Budget). Jedes Kapitel ist ein `section.lc-part` mit einer
@@ -779,6 +781,19 @@ ist nichts versteckt und nichts wartet. Das Skript:
 - Die Watch-Karte (`[data-watch]`) wechselt mit der Scroll-Position zwischen
   `proposal`, `pressing` und `watching` (`watchState`); die Worte beider
   Zustände stehen im Markup (`data-when`), wo die deutsche Seite sie übersetzt.
+- Das angedockte Feld wechselt die Form, sobald die Marke unter dem Dock
+  (`.lc-dock-rest`) im Fenster ist, das Dock also an seinem Platz unter der
+  letzten Zeile steht: `.is-end` am Dock, zwei Zeilen statt einer. Das Dock
+  hält den Raum der hohen Form schon vorher frei (`--lc-rise`, vom Skript
+  gemessen, über dem einzeiligen Feld und für Klicks durchlässig), das Feld
+  wächst also in Raum, der da ist, und nichts auf der Seite verschiebt sich.
+  Die Teile gleiten von ihrem Platz in der einen Form zu dem in der anderen
+  (das Skript setzt sie für ein Frame zurück, `.is-placing`, und lässt los);
+  die Fläche des Felds ist dafür ein eigenes `::before`. Am Handy hat die eine
+  Zeile keinen Platz für die Frage und zeigt den Platzhalter des Composers von
+  `/app` („Enter your question“, `.lc-ask-short`) ohne die Prüfer-Worte. Ohne
+  Skript bleibt das Feld einzeilig; bei „weniger Bewegung“ wechselt es die
+  Form ohne Gleiten.
 - Klicks auf `#landingField` und `#navCtaButton` setzen `skipLandingRedirect`.
 `tests/js/landing-chat.test.mjs` prüft das Skript mit eigenen Beobachtern,
 Frames und Timern.

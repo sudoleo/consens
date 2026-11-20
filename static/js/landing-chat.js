@@ -5,7 +5,8 @@
 //
 // The page is whole without this script: landing-chat.css draws every piece
 // in its last frame and takes the states before it only under .lc-js, which
-// this script sets. Under reduced motion it sets nothing.
+// this script sets. Under reduced motion it does not set it; only the docked
+// field still takes its two forms, without the glide between them.
 (function () {
   "use strict";
 
@@ -36,14 +37,76 @@
   });
 
   const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduced || !("IntersectionObserver" in window)) return;
+  if (!("IntersectionObserver" in window)) return;
+
+  // ---- the docked field ------------------------------------------------------
+  // One row high while it rides along, as the composer of /app, and two rows
+  // under the last line of the page (.is-end; landing-chat.css draws both).
+  // A reader who asked for less motion gets the two forms without the glide.
+  const dock = document.querySelector(".lc-dock");
+  const field = document.getElementById("landingField");
+  const rest = document.querySelector(".lc-dock-rest");
+  const PARTS = ".lp-composer-text, .lp-icon-btn, .lp-composer-models, .lp-run-chip, .lp-send";
+  // What the one-row field takes at the foot of the window.
+  let under = dock ? dock.offsetHeight : 0;
+  // The room the two rows take beyond the one: the dock keeps it above the
+  // one-row field (--lc-rise), so the change of form moves nothing else.
+  function measureDock() {
+    const end = dock.classList.contains("is-end");
+    dock.classList.remove("is-end");
+    dock.style.setProperty("--lc-rise", "0px");
+    const low = field.getBoundingClientRect().height;
+    under = dock.offsetHeight;
+    dock.classList.add("is-end");
+    const rise = Math.max(0, field.getBoundingClientRect().height - low);
+    dock.classList.toggle("is-end", end);
+    dock.style.setProperty("--lc-rise", `${rise.toFixed(2)}px`);
+  }
+  function setForm(end, glide) {
+    if (dock.classList.contains("is-end") === end) return;
+    const parts = glide ? [field, ...field.querySelectorAll(PARTS)] : [];
+    const first = parts.map(el => el.getBoundingClientRect());
+    dock.classList.toggle("is-end", end);
+    if (!parts.length) return;
+    // Every part is in its new place at once. It is put back where it
+    // stood, without a transition, and let go in the next frame.
+    field.classList.add("is-placing");
+    parts.forEach((el, n) => {
+      const last = el.getBoundingClientRect();
+      if (el === field) field.style.setProperty("--lc-from", `${(first[n].top - last.top).toFixed(1)}px`);
+      // A part one of the forms does not draw has no place to come from.
+      else if (first[n].width && last.width) {
+        el.style.translate = `${(first[n].left - last.left).toFixed(1)}px ${(first[n].top - last.top).toFixed(1)}px`;
+      }
+    });
+    void field.offsetHeight;
+    window.requestAnimationFrame(() => {
+      field.classList.remove("is-placing");
+      field.style.removeProperty("--lc-from");
+      parts.forEach(el => { if (el !== field) el.style.translate = ""; });
+    });
+  }
+  if (dock && field && rest) {
+    measureDock();
+    let placed = false;
+    new IntersectionObserver(entries => {
+      const entry = entries[entries.length - 1];
+      // At rest also when the reader has gone on into the footer. The first
+      // word says where the visit starts: there is no change to watch.
+      setForm(entry.isIntersecting || entry.boundingClientRect.top < 0, placed && !reduced);
+      placed = true;
+    }).observe(rest);
+    window.addEventListener("resize", measureDock);
+    window.addEventListener("load", measureDock);
+  }
+
+  if (reduced) return;
 
   const root = document.documentElement;
-  const dock = document.querySelector(".lc-dock");
   const reveals = Array.from(document.querySelectorAll("[data-reveal]"));
   const clamp = value => Math.min(1, Math.max(0, value));
   // Where the docked field begins: what stands above it is in view.
-  const line = () => window.innerHeight - (dock ? dock.offsetHeight : 0) - 24;
+  const line = () => window.innerHeight - under - 24;
 
   // ---- the review ----------------------------------------------------------
   // Played once, on a clock, because it is a thing that happens: the

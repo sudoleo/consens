@@ -836,9 +836,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       richtige Karte im Leser. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landing als Chat (`/`, `/de/`): Unter dem Hero läuft eine Spalte, das
-      Eingabefeld ist die ganze Seite über unten angedockt und ruht am Ende
-      unter „Try it with your own question.“; ein Klick öffnet `/app` mit dem
-      Cursor im Feld. Beim Scrollen erscheinen die Stücke über dem Feld,
+      Eingabefeld ist die ganze Seite über unten angedockt, eine Zeile hoch
+      wie in der App (am Handy mit „Enter your question“), und ruht am Ende
+      zweizeilig unter „Try it with your own question.“; beim Wechsel der Form
+      verschiebt sich sonst nichts. Ein Klick öffnet `/app` mit dem Cursor im
+      Feld. Beim Scrollen erscheinen die Stücke über dem Feld,
       nichts darunter verschiebt sich. Im Kapitel „Review“ steht zuerst der
       ganze Plan mit „Reviewing the answer…“, dann treten vier Tage zurück,
       die rote Marke zieht sich über „The Stelvio Pass.“, die Notiz kommt
