@@ -595,6 +595,7 @@
       App.watch?.answerButton?.(document.getElementById("agentAnswerBody"), {});
       App.answerShare?.button?.(document.getElementById("agentAnswerBody"), {});
       App.agentSettings?.render(document.getElementById("agentAnswerBody"), {});
+      App.agentGithub?.render(document.getElementById("agentAnswerBody"), {});
     }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
@@ -1044,6 +1045,11 @@
     App.agentSettings?.render(answerBody, {
       key: context.metadata.chatId && state.completedTurn?.id ? `${context.metadata.chatId}:${state.completedTurn.id}` : context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
+    // A pull request the Agent prepared (agent-github.js), keyed the same way.
+    App.agentGithub?.render(answerBody, {
+      key: context.metadata.chatId && state.completedTurn?.id ? `${context.metadata.chatId}:${state.completedTurn.id}` : context.runId,
+      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_pull_request : null,
+      chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
     App.syncSendButtonRunning?.();
     syncAskEdit(running);
     if (!running) syncPendingReview();

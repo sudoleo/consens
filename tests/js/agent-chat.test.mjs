@@ -3631,6 +3631,32 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('shows the pull request a live run prepared and no card of an earlier chat while it runs', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentGithub = { render: vi.fn() };
+    let resolve;
+    w.streamSSERequest = vi.fn(() => new Promise(r => { resolve = r; }));
+    d.getElementById('questionInput').value = 'Open a PR';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    const body = d.getElementById('agentAnswerBody');
+    // The card of the chat shown before (a sibling of the answer) goes.
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(w.App.agentGithub.render).toHaveBeenCalledWith(body, expect.objectContaining({ proposal: null }));
+    w.App.agentGithub.render.mockClear();
+    const chat = 'a'.repeat(32), turnId = 'b'.repeat(32);
+    const proposal = { repo: 'o/r', hash: 'h', status: 'pending', branch: 'x', base: 'main' };
+    resolve({ ok: true, data: { response: 'Prepared.', chat_id: chat, turn_id: turnId, bookmark_meta: { id: 'saved' },
+      turn: { id: turnId, consensus: 'Prepared.', execution_mode: 'agent', status: 'completed', agent_pull_request: proposal } } });
+    await pending;
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    // Keyed like the saved chat's card (chat:turn), so a decision holds there.
+    expect(w.App.agentGithub.render).toHaveBeenLastCalledWith(body,
+      { key: `${chat}:${turnId}`, proposal, chatId: chat, turnId });
+    dom.window.close();
+  });
+
   it('never re-renders the composer shell or the full answer for a streamed chunk', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
