@@ -26,7 +26,7 @@
 // glides to its new place instead of jumping. Their light has no hue
 // (--rewrite-light) and stands longer (REWRITE_LIGHT_MS): green says
 // agreement, and these are the sentences a reviewer doubted.
-// Exports: App.streamReveal { active, stream, settle, rewrite }.
+// Exports: App.streamReveal { active, stream, settle, pending, rewrite }.
 // =====================================================================
 (() => {
   const App = window.App = window.App || {};
@@ -71,8 +71,10 @@
   const LIGHT_MAX_MS = 750;
   const LIGHT_APPEAR = 0.32;
   // What is not text (a list's bullet, a source pill) cannot be reached by a
-  // highlight: while the look runs, the answer carries this class and
-  // agent-chat.css brings each one into view with its first letters.
+  // highlight: while words are still painted, the answer carries this class
+  // and agent-chat.css brings each one into view with its first letters. Not
+  // beyond the last word (stood): the review then sets the pills anew, and
+  // with the class every pill of the answer came into view a second time.
   const REVEALING = "is-stream-revealing";
 
   const ease = x => 1 - (1 - x) ** 3;
@@ -295,6 +297,15 @@
     measure(state, now, age);
   }
 
+  // When the newest letters have come into view; their light still cools.
+  function inView(state) {
+    let at = 0;
+    for (const span of state.spans) {
+      at = Math.max(at, span.start + (span.to - span.from - 1) * span.letter + span.ms * LIGHT_APPEAR);
+    }
+    return at;
+  }
+
   function advance(state, now) {
     const elapsed = state.last ? Math.min(50, now - state.last) : 16;
     state.last = now;
@@ -317,14 +328,23 @@
       const cost = performance.now() - started;
       state.paintAfter = cost > SLOW_PAINT_MS ? now + cost * 2 : 0;
     }
-    // Caught up with an answer that is fixed: its full render takes over.
-    if (state.finish && state.cut >= state.target.length) {
+    // Caught up with an answer that is fixed: its full render takes over,
+    // once its last letters are in view. What waits for it (pending) then
+    // comes after the answer's end, not in the frame of its last word.
+    if (state.finish && state.cut >= state.target.length && now >= inView(state)) {
       const render = state.finish;
       state.finish = null;
-      state.settled = true;
+      stood(state);
       render();
       measure(state, now, true);
     }
+  }
+
+  // Every word of the fixed answer is painted; its newest letters still
+  // come into view.
+  function stood(state) {
+    state.settled = true;
+    state.body.classList.remove(REVEALING);
   }
 
   function drop(state) {
@@ -340,8 +360,14 @@
   function tick(now) {
     frame = 0;
     for (const state of tracked) {
-      if (foreign(state)) drop(state);
-      else if (!state.settled) advance(state, now);
+      if (foreign(state)) {
+        // A fixed answer still owes its full render (settle): it follows now,
+        // or what waits for it (pending) would wait for good.
+        const render = state.body.isConnected ? state.finish : null;
+        state.finish = null;
+        drop(state);
+        render?.();
+      } else if (!state.settled) advance(state, now);
     }
     draw(now);
     for (const state of tracked) {
@@ -420,13 +446,21 @@
       drop(state);
       return;
     }
-    state.settled = true;
+    stood(state);
     state.finish = null;
     state.target = text;
     state.cut = text.length;
     measure(state, performance.now(), true);
     tracked.add(state);
     schedule();
+  }
+
+  // The last words of a fixed answer still come in at the pace and its full
+  // render has not followed yet (settle). What belongs under the answer waits
+  // for it: placed now, the words still to come pushed it down line by line.
+  function pending(body) {
+    const state = body?._streamReveal;
+    return Boolean(state?.finish) && !foreign(state);
   }
 
   // --- A fixed answer rewritten in place ------------------------------------
@@ -557,5 +591,5 @@
 
   // The answer's first letters come in while the live lines above them fade
   // out (agent-activity.js handoff).
-  App.streamReveal = { active, stream, settle, rewrite };
+  App.streamReveal = { active, stream, settle, pending, rewrite };
 })();

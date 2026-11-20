@@ -3043,7 +3043,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   gleichzeitig, Wiederholung nach 2 s/8 s bei Netz/401/408/429/5xx, beim
   Verstecken des Tabs `keepalive`).
 - **`stream-reveal.js`** — `App.streamReveal` (`active`, `stream`, `settle`,
-  seit 2026-10-22): Takt und „Licht“ einer gestreamten Agent-Antwort, Ablauf
+  `pending`, seit 2026-10-22): Takt und „Licht“ einer gestreamten Agent-Antwort, Ablauf
   unter „Agent-Laufoberfläche“. `active()` ist nur mit CSS Custom Highlight API,
   ohne `prefers-reduced-motion` und ohne ausgeschaltete Kontoeinstellung
   `stream_animation` (Settings → Display → Streaming animation, seit 2026-11-13;
@@ -14020,12 +14020,24 @@ kein Text ist (Aufzählungspunkt, Quellen-Pill, Kästchen, Linie, Tabelle), blen
 `agent-chat.css` über `#agentAnswerBody.is-stream-revealing` mit ein. Wird der
 Text fest (Modus `full`), rendert `renderAnswerBody` über
 `App.streamReveal.settle(body, text, render)`: Ein Rückstand läuft im Takt
-weiter, die volle Darstellung folgt dem letzten Wort. Kommt sie so später als
-der Aufruf, ersetzt sie die Quellen-Pills und Marken, die `agentReview.render`
-schon auf den getakteten Text gesetzt hatte: `renderAnswerBody` zählt dann
-`_agentRenderSerial` hoch und projiziert die Ansicht per
-`registry.renderVisible()` neu (im Microtask, nachdem das Modul den Text
-gemessen hat). Bis 2026-10-23 blieben die `[S1]`-Pills einer Antwort ohne
+weiter, die volle Darstellung folgt, sobald die letzten Buchstaben im Bild
+sind (`inView`), nicht im Frame des letzten Worts. Solange sie aussteht, ist
+`App.streamReveal.pending(body)` wahr, und `project()` lässt weg, was unter
+die fertige Antwort gehört (seit 2026-11-20: die Zeile von
+`agentReview.render`, Copy, Watch und Share, die Karten für Watch,
+Einstellungen und Pull-Request, der Memory-Hinweis). `agentReview.render`
+schreibt über `overText` den ganzen Text und setzte den Rest sonst auf einen
+Schlag; eine früh gesetzte Zeile schob jede weitere Textzeile nach unten.
+Mit dem letzten Wort endet auch `is-stream-revealing` (`stood`): Die Prüfung
+setzt die Quellen-Pills danach neu, und mit der Klasse verschwanden dabei
+alle Pills der Antwort für ein Bild (gemessen mit einem getakteten Stream).
+Nach der vollen Darstellung zählt `renderAnswerBody` `_agentRenderSerial`
+hoch und projiziert die Ansicht per `registry.renderVisible()` neu (im
+Microtask, nachdem das Modul den Text gemessen hat); die Zeile, die gewartet
+hat, blendet dabei einmal ein (`agentActivity.reveal`), außer wo schon eine
+Zeile oder „Reviewing the answer…“ stand. Schreibt vorher jemand anderes in
+die Antwort, folgt die volle Darstellung im nächsten Frame trotzdem (`tick`),
+sonst wartete die Zeile für immer. Bis 2026-10-23 blieben die `[S1]`-Pills einer Antwort ohne
 Vergleich so bis zum Reload aus. Ein Text, der nicht an
 den getakteten anschließt (anderer Chat), rendert sofort und beendet das Licht.
 Schreibt jemand anderes in die Antwort (`_markdownWrites`, etwa die Marken der

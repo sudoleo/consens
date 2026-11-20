@@ -373,3 +373,127 @@ def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser,
         assert not errors
     finally:
         context.close()
+
+
+# The end of an answer nobody reviewed (reviewers off), over window.fetch in
+# the provider's rhythm: uneven bundles of words, then the final frame while
+# the last of them still come into view.
+ENDING_TEXT = (
+    "Bayern play their last first-half match away at Eintracht Frankfurt "
+    "([kicker.de](https://www.kicker.de/bundesliga/spieltag)). Kick-off is on Saturday evening "
+    "([bundesliga.com](https://www.bundesliga.com/de/bundesliga/spieltag)).\n\n"
+    "Two home matches come before it, against Wolfsburg and Union Berlin. The exact times are in the league's "
+    "schedule ([dfl.de](https://www.dfl.de/de/spielplan)).\n\n"
+    "The short winter break lies between the two matchdays, and the second half starts the weekend after.\n\n"
+    "Calendar of fixed dates ([dfb.de](https://www.dfb.de/rahmenterminkalender))"
+)
+ENDING_SOURCES = [{"url": "https://www.kicker.de/bundesliga/spieltag", "title": "kicker"},
+                  {"url": "https://www.bundesliga.com/de/bundesliga/spieltag", "title": "Bundesliga"},
+                  {"url": "https://www.dfl.de/de/spielplan", "title": "DFL"},
+                  {"url": "https://www.dfb.de/rahmenterminkalender", "title": "DFB"}]
+ENDING_STREAM = """plan => {
+  const real = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (new URL(url, location.href).pathname !== '/agent' || init.method !== 'POST') return real(input, init);
+    const request = JSON.parse(init.body);
+    const encoder = new TextEncoder();
+    let seq = 0;
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const body = new ReadableStream({ async start(controller) {
+      const send = (kind, data) => controller.enqueue(encoder.encode(`id: ${++seq}\\nevent: ${kind}\\ndata: ${JSON.stringify(data)}\\n\\n`));
+      controller.enqueue(encoder.encode(':' + ' '.repeat(2045) + '\\n\\n'));
+      send('accepted', { chat_id: plan.chat, turn_id: plan.turn });
+      await wait(200);
+      const sizes = [38, 61, 24, 83, 47, 19, 72, 55, 33, 90], gaps = [70, 140, 40, 210, 90, 60, 180, 110, 50, 240];
+      for (let at = 0, index = 0; at < plan.text.length; at += sizes[index % 10], index += 1) {
+        await wait(gaps[index % 10]);
+        send('delta', { type: 'delta', text: plan.text.slice(at, at + sizes[index % 10]) });
+      }
+      await wait(120);
+      const review = { mode: 'audit', status: 'off', answer_version: 1, answer_hash: 'h1', comparisons: [],
+        versions: [{ id: 1, text: plan.text, hash: 'h1', status: 'off', comparison_ids: [] }],
+        audit: { reviewers: [], setting: 'off' } };
+      const turn = { id: plan.turn, turn_id: plan.turn, question: request.question, status: 'completed', position: 1,
+        mode: 'Agent', execution_mode: 'agent', consensus: plan.text, differences: '', differences_data: null,
+        model_answers: {}, sources: plan.sources, agent_activity: [], agent_review: review };
+      send('final', { chat_id: plan.chat, turn_id: plan.turn, response: plan.text, turn,
+        bookmark_meta: { id: request.bookmark_id, title: request.question, query: request.question, mode: 'Agent', has_consensus: true } });
+      controller.close();
+    } });
+    return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+  };
+}"""
+# Every frame that differs from the one before: how much of the answer
+# stands, each source pill's opacity, and where the row under it is.
+ENDING_FRAMES = """() => {
+  window.__ending = [];
+  let last = '';
+  const frame = () => {
+    const body = document.getElementById('agentAnswerBody');
+    const row = document.querySelector('#agentAnswer .agent-review:not([hidden])');
+    const state = { chars: body.textContent.length,
+      pills: [...body.querySelectorAll('.src-ref')].map(pill => Number(getComputedStyle(pill).opacity)),
+      row: row ? Math.round(row.getBoundingClientRect().top * 10) / 10 : null,
+      bottom: Math.round(body.getBoundingClientRect().bottom * 10) / 10 };
+    const key = JSON.stringify(state);
+    if (key !== last) { last = key; window.__ending.push(state); }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}"""
+
+
+def test_the_row_under_an_answer_comes_after_its_last_word_and_no_pill_goes_out(browser, phase4_server):
+    """The run ends while the answer's last words still come into view at
+    their pace (stream-reveal.js). The row under it (sources, Copy, Watch,
+    Share, the review's state) waits for them: it never stands over words
+    still to come, no source pill that stood goes out when it is placed, and
+    from then on neither the row nor the answer moves."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.route("**/bookmarks/**", lambda r: _json(r, {"bookmark": {}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        page.evaluate("() => App.userSettings.set('reviewers', 'off')")
+        assert page.evaluate("() => App.streamReveal.active()")
+        page.evaluate(ENDING_STREAM, {"chat": "a" * 32, "turn": "1".rjust(32, "0"), "text": ENDING_TEXT,
+                                      "sources": ENDING_SOURCES})
+        page.locator("#questionInput").fill("When is Bayern's last match of the first half?")
+        page.locator("#sendButton").click()
+        expect(page.locator("#agentAnswerBody")).not_to_be_empty()
+        page.evaluate(ENDING_FRAMES)
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'", timeout=60000)
+        row = page.locator("#agentAnswer .agent-review")
+        expect(row.locator(".agent-review-status")).to_have_text("Not reviewed · reviewers off")
+        expect(row.locator('.agent-evidence-link[data-section="sources"]')).to_have_accessible_name("Sources 4")
+        expect(row.locator(":is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill)")).to_have_count(3)
+        # Past the row's fade and the last letters' light.
+        page.wait_for_timeout(1200)
+        frames = page.evaluate("() => window.__ending")
+        whole = frames[-1]["chars"]
+        with_row = [frame for frame in frames if frame["row"] is not None]
+        assert with_row and with_row[0] is not frames[0], frames[:3]
+        # Never over words still to come.
+        assert {frame["chars"] for frame in with_row} == {whole}, [(f["chars"], f["row"]) for f in frames[-8:]]
+        # Placed once, where it stays; the answer above it stays too.
+        assert len({frame["row"] for frame in with_row}) == 1, [f["row"] for f in with_row]
+        assert len({frame["bottom"] for frame in with_row}) == 1, [f["bottom"] for f in with_row]
+        # A pill that stood never goes out again (the review sets them anew
+        # when the row is placed).
+        stood = 0
+        for frame in frames:
+            assert all(opacity == 1 for opacity in frame["pills"][:stood]), frame
+            while stood < len(frame["pills"]) and frame["pills"][stood] == 1:
+                stood += 1
+        assert stood == len(ENDING_SOURCES), frames[-1]
+        assert not errors
+    finally:
+        context.close()

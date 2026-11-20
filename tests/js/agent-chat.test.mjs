@@ -3843,18 +3843,29 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('sets the source pills again when the full render follows the paced words later', async () => {
+  it('lets the row and the actions under the answer wait for the last paced word', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
     w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
     w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    // The row a finished answer gets (agent-review.js).
+    const placeRow = (answer, _review, evidence) => {
+      if (!evidence?.ended || answer._agentReview) return;
+      answer._agentReview = d.createElement('section');
+      answer.after(answer._agentReview);
+    };
+    w.App.agentReview = { render: vi.fn(placeRow), renderActivity: vi.fn() };
+    w.App.answerCopy = { button: vi.fn() };
+    w.App.watch = { answerButton: vi.fn() };
+    w.App.answerShare = { button: vi.fn() };
+    w.App.agentActivity.reveal = vi.fn();
     // The pace still has words to show: the full render waits for them.
     let finish = null;
-    w.App.streamReveal = { active: () => true, stream: vi.fn(), settle: vi.fn((_el, _text, render) => { finish = render; }) };
+    w.App.streamReveal = { active: () => true, stream: vi.fn(), pending: () => Boolean(finish),
+      settle: vi.fn((_el, _text, render) => { finish = () => { finish = null; render(); }; }) };
     let handlers, resolve;
     w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
-    d.getElementById('questionInput').value = 'Question';
+    d.getElementById('questionInput').value = 'Is a long enough question to watch';
     const pending = w.App.agentChat.send();
     await vi.waitFor(() => expect(handlers).toBeDefined());
     const run = w.App.runRegistry.visible();
@@ -3865,22 +3876,33 @@ describe("single-model agent chat", () => {
     const sources = [{ url: 'https://www.uci.org/rules', title: 'UCI' }];
     handlers.delta.append(text);
     w.App.agentChat.project(run);
+    const eligible = mock => mock.mock.lastCall?.[1]?.eligible === true;
+    const reviewed = w.App.agentReview.render.mock.calls.length;
     resolve({ ok: true, data: { response: text, chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32), sources,
-      turn: { id: 'b'.repeat(32), consensus: text, execution_mode: 'agent', sources }, bookmark_meta: { id: 'saved' } } });
+      turn: { id: 'b'.repeat(32), status: 'completed', consensus: text, execution_mode: 'agent', sources }, bookmark_meta: { id: 'saved' } } });
     await pending;
     w.App.agentChat.project(run);
+    expect(w.App.runRegistry.isExecuting(run.runId)).toBe(false);
     expect(finish).toEqual(expect.any(Function));
     expect(w.morphMarkdown).not.toHaveBeenCalled();
-    // The review set its pills on the paced text the full render replaces.
-    const reviewed = w.App.agentReview.render.mock.calls.length;
-    expect(reviewed).toBeGreaterThan(0);
+    // The run is over, its last words are not in view yet: no row is placed
+    // under them, nothing writes the rest of the text at once, no action.
+    expect(w.App.agentReview.render).toHaveBeenCalledTimes(reviewed);
+    expect([w.App.answerCopy.button, w.App.watch.answerButton, w.App.answerShare.button].map(eligible)).toEqual([false, false, false]);
     const serial = body._agentRenderSerial;
     finish();
     expect(w.morphMarkdown).toHaveBeenLastCalledWith(body, text, { decorate: expect.any(Function) });
     expect(body._agentRenderSerial).toBe(serial + 1);
     await Promise.resolve();
-    expect(w.App.agentReview.render.mock.calls.length).toBeGreaterThan(reviewed);
+    // The text stands: the view is projected again, with all of it at once.
+    expect(w.App.agentReview.render).toHaveBeenCalledTimes(reviewed + 1);
     expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, undefined, expect.objectContaining({ sources }));
+    expect([w.App.answerCopy.button, w.App.watch.answerButton, w.App.answerShare.button].map(eligible)).toEqual([true, true, true]);
+    // The row comes into view quietly, once.
+    const fades = () => w.App.agentActivity.reveal.mock.calls.filter(([node]) => node === body._agentReview);
+    expect(fades()).toEqual([[body._agentReview, { lift: false }]]);
+    w.App.agentChat.project(run);
+    expect(fades()).toHaveLength(1);
     // The new projection keeps the rendered text: no second full render.
     expect(w.morphMarkdown).toHaveBeenCalledTimes(1);
     dom.window.close();

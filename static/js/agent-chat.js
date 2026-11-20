@@ -671,10 +671,10 @@
       const morph = () => window.morphMarkdown(body, text, { decorate: streamSourcePills });
       const full = () => (window.keepTextSelection ? window.keepTextSelection(body, morph) : morph());
       if (reveal) {
-        // A full render that follows the paced words comes after the review
-        // set its marks and source pills on the paced text, and replaces
-        // them: the view is projected again once it stands, after the reveal
-        // measured it, so no letter comes in twice.
+        // A full render that follows the paced words comes after this
+        // projection, which left out what stands under the answer (project,
+        // `arriving`): the view is projected again once the text stands,
+        // after the reveal measured it, so no letter comes in twice.
         let later = false;
         reveal.settle(body, text, () => {
           full();
@@ -996,10 +996,21 @@
     const checking = announced || (fixed && ['required', 'running'].includes(liveReview.status));
     setAnswerChecking(answerBody, checking);
     if (checking) context.metadata.revealMarks = true;
+    // What stands under a fixed answer waits for its last word: the paced
+    // text still brings it into view (stream-reveal.js settle). A row placed
+    // now was pushed down by every line still to come, and the review,
+    // writing its marks, set the rest of the text at once. The view is
+    // projected again once the text stands (renderAnswerBody).
+    const arriving = App.streamReveal?.pending?.(answerBody) === true;
+    const stands = !running && !arriving;
+    // What stood there before this projection: the row, or the line whose
+    // place it takes in the same frame (setAnswerChecking).
+    const rowStood = Boolean(answerBody?._agentReview?.isConnected || answerBody?._checkStatus?.isConnected
+      || answerBody?._copyPill?.isConnected);
     // The row under the fixed answer stands while the reviewers work, Notes
     // waiting and Sources already counted (agent-review.js renderAudit): the
     // end of the review changes a word, not the row.
-    if (!running || framed || fixed) {
+    if ((!running || framed || fixed) && !arriving) {
       const live = running && !fixed;
       // `ended`: the run and the review that follows its hand-over are over.
       App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
@@ -1014,17 +1025,17 @@
     App.agentMemory?.render(answerBody, { key: context.runId, running,
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
     App.agentMemory?.nudge(answerBody, { key: context.runId,
-      finished: !running && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
+      finished: stands && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
     // A Watch the Agent prepared: its card under the completed answer that points to it.
     // The user's own message carries no "Scheduled Watch run" line.
     App.followup?.markWatchRun?.(document.getElementById('threadAsk'), state.completedTurn || null);
     // Copy, the first of the answer's actions (answer-copy.js): whatever
     // answer stands once the run is over, a stopped one too; with Watch and
     // Share at the end of a review that may still correct a sentence.
-    App.answerCopy?.button?.(answerBody, { eligible: !running && state.completedTurn?.status !== 'pending'
+    App.answerCopy?.button?.(answerBody, { eligible: stands && state.completedTurn?.status !== 'pending'
       && Boolean(String(answerBody?.dataset.markdown || '').trim()) });
     App.agentWatch?.render(answerBody, { key: context.runId,
-      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
+      proposal: stands && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
       chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
     // The Watch pill on every finished answer (watch.js).
     // It is not the Agent offering one: a prepared Watch has its card
@@ -1032,24 +1043,33 @@
     // in a temporary chat, which keeps nothing; no share there either, it
     // keeps a copy for 30 days (the server refuses it too).
     App.watch?.answerButton?.(answerBody, { question: context.question, chatId: context.metadata.chatId,
-      eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch
+      eligible: stands && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch
         && context.config.temporary !== true });
     // Share beside it, for every finished answer (share-dialog.js).
     App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
       question: context.question,
-      eligible: context.config.temporary !== true && !running && state.completedTurn?.status === 'completed'
+      eligible: context.config.temporary !== true && stands && state.completedTurn?.status === 'completed'
         && Boolean(String(state.text || '').trim()) });
     // A settings change the Agent prepared: its card, applied with one click.
     // Keyed like the saved chat's view (chat:turn), so applying or dismissing
     // holds when the chat is opened again.
     App.agentSettings?.render(answerBody, {
       key: context.metadata.chatId && state.completedTurn?.id ? `${context.metadata.chatId}:${state.completedTurn.id}` : context.runId,
-      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
+      proposal: stands && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
     // A pull request the Agent prepared (agent-github.js), keyed the same way.
     App.agentGithub?.render(answerBody, {
       key: context.metadata.chatId && state.completedTurn?.id ? `${context.metadata.chatId}:${state.completedTurn.id}` : context.runId,
-      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_pull_request : null,
+      proposal: stands && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_pull_request : null,
       chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
+    // The row that waited for the answer's last word comes into view
+    // quietly, once; where a row or "Reviewing the answer…" stood, it takes
+    // that place without a fade.
+    if (answerBody) {
+      const row = !arriving && answerBody._awaitedLastWord && !rowStood
+        ? [answerBody._agentReview, answerBody._copyPill?.closest('.agent-watch-pill-row')].find(node => node?.isConnected) : null;
+      if (row) App.agentActivity?.reveal(row, { lift: false });
+      answerBody._awaitedLastWord = arriving;
+    }
     App.syncSendButtonRunning?.();
     syncAskEdit(running);
     if (!running) syncPendingReview();

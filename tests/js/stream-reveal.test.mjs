@@ -209,6 +209,94 @@ describe("stream-reveal: the fixed answer", () => {
     expect(el.classList.contains("is-stream-revealing")).toBe(false);
   });
 
+  // The row under the answer waits for this (agent-chat.js project).
+  it("says that a fixed answer's last words still come in, until its full render followed", () => {
+    const { window, reveal, el, paint, run } = boot();
+    expect(reveal.pending(el)).toBe(false);
+    reveal.stream(el, ANSWER, paint);
+    run(16);
+    // Streaming alone owes no full render.
+    expect(reveal.pending(el)).toBe(false);
+    const render = vi.fn(() => window.morphMarkdown(el, ANSWER));
+    reveal.settle(el, ANSWER, render);
+    expect(reveal.pending(el)).toBe(true);
+    run(3000);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(reveal.pending(el)).toBe(false);
+  });
+
+  // The review sets the answer's source pills anew right after its last
+  // word; with the entrance still on, every pill went out and came in again.
+  it("ends the entrance of pills and bullets with the last word, while its letters still come into view", () => {
+    const { window, reveal, el, paint, run, lit } = boot();
+    reveal.stream(el, ANSWER, paint);
+    run(16);
+    expect(el.classList.contains("is-stream-revealing")).toBe(true);
+    let entrance = null;
+    reveal.settle(el, ANSWER, () => {
+      entrance = el.classList.contains("is-stream-revealing");
+      window.morphMarkdown(el, ANSWER);
+    });
+    // Its words are still painted: the entrance goes on.
+    expect([entrance, el.classList.contains("is-stream-revealing")]).toEqual([null, true]);
+    while (entrance === null) run(16);
+    expect([entrance, el.classList.contains("is-stream-revealing")]).toEqual([false, false]);
+    run(16);
+    expect(lit()).toBeGreaterThan(0);
+  });
+
+  // The row under the answer waits for the full render (pending): in the
+  // frame of the last word it stood there before that word could be read.
+  it("lets the full render follow once the last letters are in view, not in the frame of the last word", () => {
+    const { window, reveal, el, painted, paint, run, unseen } = boot();
+    reveal.stream(el, ANSWER, paint);
+    run(16);
+    const render = vi.fn(() => window.morphMarkdown(el, ANSWER));
+    reveal.settle(el, ANSWER, render);
+    while (painted.at(-1) !== ANSWER) run(16);
+    expect(unseen()).toBeGreaterThan(0);
+    expect(render).not.toHaveBeenCalled();
+    let waited = 0;
+    while (!render.mock.calls.length && waited < 2000) { run(16); waited += 16; }
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(unseen()).toBe(0);
+    expect(waited).toBeLessThan(600);
+  });
+
+  it("ends the entrance at once for an answer fixed with all its words in view", () => {
+    const { window, reveal, el, paint, run } = boot();
+    reveal.stream(el, ANSWER, paint);
+    run(3000);
+    expect(el.classList.contains("is-stream-revealing")).toBe(true);
+    reveal.settle(el, ANSWER, () => window.morphMarkdown(el, ANSWER));
+    expect(el.classList.contains("is-stream-revealing")).toBe(false);
+  });
+
+  it("owes nothing for an answer it rendered at once", () => {
+    const { reveal, el } = boot();
+    reveal.settle(el, "Saved answer.", vi.fn());
+    expect(reveal.pending(el)).toBe(false);
+  });
+
+  it("still renders the fixed answer in full when someone else wrote into it before its last word", () => {
+    const { window, reveal, el, painted, paint, run } = boot();
+    reveal.stream(el, ANSWER, paint);
+    run(16);
+    const render = vi.fn(() => window.morphMarkdown(el, ANSWER));
+    reveal.settle(el, ANSWER, render);
+    const paints = painted.length;
+    window.morphMarkdown(el, painted.at(-1));
+    // Theirs now: nothing waits for the pace any more.
+    expect(reveal.pending(el)).toBe(false);
+    expect(render).not.toHaveBeenCalled();
+    run(32);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(painted).toHaveLength(paints);
+    expect(el.textContent.trim()).toBe(ANSWER);
+    run(3000);
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
   it("renders another chat's answer at once and leaves nothing of the look behind", () => {
     const { window, reveal, el, paint, run, lit } = boot();
     reveal.stream(el, ANSWER, paint);
