@@ -1533,6 +1533,17 @@ def test_a_command_stopped_by_the_days_vm_time_says_so(store, fake_vm, monkeypat
     assert cut["timed_out"] and cut["note"] == agent_vm_tools.VM_DAY_CUT.format(what="command", seconds=25)
 
 
+def test_vm_time_charged_after_the_accounts_deletion_began_lands_nowhere(store, caplog):
+    """A run whose VM time comes in after the deletion swept
+    users/{uid}/chat_state (it does so once) would leave the day's document
+    of an account that is gone; nor is that a failure to log."""
+    from app.services import agent_vm_time
+    store.db.documents[("account_deletion_jobs", UID)] = {"status": "pending", "created_at": datetime.now()}
+    agent_vm_time.charge(store, UID, 30)
+    assert not agent_vm_time.ref(store.db, UID).get().exists
+    assert "charge failed" not in caplog.text
+
+
 # --- Admins only ------------------------------------------------------------------
 
 # The VM: admins only, every account with AGENT_VM_ACCESS=all ("pro", an

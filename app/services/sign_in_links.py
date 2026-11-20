@@ -94,17 +94,26 @@ def link_url(code: str) -> str:
 
 
 def issue(uid: str, email: str, *, db=None, now: datetime | None = None) -> str:
-    """A new code for ``uid``; the caller mails :func:`link_url` of it."""
+    """A new code for ``uid``; the caller mails :func:`link_url` of it.
+    AccountDeletionInProgress once the account's deletion began: it takes
+    the account's links in one step, a link made after it would stay."""
+    from app.services import persistence_guard
     now = now or utcnow()
     code = secrets.token_urlsafe(CODE_BYTES)
-    _db(db).collection(COLLECTION).document(_digest(code)).set({
-        "uid": uid,
-        # Checked again when the link is used: the click proves this
-        # address, not whatever the account is called by then.
-        "email_hash": _digest(_address(email)),
-        "created_at": now,
-        "expires_at": now + LINK_LIFETIME,
-    })
+    database = _db(db)
+    ref = database.collection(COLLECTION).document(_digest(code))
+
+    def operation(tx):
+        persistence_guard.ensure_account_write_allowed(uid=uid, db=database, transaction=tx, now=now)
+        tx.set(ref, {
+            "uid": uid,
+            # Checked again when the link is used: the click proves this
+            # address, not whatever the account is called by then.
+            "email_hash": _digest(_address(email)),
+            "created_at": now,
+            "expires_at": now + LINK_LIFETIME,
+        })
+    _run(database, operation)
     return code
 
 

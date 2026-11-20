@@ -73,18 +73,24 @@ def status(db, uid):
 
 def charge(store, uid, seconds):
     """Adds a message's VM time to today's account; failures are logged, never
-    the message's (the cap is cost control, not a guard)."""
+    the message's (the cap is cost control, not a guard). Nothing once the
+    account's deletion began: it sweeps the account's documents once, and a
+    run may end after that."""
+    from app.services import persistence_guard
     if seconds <= 0:
         return
     day = day_key()
     doc = ref(store.db, uid, day)
 
     def operation(tx):
+        persistence_guard.ensure_account_write_allowed(uid=uid, db=store.db, transaction=tx)
         data = doc.get(transaction=tx).to_dict() or {}
         tx.set(doc, {"seconds": float(data.get("seconds") or 0) + float(seconds), "day": day,
                      "updated_at": datetime.now(timezone.utc).isoformat()})
     try:
         store._transaction(operation)
+    except persistence_guard.AccountDeletionInProgress:
+        return
     except Exception as exc:
         logging.warning("Agent VM time charge failed category=%s", safe_exception(exc))
 

@@ -112,6 +112,23 @@ def test_the_list_of_sign_ins_keeps_the_first_day_and_the_newest_sites(store, mo
     assert agent_workspace.sign_ins(agent_workspace.record(store.db, UID)) == []
 
 
+def test_after_the_accounts_deletion_began_nothing_writes_its_record_again(store, fake_vm):
+    """The deletion sweeps users/{uid}/chat_state once: a sign-in noted, a
+    key's name, a log-out everywhere or the old browser's end after it
+    would leave a record of an account that is gone. Clearing makes no
+    record where there is none to clear."""
+    vm = fake_vm.backend()
+    agent_workspace.clear_sign_ins(store.db, UID)
+    agent_workspace.delete_old_browser(store.db, UID, vm)
+    assert not agent_workspace.ref(store.db, UID).get().exists
+    store.db.documents[("account_deletion_jobs", UID)] = {"status": "pending", "created_at": datetime.now(timezone.utc)}
+    assert agent_workspace.note_sign_in(store.db, UID, "web.whatsapp.com", "WhatsApp", True) == []
+    agent_workspace.remember_values(store.db, UID, "secret_names", ["OPENAI_API_KEY"], keep=5)
+    agent_workspace.clear_sign_ins(store.db, UID)
+    agent_workspace.delete_old_browser(store.db, UID, vm)
+    assert not agent_workspace.ref(store.db, UID).get().exists
+
+
 # --- Tools in the VMs -----------------------------------------------------------------
 
 def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(monkeypatch):

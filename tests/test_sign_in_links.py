@@ -95,7 +95,7 @@ class Transaction:
 
     def _clean_up(self):
         self._id = None
-        self.reads, self.deletes = {}, []
+        self.reads, self.deletes, self.sets = {}, [], []
 
     def _begin(self, retry_id=None):
         self.db.attempts += 1
@@ -104,6 +104,9 @@ class Transaction:
     def delete(self, ref):
         self.deletes.append(ref.key)
 
+    def set(self, ref, data):
+        self.sets.append((ref.key, dict(data)))
+
     def _commit(self):
         with self.db.lock:
             if any(self.db.versions.get(key, 0) != seen for key, seen in self.reads.items()):
@@ -111,6 +114,9 @@ class Transaction:
                 raise Aborted("contention")
             for key in self.deletes:
                 self.db.docs.pop(key, None)
+                self.db.bump(key)
+            for key, data in self.sets:
+                self.db.docs[key] = data
                 self.db.bump(key)
         self._clean_up()
 
@@ -187,6 +193,18 @@ def test_only_the_hash_of_the_code_is_stored_and_the_link_carries_it_in_the_frag
     assert "?" not in url
 
 
+def test_no_link_for_an_account_whose_deletion_began():
+    """A /register for the address between the deletion's steps
+    sign_in_links and firebase_auth would leave a link with the account's
+    uid that the deletion no longer takes."""
+    from app.services import persistence_guard
+    db = FakeDb()
+    db.docs[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, "reader")] = {"status": "pending"}
+    with pytest.raises(persistence_guard.AccountDeletionInProgress):
+        sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
+    assert db.links() == {}
+
+
 def test_a_code_signs_in_once_and_is_gone_after(firebase):
     db = FakeDb()
     code = sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
@@ -234,6 +252,7 @@ def test_two_requests_with_one_code_sign_in_once(firebase):
     and finds the link spent."""
     db = FakeDb()
     code = sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
+    db.attempts = 0
     both_read = threading.Barrier(2, timeout=5)
     real_get_user = sign_in_links.auth.get_user.side_effect
 

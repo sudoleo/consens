@@ -344,13 +344,36 @@ def listed(record, field, kind):
     return tuple(value for value in values if type(value) is kind) if isinstance(values, list) else ()
 
 
+def _merge(db, uid, change):
+    """Merges into the account's record what ``change`` makes of the record
+    as it stands (the fields to write, or None for nothing) and returns the
+    record after. None once the account's deletion began, with nothing
+    written: the deletion sweeps users/{uid}/chat_state once, and a write
+    after it would leave a record of an account that is gone."""
+    from app.services import persistence_guard
+    doc = ref(db, uid)
+
+    def operation(tx):
+        persistence_guard.ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
+        current = persistence_guard._get(doc, tx).to_dict() or {}
+        fields = change(current)
+        if fields:
+            persistence_guard._set(tx, doc, fields, merge=True)
+        return {**current, **(fields or {})}
+    try:
+        return persistence_guard._run_transaction(db, operation)
+    except persistence_guard.AccountDeletionInProgress:
+        return None
+
+
 def remember_values(db, uid, field, values, *, keep):
     """Adds ``values`` to the list ``field`` of the account's record, the
     newest last and at most ``keep`` (agent_secrets' names): the record
     outlives a restart of the server, the process's memory does not."""
-    doc = ref(db, uid)
-    current = [value for value in ((doc.get().to_dict() or {}).get(field) or []) if value not in values]
-    doc.set({field: [*current, *values][-keep:]}, merge=True)
+    def change(record):
+        kept = [value for value in (record.get(field) or []) if value not in values]
+        return {field: [*kept, *values][-keep:]}
+    _merge(db, uid, change)
 
 
 # The sites the browser is logged in to, as the agent noted them
@@ -384,22 +407,22 @@ def note_sign_in(db, uid, site, name, signed_in, *, today=None):
     takes it off, and returns the list after. A site noted again keeps the
     day it was first noted and takes the new name; the newest
     SIGN_INS_KEPT stay."""
-    doc = ref(db, uid)
-    current = sign_ins(doc.get().to_dict() or {})
-    before = next((entry for entry in current if entry["site"] == site), None)
-    entries = [entry for entry in current if entry["site"] != site]
-    if signed_in:
-        since = (before or {}).get("since") or (today or _now().date()).isoformat()
-        entries.append({"site": site, "name": name or (before or {}).get("name") or site, "since": since})
-    entries = entries[-SIGN_INS_KEPT:]
-    if entries != current:
-        doc.set({"sign_ins": entries}, merge=True)
-    return entries
+    def change(record):
+        current = sign_ins(record)
+        before = next((entry for entry in current if entry["site"] == site), None)
+        entries = [entry for entry in current if entry["site"] != site]
+        if signed_in:
+            since = (before or {}).get("since") or (today or _now().date()).isoformat()
+            entries.append({"site": site, "name": name or (before or {}).get("name") or site, "since": since})
+        entries = entries[-SIGN_INS_KEPT:]
+        return {"sign_ins": entries} if entries != current else None
+    return sign_ins(_merge(db, uid, change) or {})
 
 
 def clear_sign_ins(db, uid):
-    """After the browser logged out of everything (reset_browser)."""
-    ref(db, uid).set({"sign_ins": []}, merge=True)
+    """After the browser logged out of everything (reset_browser). A record
+    without sign-ins stays as it is, and none is made."""
+    _merge(db, uid, lambda record: {"sign_ins": []} if record.get("sign_ins") else None)
 
 
 def sign_ins_note(entries):
@@ -635,7 +658,7 @@ def retire_old_browser(db, uid, vm):
     try:
         if record(db, uid).get("browser"):
             delete_old_browser(db, uid, vm)
-            ref(db, uid).set({"sign_ins": []}, merge=True)
+            clear_sign_ins(db, uid)
             logging.info("Agent workspace old browser VM deleted")
         _retired.add(uid)
     except Exception as exc:
@@ -647,9 +670,9 @@ def delete_old_browser(db, uid, vm):
     sign-in it kept, by its name whatever the record says (a VM that is gone
     counts as deleted), then the record forgets it. Also "Log out
     everywhere" (routers/agent_workspace.py): an account that has not opened
-    its workspace may still have that VM."""
+    its workspace may still have that VM, and then no record to change."""
     vm.delete(agent_vm.old_browser_name(uid))
-    ref(db, uid).set({"browser": None}, merge=True)
+    _merge(db, uid, lambda record: {"browser": None} if record.get("browser") else None)
 
 
 # The account's provisioning (module docstring): once per process and account.
