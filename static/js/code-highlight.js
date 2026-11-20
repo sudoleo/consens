@@ -77,11 +77,14 @@
 
   // A public page's code blocks come from the server, finished and without
   // a name: they get theirs once, when the page has loaded. Never in the
-  // app, where a block without a name is one still being written.
+  // app, where a block without a name is one still being written. A diagram
+  // and a picture are drawn (diagram-render.js), not toned.
   function adopt(root) {
     root.querySelectorAll('pre:not([data-code]) > code[class*="language-"]').forEach(code => {
       const language = languageOf(code);
-      if (language && language !== "mermaid") code.parentElement.dataset.code = key(language, code.textContent);
+      if (language && language !== "mermaid" && language !== "svg") {
+        code.parentElement.dataset.code = key(language, code.textContent);
+      }
     });
   }
 

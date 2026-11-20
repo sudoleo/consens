@@ -6603,6 +6603,17 @@ also Minuten.
 - **Wo es nicht gezeichnet wird:** in Mails und Telegram-Nachrichten (dort
   steht der Code) und überall, wo Mermaid den Block nicht lesen kann (dann
   bleibt er der Codeblock, den das Modell schrieb).
+- **SVG (seit 2026-11-20, Max: „SVGs als Bilder im Chat nativ darstellen“):**
+  Derselbe Weg für Bilder, die ein Modell selbst zeichnet (Logo, Icon,
+  Neon-Schild): Ein ` ```svg `-Block (auch ` ```xml ` oder ohne Sprache mit
+  `<svg>`-Wurzel, oder ein `<svg>`-Element im Text) erscheint als Bild, mit
+  Styles, Filtern und Animationen, aber ohne Skript und ohne Nachladen
+  (`docs/codebase-map.md` „SVG-Bilder“). Der Prompt bekam nur die Hälfte
+  eines Satzes dazu: „and an ```svg code block as the picture it draws“.
+  Eine SVG-Datei aus dem Arbeitsplatz bleibt bewusst ein Download
+  (`file_mime` nimmt nie ein Bild nach dem Namen): Als `image/svg+xml`
+  gespeichert, könnte jeder Weg, der ein Bild einbettet oder öffnet, ihr
+  Skript in der Seite ausführen.
 - **Offen:** ob Modelle es treffend nutzen oder übertreiben, zeigt erst Prod.
   Fotos aus dem Web bleiben, wie sie sind (`search_pictures`, `show_image`).
 

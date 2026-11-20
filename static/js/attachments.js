@@ -478,6 +478,33 @@
       return row;
     }
 
+    // What a picture made in the page offers besides itself (a drawing in an
+    // answer, diagram-render.js: its code to copy, its file to download):
+    // { label, run, done } each, `done` the word the button says for a moment
+    // once `run` has succeeded.
+    function pictureActions(actions) {
+      const row = document.createElement("div");
+      row.className = "attachment-viewer-actions";
+      actions.forEach(function (action) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "attachment-viewer-action";
+        button.textContent = action.label;
+        button.addEventListener("click", function () {
+          Promise.resolve().then(action.run).then(function () {
+            if (!action.done) return;
+            button.textContent = action.done;
+            clearTimeout(button._doneTimer);
+            button._doneTimer = setTimeout(function () { button.textContent = action.label; }, 1600);
+          }, function (failure) {
+            window.App?.showPopup?.(window.App.userError(failure, { fallback: "That didn’t work. Try again." }));
+          });
+        });
+        row.appendChild(button);
+      });
+      return row;
+    }
+
     // A gallery's pictures load once each, and its neighbours before they
     // are asked for: paging is a slideshow, not a download each time.
     let galleryFiles = new Map();
@@ -663,6 +690,7 @@
         img.alt = att.name;
         img.src = "data:" + att.mime + ";base64," + att.data;
         viewerBody.appendChild(img);
+        if (att.actions?.length) viewerBody.appendChild(pictureActions(att.actions));
         fitPicture(img, att.drawing);
       } else if (att.mime.indexOf("text/") === 0 && att.data.length * 3 / 4 <= TEXT_PREVIEW_BYTES) {
         try {
@@ -1129,8 +1157,11 @@
       // still uploading ({name, size, mime}); an empty list ends it.
       markUploading: markUploading,
       // A stored Agent file in the viewer: picture, PDF or text, with
-      // download and removal ({ fileId, name, mime, size }).
+      // download and removal ({ fileId, name, mime, size }); or a picture
+      // made in the page ({ name, mime, data, drawing, actions }).
       openStored: openAttachmentViewer,
+      // save(blob, name): the browser's download of a file made in the page.
+      save: saveBlob,
       renderMessageAttachments: renderMessageAttachments,
       markError: markError,
       refreshCompatibility: syncAttachmentCompatibility

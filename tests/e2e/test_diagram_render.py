@@ -1,10 +1,13 @@
-"""A ```mermaid block of an answer shows as its diagram (diagram-render.js).
+"""A ```mermaid block of an answer shows as its diagram and an SVG as its
+picture (diagram-render.js).
 
-Mermaid only runs in a real browser: this draws with the vendored copy under
-the app's script policy (no inline script, no eval) and holds what the
-drawing may never do, load or run anything of the model's.
+Mermaid only runs in a real browser, and only a browser draws a picture to
+look at it: this draws under the app's script policy (no inline script, no
+eval) and holds what a drawing may never do, load or run anything of the
+model's.
 """
 import base64
+import html
 import json
 from pathlib import Path
 
@@ -67,9 +70,9 @@ def _page(browser, body, width='680px', viewport=None, init=None, now=None):
     return context, page, errors, requested, refused
 
 
-def _drawing(page, selector='.md-diagram'):
-    """The SVG of a drawn diagram's image, as text."""
-    source = page.locator(f'{selector} img').get_attribute('src')
+def _drawing(page, selector='.md-diagram', index=0):
+    """The SVG of a drawn diagram's or picture's image, as text."""
+    source = page.locator(f'{selector} img').nth(index).get_attribute('src')
     assert source.startswith('data:image/svg+xml;base64,')
     return base64.b64decode(source.split(',', 1)[1]).decode('utf-8')
 
@@ -356,6 +359,114 @@ def test_a_page_without_a_diagram_asks_for_nothing(browser):
     try:
         page.wait_for_timeout(300)
         assert page.locator('.md-diagram').count() == 0
+        assert requested == [] and not refused and not errors
+    finally:
+        context.close()
+
+
+def _svg_block(source):
+    return f'<pre><code class="language-svg">{html.escape(source, quote=False)}\n</code></pre>'
+
+
+# A neon sign as a model draws one: its own dark background, a style rule, a
+# glow filter, a gradient and an animation, and what a page could abuse.
+NEON = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 320 120" '
+        'onload="window.pwned=1">\n'
+        '  <title>Neon sign</title>\n'
+        '  <style>.tube{fill:none;stroke:url(#tube);stroke-width:4;filter:url(#glow)}</style>\n'
+        '  <defs><filter id="glow"><feGaussianBlur stdDeviation="3"/></filter>\n'
+        '    <linearGradient id="tube"><stop offset="0" stop-color="#0ff"/><stop offset="1" stop-color="#f0f"/>'
+        '</linearGradient></defs>\n'
+        '  <rect width="320" height="120" fill="#07070d"/>\n'
+        '  <path class="tube" d="M30 90 L60 30 L90 90 M120 30 h60 M150 30 v60">'
+        '<animate attributeName="opacity" values="1;.6;1" dur="2s" repeatCount="indefinite"/></path>\n'
+        '  <script>window.pwned=2</script>\n'
+        '  <image href="https://leak.test/neon.png" width="10" height="10"/>\n'
+        '  <a href="javascript:window.pwned=3"><text x="200" y="70" fill="#0ff">OPEN</text></a>\n'
+        '</svg>')
+
+
+def test_an_svg_is_drawn_as_a_picture_of_its_own_size_and_nothing_of_it_runs(browser):
+    context, page, errors, requested, refused = _page(
+        browser, f'<p>Before</p>{_svg_block(NEON)}<p id="after">After</p>', viewport={'width': 1280, 'height': 800})
+    try:
+        place = page.locator('.md-diagram')
+        expect(place).to_have_attribute('data-drawn', 'light', timeout=10000)
+        expect(place).to_have_class('md-diagram is-picture has-size is-arriving is-drawn')
+        shown = page.evaluate('''async () => {
+            const img = document.querySelector(".md-diagram img");
+            await img.decode();
+            const box = document.querySelector(".md-diagram-figure").getBoundingClientRect();
+            return { natural: [img.naturalWidth, img.naturalHeight], box: [box.width, box.height], alt: img.alt };
+        }''')
+        # Its own size, as wide as the answer allows, at its own shape; its title is its name.
+        assert shown['natural'] == [320, 120] and shown['box'] == [320, 120] and shown['alt'] == 'Neon sign'
+        svg = _drawing(page)
+        for kept in ('<style>.tube{', '<feGaussianBlur', '<linearGradient', '<animate', 'fill="#07070d"'):
+            assert kept in svg, kept
+        for gone in ('<script', 'onload', 'leak.test', 'javascript:'):
+            assert gone not in svg, gone
+        # It brings its own background: no paper behind it.
+        assert 'fill:#' not in svg.split('<title>', 1)[0]
+        opener = page.get_by_role('button', name='Open picture')
+        opener.click()
+        expect(page.locator('dialog.md-diagram-viewer')).to_have_attribute('open', '')
+        page.keyboard.press('Escape')
+        # A picture needs no library: nothing was asked for, nothing ran.
+        assert page.evaluate('window.pwned') is None
+        assert requested == [] and not refused and not errors
+    finally:
+        context.close()
+
+
+def test_a_picture_scales_into_the_answer_and_its_field_has_its_size_before(browser):
+    wide = '<svg viewBox="0 0 2000 500"><rect width="2000" height="500" fill="#123"/></svg>'
+    icon = '<svg viewBox="0 0 24 24"><path d="M4 12h16" stroke="#217863" stroke-width="2"/></svg>'
+    context, page, errors, requested, _refused = _page(browser, _svg_block(wide) + _svg_block(icon))
+    try:
+        expect(page.locator('.md-diagram.is-drawn')).to_have_count(2, timeout=10000)
+        boxes = page.evaluate('''() => [...document.querySelectorAll(".md-diagram-figure")]
+            .map(figure => { const box = figure.getBoundingClientRect(); return [box.width, box.height]; })''')
+        # Wider than the answer: scaled down whole, never panned; an icon of 24 px at 128.
+        assert boxes[0] == [680, 170] and boxes[1] == [128, 128]
+        assert page.evaluate('document.querySelector(".md-diagram").scrollWidth') <= 680
+        assert requested == [] and not errors
+    finally:
+        context.close()
+
+
+def test_a_picture_that_would_vanish_in_the_dark_stands_on_paper(browser):
+    # Black lines without a background of their own, and an icon in currentColor.
+    black = '<svg viewBox="0 0 100 100"><path d="M10 10 L90 90 M90 10 L10 90" stroke="#000" stroke-width="8"/></svg>'
+    icon = '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="8"/></svg>'
+    context, page, errors, _requested, _refused = _page(browser, _svg_block(black) + _svg_block(icon))
+    try:
+        places = page.locator('.md-diagram')
+        expect(places.nth(0)).to_have_attribute('data-drawn', 'light', timeout=10000)
+        expect(places.nth(1)).to_have_attribute('data-drawn', 'light')
+        assert 'fill:#ffffff' not in _drawing(page, index=0)
+        page.evaluate('document.documentElement.classList.add("dark-mode")')
+        expect(places.nth(0)).to_have_attribute('data-drawn', 'dark')
+        expect(places.nth(1)).to_have_attribute('data-drawn', 'dark')
+        # On the light page's paper in the dark, at the same size: nothing moves.
+        assert '<rect width="128" height="128" style="fill:#ffffff"' in _drawing(page, index=0)
+        # currentColor is the ink of the page: light in the dark, no paper needed.
+        drawn = _drawing(page, index=1)
+        assert 'color="#f5f5f5"' in drawn and 'fill:#ffffff' not in drawn
+        assert not errors
+    finally:
+        context.close()
+
+
+def test_markup_that_is_not_one_svg_stays_the_code_the_model_wrote(browser):
+    context, page, errors, requested, refused = _page(
+        browser, _svg_block('<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>\n<p>and a paragraph</p>'))
+    try:
+        place = page.locator('.md-diagram')
+        # No size could be read from it either: the field never took one.
+        expect(place).to_have_class('md-diagram is-picture is-arriving is-code', timeout=10000)
+        expect(place.locator('pre')).to_be_visible()
         assert requested == [] and not refused and not errors
     finally:
         context.close()

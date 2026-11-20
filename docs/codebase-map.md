@@ -746,15 +746,27 @@ Seitenfluss, und die Karte selbst ist die Uhr (`render.anchor`, `measure`): Der
 Lauf beginnt, wenn die Karte von unten hereinkommt, und endet, wenn ihre letzte
 Zeile da ist. Vorher spielte ein Handy den ganzen Lauf in den 150 px ab, die
 einer zu hohen angehefteten Bühne an Weg blieben. Szene 03
-(„Decide“) in fünf Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
+(„Decide“) in vier Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
 öffnet die Notizkarte `#lpNoteTax` über `data-diff-open`), was die Farben
-heißen (`.lp-mark-key`), was die anderen KIs antworteten (`.lp-answers`), und die
-Pause eines Prüfers vor einem riskanten Schritt (`.lp-pause-card`, die Karte über
-dem Feld in `/app`). `landing-insights.js` baut nur noch die Hover-Vorschau der
+heißen (`.lp-mark-key`) und was die anderen KIs antworteten (`.lp-answers`).
+`landing-insights.js` baut nur noch die Hover-Vorschau der
 markierten Stelle. Die Reihenfolge der Seite: Hero, 01 Ask, 02 Run, 03 Decide,
-04 Monitor, Benchmark, Models, Schlussfeld; die Überschriften sagen, was da
+04 Monitor, Benchmark, Models, Harness, Schlussfeld; die Überschriften sagen, was da
 steht, ohne Werbezeilen (der Abschnitt „Why consens.io“ mit drei Spalten, die
 Szene 03 wiederholten, und „Proof, not promises“ sind entfallen).
+**Harness (seit 2026-11-20, Max: „Harness“ soll in den Mittelpunkt):** Über der
+h1 steht als Produktname „Agent harness“ (`.lp-hero-kind`), die Leiste aller
+öffentlichen Seiten hat den Link „Harness“ (`/#harness`), und der Abschnitt
+`#harness` nennt vier Fakten als Liste an einer Haarlinie (`.lp-harness-facts`:
+Live review, Speed, Its own computer, Your accounts) neben der Halt-Karte von
+`/app` (`.lp-pause-card`: „A reviewer paused the work“, eingeschleuste
+Anweisung, „Let it continue“). Jeder Satz dort beschreibt den Code von heute
+(der Kommentar im Template nennt die Stellen): Kein Aufruf wartet auf die
+Prüfer (`agent_gate.outward`), ein Halt kommt nach dem gemeldeten Schritt;
+deshalb zeigt die Karte eine gelesene Seite, keinen Klick. Die frühere fünfte
+Stufe von Szene 03 („A pause before a risky step“, „The step runs only if you
+let it“) zeigte die leere Vorab-Prüfung und ist mit diesem Abschnitt
+entfallen. Ändert sich eins der Fakten, ändert sich der Satz.
 `/consensus-engine` und `/benchmark` beschreiben die Engine hinter Watches,
 Topics und API, nicht die Antworten der App. Der Log faltet sich mit einem
 Höhenübergang über `.lp-agent-log-items` (statt `hidden`), der Platz für den
@@ -800,7 +812,7 @@ und echtem Scrollen und geht mit derselben Bewegung, mit der es kommt
 8.000 px zu gleiten; Anker landen unter der Leiste (`scroll-padding-top:
 54px`), eine späte Verschiebung bis zum ersten Eingriff wird ausgeglichen; auf
 der Landing markiert die Leiste „Watches“, solange `#watch` die Mitte des
-Bildschirms hält. Alle öffentlichen Seiten stehen auf EINEM Raster
+Bildschirms hält, „Harness“ ebenso für `#harness`. Alle öffentlichen Seiten stehen auf EINEM Raster
 (`--page-width`/`--page-gutter` in `public-tokens.css`, 20 px, unter 700 px
 16 px; Watch-/Topic-Spalte 860 px auf derselben linken Kante) und einem
 Material: Panels (`.legal-panel`, `.notice`) sind Abschnitte mit Haarlinie, keine
@@ -2653,8 +2665,45 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nur wenn außer LaTeX nichts im Anker steht, wird er nachträglich als Formel
   gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
 - **`diagram-render.js`** (seit 2026-11-10) — ein ` ```mermaid `-Block einer
-  Antwort erscheint als Diagramm, in `/app` und auf Share-/Watch-Seiten.
-  Exponiert `window.ConsensusDiagram.{key,request,settled,warm,render}`.
+  Antwort erscheint als Diagramm, ein SVG (seit 2026-11-20) als Bild, in
+  `/app` und auf Share-/Watch-Seiten.
+  Exponiert `window.ConsensusDiagram.{key,isSvg,request,settled,warm,render}`.
+  - **SVG-Bilder (seit 2026-11-20, Max: SVGs „nativ“ als Bilder):** Ein SVG ist
+    ein ` ```svg `-Block, ein ` ```xml `-Block oder einer ohne Sprache, dessen
+    Code ein `<svg>`-Element ist (`isSvg`: davor nur BOM, XML-Deklaration,
+    Kommentare und ein Doctype ohne internes Subset), oder ein `<svg>`-Element,
+    das am Zeilenanfang im Text steht (`markdown-stream.js` `svgElement`, bis
+    zum passenden `</svg>`, auch über Leerzeilen; vorher war es Markup im
+    Dokument, dessen IDs das Präfix des Sanitizers brach und dessen `<style>`
+    fiel). Ein ` ```html `-Block und ein eingerückter Block bleiben Code.
+    Gezeichnet wird ohne Bibliothek und wie ein Diagramm als `<img>`
+    (`drawSvg`): Das Bild führt kein Skript aus und lädt nichts, deshalb
+    behält das SVG seine Styles, Verläufe, Filter und Animationen (Neon).
+    Gelesen wird es wie Inline-SVG in einer inerten `<template>`; was daneben
+    steht (HTML, das der Parser aus der Zeichnung schiebt), macht es zu Code.
+    `cleanSvg` nimmt `script`, `foreignObject`, eingebettete Dokumente,
+    `on*`-Attribute, Adressen außer `#…` und `data:image/` und Animationen
+    auf `href` oder Handler weg; diese bereinigte Datei ist der Download.
+    Größe (`measure`): Breite/Höhe (absolute Einheiten), sonst die viewBox,
+    sonst 300 × 150; die längere Seite mindestens `PICTURE_LEAST` (128 px,
+    ein 24-px-Icon wird groß gezeichnet), höchstens `PICTURE_MOST` (4096).
+    Sie steht vor dem Zeichnen fest: Der Platz hat sie sofort, ein Block im
+    Stream ab seinem vollständigen `<svg …>`-Tag (`warm(partial, place)`).
+    `currentColor` ist die Tinte des Themas. **Papier (`paperFor`):** Der
+    Browser zeichnet das Bild einmal klein (64 px) und sieht nach: Ist der
+    Rand nicht zu 60 % gefüllt (kein eigener Hintergrund) und ist weniger als
+    die Hälfte der Tinte gegen den Grund sichtbar (Kontrast unter 1,6), steht
+    es auf dem Grund des anderen Themas, in derselben Größe. Mit eigenem
+    Hintergrund oder sichtbaren Linien steht es, wie es ist. Abgelehnt
+    (`refused`): über 300.000 Zeichen oder ein `<!ENTITY`. CSS (`diagram.css`
+    `.is-picture`): eigene Größe bis zur Antwortbreite und
+    `--picture-max-height` (wie `.agent-vm-picture`), als Ganzes verkleinert,
+    nie gewischt, runde Ecken. Ein Klick öffnet den Bildbetrachter mit
+    „Copy code“ (Quelle des Modells) und „Download“ (`<titel>.svg`;
+    `App.attachments.openStored` mit `actions`, `App.attachments.save`);
+    beides gilt auch für Mermaid (Download = das gezeichnete SVG). SVG-Dateien
+    aus dem Arbeitsplatz (`vm_share_file`) bleiben ein Download: Sie werden
+    nie als `image/svg+xml` gespeichert oder ausgeliefert.
   - **Mermaid** 12.3.0 liegt als ES-Module unter
     `static/vendor/mermaid/<version>/dist/` und wird per `import()` geholt, wenn
     eine Antwort zum ersten Mal ein Diagramm enthält (Kern plus eine
@@ -2761,18 +2810,24 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Klick daneben schließen, der Fokus kehrt zum Diagramm zurück.
   - **Öffentliche Seiten:** `public_markdown._mark_code_blocks` lässt nur
     einem geschlossenen Mermaid-Block die Klasse `language-mermaid` (nh3
-    `tag_attribute_values`). `templates/partials/answer_blocks.html` bindet
+    `tag_attribute_values`), ein geschlossener ` ```xml `-Block oder einer
+    ohne Sprache mit SVG-Wurzel heißt `language-svg` (`is_svg`), und ein
+    `<svg>`-Element im Text wird über die Block-Regel `_svg_element` zum
+    Codeblock `svg` (sonst stünde sein Markup als Text da, `html=False`);
+    `code-highlight.js` lässt `mermaid` und `svg` aus. `templates/partials/answer_blocks.html` bindet
     das Skript nur ein, wenn `page_has_diagram()`
     (`app/core/answer_assets.py`) die Marke im Template-Kontext findet;
     `adopt()` macht aus dem Block des Servers einen Platz. Mails und Telegram
     zeigen den Code.
   - Der Prompt nennt nur den Fakt (`AGENT_AUDIT_ANSWER_SECTION`: „a
-    ```mermaid code block shows as the diagram it describes“), wie bei
-    Formeln; `docs/agent-mode.md`, „Diagramme in der Antwort“.
+    ```mermaid code block shows as the diagram it describes and an ```svg
+    code block as the picture it draws“), wie bei Formeln;
+    `docs/agent-mode.md`, „Diagramme in der Antwort“.
   - Tests: `tests/js/markdown-diagram.test.mjs`,
-    `tests/js/diagram-render.test.mjs`, `tests/test_answer_assets.py` und
+    `tests/js/markdown-svg.test.mjs`, `tests/js/diagram-render.test.mjs`,
+    `tests/js/diagram-svg.test.mjs`, `tests/test_answer_assets.py` und
     im echten Browser unter der Skript-Policy der App
-    `tests/e2e/test_diagram_render.py`.
+    `tests/e2e/test_diagram_render.py` (auch Papier, Größe, Neon).
 - **`code-highlight.js`** (seit 2026-11-11) — Syntax-Töne in den Codeblöcken
   einer Antwort, in `/app` und auf Share-/Watch-Seiten. Exponiert
   `window.ConsensusCode.{key,render,warm}`. Wie bei Formeln und Diagrammen

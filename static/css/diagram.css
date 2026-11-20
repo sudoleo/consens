@@ -18,6 +18,12 @@
    phone's width had labels of 6 px. Wider than the answer then, it pans
    sideways in its place, as a table does; diagram-render.js turns a flow
    that would come out too small first.
+
+   An SVG picture (.is-picture) shows like a picture the agent shared
+   (agent-workspace.css .agent-vm-picture): at its own size up to the
+   answer's width and --picture-max-height, scaled down as a whole, never
+   panned. Its size comes from its source, so its field has it before it is
+   drawn, even while the block is still being written.
    ========================================================================== */
 
 .md-diagram {
@@ -41,8 +47,8 @@
   mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
 }
 .md-diagram > pre { display: none; margin: 0; }
-/* Not a diagram after all (Mermaid cannot read it), or a block the answer
-   never closed: the code as the model wrote it. */
+/* Not a drawing after all (Mermaid or the browser cannot read it), or a
+   block the answer never closed: the code as the model wrote it. */
 .md-diagram.is-code > pre,
 .md-diagram[data-open]:not(.is-pending) > pre { display: block; }
 .md-diagram.is-code > .md-diagram-figure { display: none; }
@@ -61,6 +67,16 @@
   width: max(calc(var(--diagram-width) * var(--diagram-min-scale) * 1px), min(calc(var(--diagram-width) * 1px), 100%));
   aspect-ratio: var(--diagram-width) / var(--diagram-height);
 }
+.md-diagram.is-picture { --picture-max-height: min(520px, 60vh); }
+.md-diagram.is-picture.has-size > .md-diagram-figure,
+.md-diagram.is-picture.is-pending.has-size::before {
+  width: min(calc(var(--diagram-width) * 1px), 100%,
+    calc(var(--picture-max-height) * var(--diagram-width) / var(--diagram-height)));
+  aspect-ratio: var(--diagram-width) / var(--diagram-height);
+}
+/* A picture with a background of its own (or on its paper, diagram-render.js
+   paperFor) ends in the field's round corners. */
+.md-diagram.is-picture > .md-diagram-figure { overflow: hidden; }
 /* Waiting: the skeleton's tone with its light passing (skeleton.css). */
 .md-diagram:not(.is-drawn) > .md-diagram-figure,
 .md-diagram.is-pending::before {

@@ -201,6 +201,7 @@ def test_the_answer_section_says_what_the_app_draws():
     section = prompt_defaults.AGENT_AUDIT_ANSWER_SECTION
     assert "shows as a typeset formula" in section
     assert "a ```mermaid code block shows as the diagram it describes" in section
+    assert "an ```svg code block as the picture it draws" in section
     assert "one drawn in a code block stays text" not in prompt_defaults.AGENT_VM_PROMPT
 
 

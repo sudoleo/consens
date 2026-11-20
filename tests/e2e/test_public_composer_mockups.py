@@ -183,15 +183,19 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         expect(page.locator('#lpNoteTax')).to_have_attribute('open', '')
         expect(page.locator('#lpNoteTax')).to_contain_text('Saxony has charged 5.5% since January 2023.')
         expect(page.locator('#lpNoteTax')).to_contain_text('Claude · Wrong')
-        # The pause is the fifth step of the list, a picture beside its words.
-        expect(page.locator('.lp-steps > .lp-step')).to_have_count(5)
-        expect(page.locator('.lp-steps .lp-pause-title')).to_have_text('A reviewer paused before a step')
+        # Decide is about reading the answer; a reviewer's pause is the harness's, as /app shows it.
+        expect(page.locator('.lp-steps > .lp-step')).to_have_count(4)
+        expect(page.locator('#harness .lp-pause-title')).to_have_text('A reviewer paused the work')
+        expect(page.locator('#harness .lp-harness-facts dt')).to_have_text(
+            ['Live review', 'Speed', 'Its own computer', 'Your accounts'])
+        expect(page.locator('.lp-section--hero .lp-hero-kind')).to_have_text('Agent harness')
         output = Path('test-results/landing-one-mode')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}'
         page.locator('.lp-scene-02 .lp-scene-visual').screenshot(path=str(output / f'run-{suffix}.png'))
         page.locator('.lp-scene-03').screenshot(path=str(output / f'decide-{suffix}.png'))
         page.locator('.lp-section--hero').screenshot(path=str(output / f'hero-{suffix}.png'))
+        page.locator('#harness').screenshot(path=str(output / f'harness-{suffix}.png'))
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert errors == []
     finally:

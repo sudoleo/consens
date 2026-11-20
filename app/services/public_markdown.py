@@ -257,10 +257,11 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
 
 
 # The classes a code block may keep. The page draws ```mermaid as a diagram
-# (diagram-render.js) and gives a block in one of these languages its syntax
-# tones (code-highlight.js); app/core/answer_assets.py loads either script
-# only for a page with such a block. The names are those highlight.js's
-# common build knows, with their usual short forms.
+# and ```svg as a picture (diagram-render.js) and gives a block in one of
+# these languages its syntax tones (code-highlight.js);
+# app/core/answer_assets.py loads either script only for a page with such a
+# block. The names are those highlight.js's common build knows, with their
+# usual short forms.
 CODE_LANGUAGES = frozenset("""
     bash c c++ cc console cpp cs csharp css diff go golang graphql h hpp html ini java javascript js json jsonc
     jsx kotlin kt less lua makefile markdown md objc objectivec patch perl php pl py python r rb rs ruby rust
@@ -268,21 +269,72 @@ CODE_LANGUAGES = frozenset("""
 """.split())
 _CODE_CLASSES = {"code": {"class": {"language-mermaid"} | {f"language-{name}" for name in CODE_LANGUAGES}}}
 
+# What the app reads as an SVG (diagram-render.js isSvg): an <svg> element
+# after at most a byte order mark, the XML declaration, comments and a
+# doctype without an internal subset.
+_SVG_PROLOG = re.compile(r"(?:\uFEFF|\s|<\?xml\b[^>]*\?>|<!--.*?-->|<!DOCTYPE\s+svg\b[^>\[]*>)*",
+                         re.IGNORECASE | re.DOTALL)
+_SVG_ROOT = re.compile(r"<svg[\s>]")
+_SVG_ELEMENT_START = re.compile(r" {0,3}<svg[\s>]")
+_SVG_TAG = re.compile(r"""<(/?)svg\b(?:"[^"]*"|'[^']*'|[^'">])*?(/?)>""", re.IGNORECASE)
+
+
+def is_svg(source) -> bool:
+    text = str(source or "")
+    return bool(_SVG_ROOT.match(text, _SVG_PROLOG.match(text).end()))
+
+
+def _svg_element(state, start_line, end_line, silent):
+    """An <svg> element standing in the text is the code block of a picture,
+    as in the app (markdown-stream.js svgElement): from its line to the one
+    with its matching </svg>, inner <svg> elements nested. Raw HTML stays
+    text here (html=False), so without this the reader saw its markup. One
+    the answer never closed stays that text."""
+    if state.sCount[start_line] - state.blkIndent >= 4:
+        return False
+    start = state.bMarks[start_line] + state.tShift[start_line]
+    # Its line break included: "<svg" may stand alone, its attributes below.
+    if not _SVG_ELEMENT_START.match(state.src, start, state.eMarks[start_line] + 1):
+        return False
+    lines, depth = [], 0
+    for line in range(start_line, end_line):
+        # Indented as far as the line goes beyond the element's own start.
+        text = state.getLines(line, line + 1, state.sCount[start_line], False)
+        for tag in _SVG_TAG.finditer(text):
+            depth += -1 if tag.group(1) else 0 if tag.group(2) else 1
+            if depth <= 0:
+                if not silent:
+                    token = state.push("fence", "code", 0)
+                    token.info, token.markup, token.map = "svg", "```", [start_line, line + 1]
+                    token.content = "\n".join([*lines, text[:tag.end()]]) + "\n"
+                    token.meta = {"svg_element": True}
+                    state.line = line + 1
+                return True
+        lines.append(text)
+    return False
+
+
+_MD.block.ruler.before("paragraph", "svg_element", _svg_element, {"alt": ["paragraph"]})
+
 
 def _mark_code_blocks(tokens, text):
     """Only a block with its closing fence keeps its language, as in the app
     (markdown-stream.js fenceClosed): an answer cut off inside a ```mermaid
     block would be drawn half. A block in any other language than the ones
-    above loses it, so its code carries no class."""
+    above loses it, so its code carries no class. An ```xml block or one
+    without a language whose code is an <svg> element is named "svg", as the
+    app reads it; an <svg> element in the text is one already."""
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     for token in tokens:
-        if token.type != "fence":
+        if token.type != "fence" or (token.meta or {}).get("svg_element"):
             continue
         first, after = token.map or (0, 0)
         # The fence's last line, without the marks of a quote or list around it.
         closing = re.sub(r"^[\s>]+", "", lines[after - 1]).strip() if first < after - 1 < len(lines) else ""
         closed = len(closing) >= len(token.markup) >= 3 and closing == token.markup[0] * len(closing)
         language = (token.info.split() or [""])[0].lower()
+        if closed and language in {"", "xml"} and is_svg(token.content):
+            language = "svg"
         token.info = language if closed and (language == "mermaid" or language in CODE_LANGUAGES) else ""
 
 

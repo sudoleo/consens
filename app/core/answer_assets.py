@@ -1,7 +1,8 @@
 """Load the scripts for an answer's blocks on public pages only when needed.
 
-A shared answer shows a ```mermaid block as its diagram, a code block
-with its syntax tones and its tables and numbered lists in their shapes,
+A shared answer shows a ```mermaid block as its diagram, an SVG as its
+picture, a code block with its syntax tones and its tables and numbered
+lists in their shapes,
 like the app (static/js/diagram-render.js, code-highlight.js,
 answer-shapes.js). Most pages need few of them, so the templates include
 ``partials/answer_blocks.html``, which emits each script only when the
@@ -15,10 +16,10 @@ import re
 
 from jinja2 import pass_context
 
-# What public_markdown.render_public_markdown writes for a diagram block
-# and for a code block in a language it lets through.
-DIAGRAM_MARK = 'class="language-mermaid"'
-_CODE_MARK = re.compile(r'class="language-(?!mermaid")')
+# What public_markdown.render_public_markdown writes for a diagram or
+# picture block and for a code block in a language it lets through.
+DIAGRAM_MARKS = ('class="language-mermaid"', 'class="language-svg"')
+_CODE_MARK = re.compile(r'class="language-(?!mermaid"|svg")')
 
 _HEADING = re.compile(r"<h[1-6][\s>]")
 
@@ -40,7 +41,7 @@ def _contains(value, found, depth: int = 0) -> bool:
 
 
 def contains_diagram(value) -> bool:
-    return _contains(value, lambda text: DIAGRAM_MARK in text)
+    return _contains(value, lambda text: any(mark in text for mark in DIAGRAM_MARKS))
 
 
 def contains_code(value) -> bool:

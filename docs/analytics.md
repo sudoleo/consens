@@ -102,10 +102,11 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
 - `app_diagram` (seit 2026-11-11, `kind`, `outcome`): einmal je Diagramm
   einer Antwort, die gerade geschrieben wird (`diagram-render.js`), nie beim
   Öffnen eines gespeicherten Chats. `kind` ist Mermaids Name der Diagrammart
-  (`flowchart`, `sequence`, `pie`, `xychart` …, sonst `other`), nie ein Wort
-  des Modells. `outcome`: `drawn` (gezeichnet), `syntax` (Mermaid konnte den
-  Block nicht lesen, er bleibt Code), `refused` (Bild-Form, leer oder zu lang)
-  oder `load` (Mermaid kam nicht an). Nutzung: Anzahl ins Verhältnis zu
+  (`flowchart`, `sequence`, `pie`, `xychart` …, sonst `other`) oder `svg`
+  für ein SVG-Bild (seit 2026-11-20), nie ein Wort des Modells. `outcome`:
+  `drawn` (gezeichnet), `syntax` (Mermaid oder der Browser konnte den Block
+  nicht lesen, er bleibt Code), `refused` (Bild-Form, leer, zu lang oder ein
+  SVG mit Entitäten) oder `load` (Mermaid kam nicht an). Nutzung: Anzahl ins Verhältnis zu
   `answer` mit `mode=agent` setzen; Fehlerquote: `syntax` an allen. Eine
   Antwort, die ohne Stream ankommt (gepufferte Verbindung), zählt nicht mit.
 - `app_shape` (seit 2026-11-13, `kind`): einmal je Form einer Agent-Antwort,

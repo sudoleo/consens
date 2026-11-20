@@ -51,6 +51,30 @@ def test_a_model_cannot_write_the_mark_itself():
     assert "<code class=" not in html
 
 
+ICON = '<svg viewBox="0 0 24 24">\n  <path d="M12 2v20"/>\n</svg>'
+
+
+def test_an_svg_is_a_picture_however_the_answer_wrote_it():
+    picture = '<pre><code class="language-svg">&lt;svg viewBox="0 0 24 24"&gt;\n  &lt;path d="M12 2v20"/&gt;\n&lt;/svg&gt;\n</code></pre>'
+    # A ```svg block, an ```xml block or one without a language whose code is an <svg> element,
+    # and an <svg> element in the text itself, nested <svg> and blank lines inside included.
+    for text in (_block(ICON, "svg"), _block(ICON, "xml"), _block(ICON, ""), f"Here:\n{ICON}\nAfter."):
+        html = render_public_markdown(text)
+        assert picture in html, text
+        assert contains_diagram(html) and not contains_code(html), text
+    assert 'class="language-svg"' in render_public_markdown(_block(f'<?xml version="1.0"?>\n<!-- logo -->\n{ICON}', "xml"))
+    nested = render_public_markdown('<svg viewBox="0 0 9 9">\n\n  <svg x="1"><rect/></svg>\n\n</svg>\n\nEnd')
+    assert nested.count("<pre>") == 1 and "  &lt;svg x=" in nested and "<p>End</p>" in nested
+    # Other markup stays code or text: an ```xml document, HTML that holds an <svg>, an element
+    # mentioned in a sentence or one the answer never closed.
+    assert 'class="language-xml"' in render_public_markdown(_block("<note/>", "xml"))
+    assert 'class="language-html"' in render_public_markdown(_block(ICON, "html"))
+    assert "<pre>" not in render_public_markdown("Use the <svg> element.")
+    assert "<pre>" not in render_public_markdown('<svg viewBox="0 0 1 1">\n<rect/>')
+    # An internal subset could declare entities: no picture.
+    assert "language-svg" not in render_public_markdown(_block(f'<!DOCTYPE svg [<!ENTITY a "b">]>\n{ICON}', "xml"))
+
+
 def test_nested_context_values_are_scanned():
     mark = '<pre><code class="language-mermaid">pie\n</code></pre>'
     assert contains_diagram({"turns": [{"answer_html": mark}]})

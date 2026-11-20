@@ -1,11 +1,13 @@
 // =====================================================================
 // diagram-render.js
-// Diagrams in an answer: a ```mermaid block shows as its diagram, in the
-// app (markdown-stream.js leaves each block in a .md-diagram place) and on
-// public pages (the server's code block, adopted here).
+// Drawings in an answer: a ```mermaid block shows as its diagram and an
+// SVG as the picture it draws, in the app (markdown-stream.js leaves each
+// in a .md-diagram place) and on public pages (the server's code block,
+// adopted here). Both are images, never markup in the page.
 // Mermaid comes from static/vendor, imported when an answer first holds a
 // diagram: its core and one kind of diagram are about 230 KB compressed.
-// Export: window.ConsensusDiagram.{key, request, settled, warm, render}.
+// An SVG needs no library.
+// Export: window.ConsensusDiagram.{key, isSvg, request, settled, warm, render}.
 // =====================================================================
 
 (function initConsensusDiagram() {
@@ -462,6 +464,216 @@
     };
   }
 
+  // ---- SVG pictures ------------------------------------------------------------
+  // A model's SVG shows as the picture it draws, like a diagram as an image:
+  // an image runs no script and loads nothing, so the markup keeps its
+  // styles, gradients, filters and animations. What could run or load where
+  // the file is opened on its own goes first, and that cleaned file is what
+  // the viewer downloads.
+  //
+  // What may stand before the root: a byte order mark, the XML declaration,
+  // comments and a doctype without an internal subset. Entities declared
+  // there could grow a small source into gigabytes while it is parsed, so a
+  // source that declares any is never drawn.
+  const PROLOG = /^(?:\uFEFF|\s|<\?xml\b[^>]*\?>|<!--[\s\S]*?-->|<!DOCTYPE\s+svg\b[^>[]*>)*/i;
+  const SVG_ROOT = /^<svg[\s>]/;
+  const MAX_SVG_CHARS = 300000;
+  // An icon of 24 px is drawn larger, as a drawing stays sharp at any size,
+  // and a picture far beyond any screen smaller.
+  const PICTURE_LEAST = 128;
+  const PICTURE_MOST = 4096;
+  const UNITS = { px: 1, pt: 4 / 3, pc: 16, mm: 96 / 25.4, cm: 96 / 2.54, in: 96 };
+  // Elements that run, embed another document or fetch, in a file opened on
+  // its own; and an animation may set an address or a handler.
+  const UNSAFE = "script, foreignObject, iframe, object, embed, audio, video, canvas"; // i18n-ignore
+
+  // The source from its <svg> on, or "" for anything else.
+  function svgBody(source) {
+    const text = String(source || "");
+    const body = text.slice(PROLOG.exec(text)[0].length);
+    return SVG_ROOT.test(body) ? body : "";
+  }
+  const isSvg = source => Boolean(svgBody(source));
+  // A Mermaid source never opens with markup: this is how a place of either
+  // kind is told apart by its source alone.
+  const isMarkup = source => /^\uFEFF?\s*</.test(String(source || ""));
+
+  // The one <svg> element of a source, read the way a page reads inline SVG
+  // (an inert template: nothing in it loads or runs). Anything beside it,
+  // such as HTML the parser moved out of the drawing, means it is no picture.
+  function parseSvg(source) {
+    const body = svgBody(source);
+    const template = document.createElement("template");
+    template.innerHTML = body;
+    const nodes = [...template.content.childNodes]
+      .filter(node => node.nodeType === Node.ELEMENT_NODE || (node.nodeType === Node.TEXT_NODE && node.data.trim()));
+    const svg = nodes.length === 1 ? nodes[0] : null;
+    if (!body || !svg || svg.namespaceURI !== SVG || svg.localName !== "svg") throw new Error("no picture");
+    return svg;
+  }
+
+  function cleanSvg(svg) {
+    svg.querySelectorAll(UNSAFE).forEach(node => node.remove());
+    svg.querySelectorAll("set, animate").forEach(node => {
+      const target = String(node.getAttribute("attributeName") || "").toLowerCase();
+      if (/(^|:)href$|^on/.test(target)) node.remove();
+    });
+    for (const node of [svg, ...svg.querySelectorAll("*")]) {
+      for (const { name, value } of [...node.attributes]) {
+        const bare = name.toLowerCase();
+        if (bare.startsWith("on")) node.removeAttribute(name);
+        else if (/(^|:)href$/.test(bare) && !/^(#|data:image\/)/i.test(value.trim())) node.removeAttribute(name);
+      }
+    }
+    // The size of the picture is its attributes' (measure()), not a page's style.
+    for (const property of ["width", "height", "min-width", "min-height", "max-width", "max-height"]) {
+      svg.style.removeProperty(property);
+    }
+    if (!svg.getAttribute("style")) svg.removeAttribute("style");
+  }
+
+  function lengthOf(value) {
+    const match = /^\s*\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*(px|pt|pc|mm|cm|in)?\s*$/i.exec(String(value || ""));
+    return match ? parseFloat(match[1] + (match[2] || "")) * UNITS[(match[3] || "px").toLowerCase()] : NaN;
+  }
+
+  // The picture's frame (its viewBox, or the area its own size covers) and
+  // the size it is drawn at: its width and height, else its viewBox's, else
+  // the 300 × 150 a browser gives an SVG without either.
+  function measure(svg) {
+    const numbers = (svg.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+    const box = numbers.length === 4 && numbers.every(Number.isFinite) && numbers[2] > 0 && numbers[3] > 0 ? numbers : null;
+    let width = lengthOf(svg.getAttribute("width"));
+    let height = lengthOf(svg.getAttribute("height"));
+    const ratio = box ? box[2] / box[3] : 2;
+    if (!(width > 0) && !(height > 0)) [width, height] = box ? [box[2], box[3]] : [300, 150];
+    else if (!(width > 0)) width = height * ratio;
+    else if (!(height > 0)) height = width / ratio;
+    const longer = Math.max(width, height);
+    const scale = longer < PICTURE_LEAST ? PICTURE_LEAST / longer : longer > PICTURE_MOST ? PICTURE_MOST / longer : 1;
+    return { view: box || [0, 0, width, height], width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)) };
+  }
+
+  // The size a source will be drawn at, known before it is (its place has
+  // it from the first frame), or null. A block still being written has it
+  // once its <svg …> tag is complete.
+  function sizeOfSvg(source) {
+    try {
+      return measure(parseSvg(source));
+    } catch (_) {
+      return null;
+    }
+  }
+  function sizeOfOpenSvg(partial) {
+    const body = svgBody(partial);
+    let quote = "";
+    for (let index = 0; index < body.length; index += 1) {
+      const mark = body[index];
+      if (quote) { if (mark === quote) quote = ""; } else if (mark === '"' || mark === "'") quote = mark;
+      else if (mark === ">") return sizeOfSvg(`${body.slice(0, index + 1)}</svg>`);
+    }
+    return null;
+  }
+
+  // ---- Paper behind a picture ----
+  // An SVG brings its own colors. Black lines on no background of their own
+  // vanish on the dark page, white ones on the light page: such a picture
+  // stands on the other theme's paper, as it would stand there. A picture
+  // with a background of its own, or whose lines stand out, stands as drawn.
+  // The browser draws it once, small, to look.
+  const LOOK_SIDE = 64;
+  const MIN_CONTRAST = 1.6;
+  function luminance([red, green, blue]) {
+    const linear = channel => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
+  }
+  async function paperFor(data, width, height, theme) {
+    const image = new Image();
+    image.src = `data:image/svg+xml;base64,${data}`;
+    // A browser without decode() (jsdom) draws the picture as it is.
+    if (typeof image.decode !== "function") return "";
+    // What the browser cannot draw is no picture: the code stays.
+    await image.decode();
+    if (!image.naturalWidth) throw new Error("no picture");
+    const scale = Math.min(1, LOOK_SIDE / Math.max(width, height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    let pixels;
+    try {
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    } catch (_) {
+      return "";
+    }
+    const ground = tokens(theme).ground;
+    const groundLight = luminance(ground);
+    let edge = 0, edgeFilled = 0, ink = 0, seen = 0;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const at = (y * canvas.width + x) * 4;
+        const alpha = pixels[at + 3] / 255;
+        if (x === 0 || y === 0 || x === canvas.width - 1 || y === canvas.height - 1) {
+          edge += 1;
+          if (alpha > 0.9) edgeFilled += 1;
+        }
+        if (alpha < 0.15) continue;
+        ink += 1;
+        const shown = luminance([0, 1, 2].map(index => pixels[at + index] * alpha + ground[index] * (1 - alpha)));
+        if ((Math.max(shown, groundLight) + 0.05) / (Math.min(shown, groundLight) + 0.05) >= MIN_CONTRAST) seen += 1;
+      }
+    }
+    if (!ink || edgeFilled >= edge * 0.6 || seen >= ink * 0.5) return "";
+    return hex(FALLBACK[theme === "dark" ? "light" : "dark"].ground);
+  }
+  // The picture inside a sheet of its own size, a margin of paper around it.
+  function onPaper(svg, width, height, color) {
+    const margin = Math.round(Math.max(8, Math.min(24, Math.min(width, height) * 0.06)));
+    const sheet = document.createElementNS(SVG, "svg");
+    sheet.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    sheet.setAttribute("width", String(width));
+    sheet.setAttribute("height", String(height));
+    const paper = document.createElementNS(SVG, "rect");
+    paper.setAttribute("width", String(width));
+    paper.setAttribute("height", String(height));
+    // Inline, so a rule of the picture's own <style> for every rect leaves it.
+    paper.setAttribute("style", `fill:${color}`);
+    const inner = svg.cloneNode(true);
+    inner.setAttribute("x", String(margin));
+    inner.setAttribute("y", String(margin));
+    inner.setAttribute("width", String(Math.max(1, width - 2 * margin)));
+    inner.setAttribute("height", String(Math.max(1, height - 2 * margin)));
+    sheet.append(paper, inner);
+    return sheet;
+  }
+
+  async function drawSvg(source, theme) {
+    if (source.length > MAX_SVG_CHARS || /<!ENTITY/i.test(source) || !isSvg(source)) {
+      throw Object.assign(new Error("no picture"), { refused: true });
+    }
+    const svg = parseSvg(source);
+    cleanSvg(svg);
+    const serialize = node => new XMLSerializer().serializeToString(node);
+    const file = serialize(svg);
+    const { view, width, height } = measure(svg);
+    svg.setAttribute("viewBox", view.join(" "));
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    // currentColor is the answer's ink, as it is for an icon in the text.
+    if (!svg.hasAttribute("color") && !svg.style.color) svg.setAttribute("color", hex(tokens(theme).ink));
+    const title = svg.querySelector(":scope > title");
+    const name = (title ? title.textContent : svg.getAttribute("aria-label") || "").trim().slice(0, 200);
+    let data = base64(serialize(svg));
+    const paper = await paperFor(data, width, height, theme);
+    if (paper) data = base64(serialize(onPaper(svg, width, height, paper)));
+    return { data, width, height, title: name, kind: "svg", file };
+  }
+
   // How large a drawing shows in a place of this width (diagram.css).
   function scaleIn(result, width) {
     return Math.min(1, width / result.width);
@@ -526,9 +738,12 @@
   // theme + width + source -> { state: "pending" | "drawn" | "failed", since, done, picture, kind, outcome, live }.
   const drawings = new Map();
 
+  // A picture is drawn for a theme only (its colors), a diagram also for the
+  // width of its place.
   function request(source, theme, width) {
     theme = theme || themeName();
-    const wide = span(width);
+    const picture = isMarkup(source);
+    const wide = picture ? 0 : span(width);
     const id = `${theme}\n${wide}\n${source}`;
     let entry = drawings.get(id);
     // A diagram Mermaid cannot read stays code; one whose Mermaid did not
@@ -541,14 +756,15 @@
       if (drawings.size <= DRAWINGS_KEPT) break;
       if (drawings.get(old).state !== "pending") drawings.delete(old);
     }
-    const work = source.trim() && source.length <= MAX_SOURCE_CHARS && !loadsImage(source) ? draw(source, theme, wide)
-      : Promise.reject(Object.assign(new Error("no diagram"), { refused: true }));
+    const work = picture ? drawSvg(source, theme)
+      : source.trim() && source.length <= MAX_SOURCE_CHARS && !loadsImage(source) ? draw(source, theme, wide)
+        : Promise.reject(Object.assign(new Error("no diagram"), { refused: true }));
     entry.done = work.then(result => {
       entry.state = "drawn";
       entry.picture = result;
       entry.kind = result.kind;
       entry.outcome = "drawn";
-      rememberSize(source, wide, result);
+      if (!picture) rememberSize(source, wide, result);
     }, error => {
       entry.state = "failed";
       entry.again = Boolean(error && error.again);
@@ -573,10 +789,10 @@
   }
 
   // ---- Counting ---------------------------------------------------------------
-  // How often a model's diagram is drawn and how often Mermaid cannot read
-  // it (docs/analytics.md, app_diagram): once per diagram of an answer being
-  // written, never for a chat opened later. Its kind is one of Mermaid's
-  // names, never a word of the model's.
+  // How often a model's diagram or picture is drawn and how often it cannot
+  // be read (docs/analytics.md, app_diagram): once per drawing of an answer
+  // being written, never for a chat opened later. Its kind is one of
+  // Mermaid's names or "svg", never a word of the model's.
   const KINDS = ["flowchart", "sequence", "class", "state", "er", "gantt", "pie", "xychart", "mindmap", "timeline",
     "quadrant", "sankey", "git", "journey", "c4", "requirement", "block", "kanban", "architecture", "packet", "radar",
     "treemap"];
@@ -587,7 +803,9 @@
   }
   // The kind a source names in its first line, after its front matter and
   // its "%%" lines: what a block that could not be drawn was meant to be.
+  // Markup is an SVG picture.
   function sourceKind(source) {
+    if (isMarkup(source)) return "svg";
     const lines = String(source || "").split("\n");
     let index = 0;
     if (lines[0].trim() === "---") index = lines.findIndex((line, at) => at > 0 && line.trim() === "---") + 1 || lines.length;
@@ -608,8 +826,18 @@
 
   // The block is still being written: Mermaid and the diagram's kind (named
   // in its first line) load meanwhile, so the finished block draws at once.
+  // A picture needs nothing loaded; its field takes the picture's size as
+  // soon as its <svg …> tag is complete, so the picture takes the field's
+  // place without moving the text.
   const warmed = new Set();
-  function warm(partial) {
+  function warm(partial, place) {
+    if (isMarkup(partial)) {
+      if (!place) return;
+      place.classList.add("is-picture");
+      const size = sizeOfOpenSvg(partial);
+      if (size) setSize(place, size.width, size.height);
+      return;
+    }
     const first = String(partial || "").trim().split("\n")[0].trim();
     if (warmed.has(first)) return;
     warmed.add(first);
@@ -715,8 +943,9 @@
     const viewer = viewerOfPage();
     const { dialog, stage, image } = viewer;
     viewer.opener = opener;
-    dialog.setAttribute("aria-label", shown.title || say("Diagram"));
-    image.alt = shown.title || say("Diagram");
+    const name = shown.title || say(shown.kind === "svg" ? "Picture" : "Diagram");
+    dialog.setAttribute("aria-label", name);
+    image.alt = name;
     image.src = `data:image/svg+xml;base64,${shown.data}`;
     if (!dialog.open) dialog.showModal();
     const room = [Math.max(120, stage.clientWidth - 32), Math.max(120, stage.clientHeight - 32)];
@@ -726,6 +955,29 @@
     image.style.height = `${Math.round(shown.height * scale)}px`;
     stage.scrollTo(0, 0);
     stage.focus({ preventScroll: true });
+  }
+
+  // The name a drawing is downloaded under: its title, else what it is.
+  function fileName(shown) {
+    const words = String(shown.title || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
+    return `${words.slice(0, 60).replace(/-+$/, "") || (shown.kind === "svg" ? "picture" : "diagram")}.svg`; // i18n-ignore
+  }
+
+  // In the app's viewer a drawing keeps what it was made from: its code to
+  // copy, and the file to download (a picture as the model wrote it, less
+  // what could run; a diagram as drawn).
+  function viewerActions(place, shown) {
+    const attachments = window.App && window.App.attachments;
+    const actions = [];
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      actions.push({ label: "Copy code", done: "Copied", run: () => navigator.clipboard.writeText(sourceOf(place)) });
+    }
+    if (attachments && attachments.save) {
+      const bytes = () => shown.kind === "svg" ? shown.file : Uint8Array.from(atob(shown.data), mark => mark.charCodeAt(0));
+      actions.push({ label: "Download",
+        run: () => attachments.save(new Blob([bytes()], { type: "image/svg+xml" }), fileName(shown)) });
+    }
+    return actions;
   }
 
   // The field the diagram is drawn into (diagram.css): there from the first
@@ -742,7 +994,7 @@
     const open = document.createElement("button");
     open.type = "button";
     open.className = "md-diagram-open";
-    open.setAttribute("aria-label", say("Open diagram"));
+    open.setAttribute("aria-label", say(isMarkup(sourceOf(place)) ? "Open picture" : "Open diagram"));
     open.disabled = true;
     open.append(image);
     open.addEventListener("click", () => {
@@ -750,8 +1002,8 @@
       if (!shown) return;
       const viewer = window.App && window.App.attachments && window.App.attachments.openStored;
       if (viewer) {
-        viewer({ name: "diagram.svg", title: shown.title || say("Diagram"), mime: "image/svg+xml", data: shown.data,
-          drawing: true, trigger: open });
+        viewer({ name: fileName(shown), title: shown.title || say(shown.kind === "svg" ? "Picture" : "Diagram"),
+          mime: "image/svg+xml", data: shown.data, drawing: true, trigger: open, actions: viewerActions(place, shown) });
       } else if (typeof HTMLDialogElement === "function") {
         enlarge(shown, open);
       }
@@ -794,30 +1046,35 @@
     const open = figure.querySelector(".md-diagram-open");
     if (open) open.disabled = false;
     place._diagram = result;
-    image.alt = result.title || say("Diagram");
+    image.alt = result.title || say(result.kind === "svg" ? "Picture" : "Diagram");
     image.src = `data:image/svg+xml;base64,${result.data}`;
     setSize(place, result.width, result.height);
     place.dataset.drawn = theme;
     place._diagramSpan = wide;
     place.classList.remove("is-code");
     place.classList.add("is-drawn");
-    watchPan(place);
+    // A picture is scaled into its place (diagram.css), never panned.
+    if (result.kind !== "svg") watchPan(place);
   }
 
   function fill(place) {
     const theme = themeName();
-    const wide = span(widthOf(place));
+    const source = sourceOf(place);
+    const picture = isMarkup(source);
+    place.classList.toggle("is-picture", picture);
+    const wide = picture ? 0 : span(widthOf(place));
     if (place.dataset.drawn === theme && place._diagramSpan === wide) return;
-    const entry = request(sourceOf(place), theme, wide);
+    const entry = request(source, theme, wide);
     if (entry.state === "drawn") {
       show(place, entry.picture, theme, wide);
     } else if (entry.state === "failed") {
-      // What Mermaid cannot read stays what the model wrote: a code block.
+      // What cannot be read stays what the model wrote: a code block.
       if (!place.dataset.drawn) place.classList.add("is-code");
     } else if (!place._diagramWaits) {
       if (!place.dataset.drawn) {
-        const known = sizes()[`${place.dataset.diagram}@${wide}`];
-        if (Array.isArray(known) && known[0] > 0 && known[1] > 0) setSize(place, known[0], known[1]);
+        const known = picture ? sizeOfSvg(source) : sizes()[`${place.dataset.diagram}@${wide}`];
+        if (picture && known) setSize(place, known.width, known.height);
+        else if (Array.isArray(known) && known[0] > 0 && known[1] > 0) setSize(place, known[0], known[1]);
         figureOf(place);
       }
       place._diagramWaits = true;
@@ -831,9 +1088,11 @@
     }
   }
 
-  // A code block the server rendered (public pages) becomes a place.
+  // A code block the server rendered (public pages) becomes a place: a
+  // diagram, or a picture (public_markdown.py names a block "svg" only when
+  // its code is one <svg> element).
   function adopt(root) {
-    root.querySelectorAll("pre > code.language-mermaid").forEach(code => {
+    root.querySelectorAll("pre > code.language-mermaid, pre > code.language-svg").forEach(code => {
       const pre = code.parentElement;
       if (pre.parentElement && pre.parentElement.classList.contains("md-diagram")) return;
       const place = document.createElement("div");
@@ -864,7 +1123,7 @@
     if (document.body) watcher.observe(document.body, { attributes: true, attributeFilter: ["class"] });
   }
 
-  window.ConsensusDiagram = { key, request, settled, warm, render };
+  window.ConsensusDiagram = { key, isSvg, request, settled, warm, render };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

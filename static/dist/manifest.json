@@ -1,5 +1,5 @@
 {
-  "sources": "09b03060cd37",
+  "sources": "c765f2ed293e",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -609,20 +609,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.07a4ef63a04f.js",
+      "src": "/static/dist/app.c39b7b27d364.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.c51a56277a47.css",
-    "landing": "/static/dist/landing.0fcd3ca7c011.css",
-    "public": "/static/dist/public.ce9b752e83ab.css"
+    "app": "/static/dist/app.e8b4e858f19c.css",
+    "landing": "/static/dist/landing.b129874028e2.css",
+    "public": "/static/dist/public.a2ed1b7cf984.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "d802f318c8c3",
+      "hash": "a2eb03d825ec",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -670,7 +670,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "b85827aa29bd",
+      "hash": "316667717122",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -686,7 +686,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "06c6a9f27b94",
+      "hash": "cae4d08be504",
       "inputs": [
         "static/css/answer-shapes.css",
         "static/css/code-highlight.css",
@@ -702,10 +702,10 @@
     }
   },
   "previous_assets": [
+    "app.c51a56277a47.css",
     "app.769a3546a86c.css",
-    "app.14bb91949a3f.css",
+    "app.07a4ef63a04f.js",
     "app.b968be0983f2.js",
-    "app.aa6588424f0f.js",
     "auth.cf1dba1d8c12.js",
     "auth.c4661857697c.js",
     "demo.274397f8bb1b.js",
@@ -714,9 +714,9 @@
     "firebase.3fc4a06abd2f.js",
     "head.0e2c4abc9007.js",
     "head.eb40d37b940a.js",
+    "landing.0fcd3ca7c011.css",
     "landing.e41ebf7d6c40.css",
-    "landing.2a85f6138f8f.css",
-    "public.95e10823f698.css",
-    "public.58a22e1bbc91.css"
+    "public.ce9b752e83ab.css",
+    "public.95e10823f698.css"
   ]
 }

@@ -14,7 +14,8 @@
  *    does `html.is-scroll-smooth` (landing.css, public-pages.css) switch the
  *    glide on for in-page links.
  * 3. On the landing page the bar marks the section you are in: "Watches"
- *    while #watch fills the screen, "Product" everywhere else.
+ *    while #watch fills the screen, "Harness" while #harness does, "Product"
+ *    everywhere else.
  */
 (function () {
   "use strict";
@@ -141,16 +142,20 @@
     var links = Array.prototype.slice.call(
       document.querySelectorAll('.site-nav a[href^="/#"]')
     );
-    var watch = document.getElementById("watch");
-    if (!links.length || !watch) return;
+    var marked = ["watch", "harness"].map(function (id) { return document.getElementById(id); })
+      .filter(Boolean);
+    if (!links.length || !marked.length) return;
     var current = "";
     var frame = 0;
 
     function update() {
       frame = 0;
-      var box = watch.getBoundingClientRect();
       var middle = window.innerHeight / 2;
-      var section = box.top <= middle && box.bottom > middle ? "watch" : "product";
+      var section = "product";
+      marked.forEach(function (element) {
+        var box = element.getBoundingClientRect();
+        if (box.top <= middle && box.bottom > middle) section = element.id;
+      });
       if (section === current) return;
       current = section;
       links.forEach(function (link) {

@@ -218,15 +218,20 @@ function liftPictureLines(root) {
   });
 }
 
-// --- Diagrams ---------------------------------------------------------------
-// A ```mermaid block is a diagram (diagram-render.js draws it as an image).
-// Here it becomes its place: the code as marked would write it, in a
-// .md-diagram named after its source, so the same diagram in the next render
-// is the same node and keeps its drawing. A block whose closing fence has
-// not arrived carries data-open instead and is never drawn: half a diagram
-// is a syntax error. Without diagram-render.js the block stays code.
+// --- Diagrams and pictures ----------------------------------------------------
+// A ```mermaid block is a diagram and an SVG a picture (diagram-render.js
+// draws either as an image). An SVG is a ```svg block, an ```xml block or
+// one without a language whose code is an <svg> element, or such an element
+// standing in the text itself, which would otherwise be markup in the page.
+// Here each becomes its place: the code as marked would write it, in a
+// .md-diagram named after its source, so the same drawing in the next render
+// is the same node and keeps its image. A block whose end has not arrived
+// carries data-open instead and is never drawn: half a diagram is a syntax
+// error. Without diagram-render.js the block stays code.
 const diagramReadyParsers = new WeakSet();
 const DIAGRAM_LANGUAGE = /^mermaid(?:\s|$)/i;
+const SVG_LANGUAGE = /^svg(?:\s|$)/i;
+const SVG_HOST_LANGUAGE = /^(?:xml)?(?:\s|$)/i;
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, mark => `&#${mark.charCodeAt(0)};`);
@@ -241,24 +246,79 @@ function fenceClosed(raw) {
   return last.length >= fence[1].length && last === fence[1][0].repeat(last.length);
 }
 
+// "mermaid", "svg" or "" for a token of marked.
+function drawingKind(token) {
+  if (token?.type === "svgElement") return "svg";
+  if (token?.type !== "code") return "";
+  const language = String(token.lang || "").trim();
+  if (DIAGRAM_LANGUAGE.test(language)) return "mermaid";
+  if (SVG_LANGUAGE.test(language)) return "svg";
+  // An indented block is code by its form; only a fence says what it holds.
+  const fenced = /^ {0,3}(`{3,}|~{3,})/.test(String(token.raw || ""));
+  return fenced && SVG_HOST_LANGUAGE.test(language) && window.ConsensusDiagram?.isSvg?.(token.text) ? "svg" : "";
+}
+
 function diagramToken(token) {
-  return token?.type === "code" && DIAGRAM_LANGUAGE.test(String(token.lang || "").trim());
+  return Boolean(drawingKind(token));
+}
+
+// Whether a drawing's source is complete: a fence that is closed, an
+// element whose </svg> arrived.
+function drawingClosed(token) {
+  return token.type === "svgElement" ? token.closed : fenceClosed(token.raw);
+}
+
+// An <svg> element at the start of a line, up to its matching </svg>
+// (inner <svg> elements nest), or to the end of the text while it is
+// still being written. Nothing after </svg> on its line belongs to it.
+const SVG_ELEMENT_START = /^ {0,3}<svg[\s>]/;
+const SVG_TAG = /<(\/?)svg\b(?:"[^"]*"|'[^']*'|[^'">])*?(\/?)>/gi;
+
+function svgElement(src) {
+  if (!SVG_ELEMENT_START.test(src)) return undefined;
+  SVG_TAG.lastIndex = 0;
+  let depth = 0;
+  for (let tag = SVG_TAG.exec(src); tag; tag = SVG_TAG.exec(src)) {
+    if (tag[1]) depth -= 1;
+    else if (!tag[2]) depth += 1;
+    if (depth <= 0) {
+      const end = SVG_TAG.lastIndex;
+      const line = src.indexOf("\n", end);
+      const raw = line === -1 ? src : src.slice(0, line + 1);
+      return { type: "svgElement", raw, text: src.slice(0, end).trim(), closed: true };
+    }
+  }
+  return { type: "svgElement", raw: src, text: src.trim(), closed: false };
 }
 
 function ensureDiagramBlocks(marked) {
   if (typeof marked?.use !== "function" || diagramReadyParsers.has(marked)) return;
   diagramReadyParsers.add(marked);
+  const place = token => {
+    const diagrams = window.ConsensusDiagram;
+    if (!diagrams) return false;
+    const kind = drawingKind(token);
+    const name = drawingClosed(token) ? `data-diagram="${escapeHtml(diagrams.key(token.text))}"` : "data-open";
+    return `<div class="md-diagram" ${name}><pre><code class="language-${kind}">${escapeHtml(token.text)}\n</code></pre></div>\n`;
+  };
   // An extension's renderer gets the token (its raw text says whether the
   // fence is closed); marked 12's own code renderer gets only the code.
   marked.use({ extensions: [{
     name: "code",
     renderer(token) {
-      if (!diagramToken(token)) return codeBlock(token);
-      const diagrams = window.ConsensusDiagram;
-      if (!diagrams) return false;
-      const place = fenceClosed(token.raw) ? `data-diagram="${escapeHtml(diagrams.key(token.text))}"` : "data-open";
-      return `<div class="md-diagram" ${place}><pre><code class="language-mermaid">${escapeHtml(token.text)}\n</code></pre></div>\n`;
+      return diagramToken(token) ? place(token) : codeBlock(token);
     }
+  }, {
+    name: "svgElement",
+    level: "block",
+    start(src) {
+      const found = /(^|\n) {0,3}<svg[\s>]/.exec(src);
+      return found ? found.index + found[1].length : undefined;
+    },
+    tokenizer(src) {
+      return window.ConsensusDiagram ? svgElement(src) : undefined;
+    },
+    renderer: place
   }] });
 }
 
@@ -278,16 +338,16 @@ function codeBlock(token) {
     + `${escapeHtml(token.text)}\n</code></pre>\n`;
 }
 
-// A block still being written stands as a quiet field (diagram.css); only a
-// running stream marks it, so a block the finished answer never closed shows
-// its code.
+// A block still being written stands as a quiet field (diagram.css), a
+// picture's in its size once that is known; only a running stream marks it,
+// so a block the finished answer never closed shows its code.
 function markOpenDiagrams(nodes) {
   for (const node of nodes) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const open = node.matches(".md-diagram[data-open]") ? [node] : node.querySelectorAll(".md-diagram[data-open]");
     for (const place of open) {
       place.classList.add("is-pending");
-      window.ConsensusDiagram?.warm?.(place.textContent);
+      window.ConsensusDiagram?.warm?.(place.textContent, place);
     }
   }
 }
@@ -856,19 +916,19 @@ function renderStreamTail(text, decorate) {
 
 // A finished diagram is drawn a moment after its block arrived, and its
 // size is only known then: text that streamed on below it meanwhile jumped
-// when the drawing came. The end of the first finished diagram block from
-// `from` on whose drawing is not there yet, so the stream shows the text
+// when the drawing came. The end of the first finished diagram or picture
+// from `from` on whose image is not there yet, so the stream shows the text
 // only up to it and what follows comes below the drawing; the length of
 // `text` when nothing is waited for. marked's own lexer finds the block:
 // its `text` is the source the place is drawn from.
 function streamHold(text, from) {
   const diagrams = window.ConsensusDiagram;
-  if (!diagrams?.settled || typeof window.marked?.lexer !== "function" || !/mermaid/i.test(text.slice(from))) return text.length;
+  if (!diagrams?.settled || typeof window.marked?.lexer !== "function" || !/mermaid|<svg/i.test(text.slice(from))) return text.length;
   let end = from;
   try {
     for (const token of window.marked.lexer(text.slice(from))) {
       end += token.raw.length;
-      if (diagramToken(token) && fenceClosed(token.raw) && !diagrams.settled(token.text)) return Math.min(end, text.length);
+      if (diagramToken(token) && drawingClosed(token) && !diagrams.settled(token.text)) return Math.min(end, text.length);
     }
   } catch (_) { /* A text marked cannot read holds nothing back. */ }
   return text.length;
