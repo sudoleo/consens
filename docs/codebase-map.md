@@ -165,7 +165,9 @@ previous one's login and repositories. Details in `docs/agent-mode.md`
 
 The account's workspace live (27.10.2026; since its security audit two VMs per
 account, the workbench and the browser): `routers/agent_workspace.py` exposes
-`GET /agent/workspace`, `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`;
+`GET /agent/workspace`, since 2026-11-20 `POST /agent/workspace/warm`
+(`{"intent": bool}`: wakes the workspace and starts its Chrome before the user
+opens it, `agent_workspace.warm_later`), `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`;
 while the user holds the browser the agent waits: its calls wait and the
 browser VM's `control.json` stops `browser.py`; what runs on the workbench goes
 on since 2026-10-29, when `pause.py` went),
@@ -7785,13 +7787,31 @@ späterer Nachrichten treffen die Markierung sofort (`agent_workspace.reachable`
 in `open_workspace`) und warten nur auf eine Probe im Hintergrund, höchstens
 15 s (`agent_vm.probe`, `SpritesBackend.reach`). Eine Anfrage, die die VM
 erreicht, ein Restore oder das Löschen der VM heben die Markierung auf. Eine
-VM, die eine Minute später (`agent_vm.watch`) wieder so antwortet, gilt als
+VM, die gleich danach (`agent_vm.watch`, `WATCH_SECONDS` 5 s seit 2026-11-20,
+vorher eine Minute) wieder so antwortet, gilt als
 festgefahren und setzt sich selbst zurück (`agent_workspace.heal_later`/`heal`).
 Ziel ist der neueste Checkpoint aus dem Datensatz (`checkpoint`, geschrieben
 von `VMSession._take_checkpoint` über `record_checkpoint`; nach einem Restore
 des Nutzers, `restore_agent_vm`, der zurückgeholte). Es gelten
-`restorable` und `in_use`, und das höchstens einmal je Stunde. Die nächste
-Nachricht liest `HEALED_NOTE` (`restored_by`, `Claim.healed`). Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+`restorable` und `in_use`; nach einem Restore frühestens eine Stunde später
+wieder. Seit 2026-11-20 versucht `heal` einen Restore, den das Gateway
+ablehnt, dreimal (`HEAL_TRIES`), und eine Heilung ohne Restore darf nach
+`HEAL_AGAIN_SECONDS` neu beginnen (bis dahin sperrte der eine Fehlversuch
+für die Stunde). Die nächste
+Nachricht liest `HEALED_NOTE` (`restored_by`, `Claim.healed`). **Vorwärmen und
+kurzer Weg (seit 2026-11-20):** `POST /agent/workspace/warm`
+(`agent_workspace.warm_later`/`_warm`, von `workspace-view.js` `warm` beim
+Kontostatus, bei Aktivität in der App und mit `intent` am Arbeitsplatz-Knopf)
+weckt die VM, startet Chrome und hält sie zwei Minuten wach, bevor der Nutzer
+sie öffnet; nie eine neue VM, nie unter einer Nachricht, höchstens alle
+`WARM_EVERY_SECONDS`, Notaus `AGENT_WORKSPACE_WARM=off`. `open_workspace`
+fragt eine VM nicht noch einmal, die der Prozess auf Stand gebracht und in
+den letzten `WAKE_AFTER_SECONDS` erreicht hat (`_ready`,
+`agent_vm.reached_within`; `lose_contact`, eine 502 und `mark_restored` heben
+das auf). Die Live-Ansicht wartet auf eine festgefahrene VM mit dem Zustand
+`repairing` (`routers/agent_workspace.py::_repairing`, solange
+`agent_vm.checking` oder `agent_workspace.healing`) und endet sonst mit
+`stuck` und Close-Code 4503; Details `docs/agent-mode.md`, „Sofort da“. Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
 Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
 Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
 Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder

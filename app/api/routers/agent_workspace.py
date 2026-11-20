@@ -19,7 +19,12 @@ and opening is rate limited. Its first state ("connecting") names what is
 left of the day's VM time (``left_seconds``, absent without a cap) for the
 panel's head. While the server wakes
 the VM, "waking" carries about when the browser's start ends
-(``until``), as setup and starting do after it.
+(``until``), as setup and starting do after it. A VM the provider does not
+start keeps the view waiting with "repairing" while the server asks it again
+and restores it (_repairing), and ends it with "stuck" (CLOSE_STUCK) when
+that did not bring it back. Before any of it the app may ask for the
+workspace (warm_workspace), so the view finds it awake with its Chrome
+running.
 
 How a view or terminal ended goes to the log with its close code, who ended
 it (the browser, the relay, the provider's socket) and the numbers they gave,
@@ -86,6 +91,11 @@ class Control(Strict):
     holder: str = Field(pattern=r"^(user|agent)$")
 
 
+class Warm(Strict):
+    # The user reaches for the workspace's button now (workspace-view.js warm).
+    intent: bool = False
+
+
 def allowed(uid):
     """The workspace comes with the VM (routers/agent.py vm_allowed) and a
     provider."""
@@ -127,6 +137,25 @@ def workspace_status(request: Request):
         # Closed by the server's safety rules: until when (None: until consens.io looked at it).
         body["guard"] = {"state": guard.state, "until": guard.until.isoformat() if guard.until else None}
     return JSONResponse(body, headers=NO_STORE)
+
+
+@router.post("/agent/workspace/warm")
+@limiter.limit("30/minute")
+def warm_workspace(request: Request, payload: Warm):
+    """Wakes the account's workspace and starts its browser in the
+    background, before the user opens it (agent_workspace.warm_later, which
+    decides whether: often it began one a moment ago). Answers at once."""
+    uid = owner(request)
+    # An open view keeps the workspace awake itself (another tab of the
+    # account asks all the same), and a warm-up would look at the Chrome the
+    # user is watching.
+    warming = not _viewing.get(uid) and agent_workspace.warm_later(_store(), uid, intent=payload.intent) is not None
+    return JSONResponse({"warming": warming}, headers=NO_STORE)
+
+
+# How many live views each account has open in this process (one server
+# instance): none of them is warmed under (warm_workspace).
+_viewing: dict[str, int] = {}
 
 
 @router.post("/agent/workspace/control")
@@ -310,6 +339,74 @@ async def _waking(websocket, uid, seconds, start):
     return opening.result()
 
 
+# A VM the provider did not start (its gateway's 502 after the whole wait)
+# is asked again at once and, stuck, goes back to its newest checkpoint by
+# itself (agent_vm.watch, agent_workspace.heal). The view waits for that
+# with "repairing" instead of ending with "not reachable" and a button that
+# meets the same answer: until the VM is reached again, nothing works on it
+# any more (no probe, no heal: "stuck") or REPAIR_WAIT_SECONDS passed (the
+# second answer and three tries of a restore, about 50 s each). What it is
+# told to expect, REPAIR_SECONDS, is the second answer, one restore and the
+# start after it.
+REPAIR_SECONDS = 150
+REPAIR_WAIT_SECONDS = 420
+REPAIR_LOOK_SECONDS = 1.0
+# The state again this often: a view that is gone ends the wait.
+REPAIR_TELL_SECONDS = 10
+
+
+class _Stuck(Exception):
+    """The VM does not start and nothing repairs it now."""
+
+
+async def _repairing(websocket, uid, seconds, start):
+    """Waits while the account's stuck VM is asked again and restored, then
+    opens it (_waking). Raises _Stuck when that did not bring it back."""
+    from datetime import datetime, timedelta, timezone
+    name = agent_vm.workspace_name(uid)
+    until = (datetime.now(timezone.utc) + timedelta(seconds=REPAIR_SECONDS)).isoformat()
+    deadline, told = time.monotonic() + REPAIR_WAIT_SECONDS, None
+    while agent_vm.unresponsive_status(name) is not None:
+        now = time.monotonic()
+        if now >= deadline or not (agent_vm.checking(name) or agent_workspace.healing(uid)):
+            raise _Stuck()
+        if told is None or now - told >= REPAIR_TELL_SECONDS:
+            told = now
+            if not await _state(websocket, "repairing", until=until):
+                raise WebSocketDisconnect()
+        await asyncio.sleep(REPAIR_LOOK_SECONDS)
+    try:
+        return await _waking(websocket, uid, seconds, start)
+    except agent_vm.VMUnavailable as exc:
+        # Only a VM that was waited for is stuck; the provider's own answer
+        # about one it never marked (its API, not the VM) is an error like any.
+        if told is not None and agent_vm.unresponsive(exc):
+            raise _Stuck() from None
+        raise
+
+
+async def _connect(uid, seconds, url, kind="view"):
+    """``(id, upstream)``: this view or terminal claimed as the account's one
+    (agent_workspace.claim_view) while its exec socket opens, not before
+    it: each is a round trip the user waits for."""
+    claim = asyncio.ensure_future(asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds, kind))
+    try:
+        upstream = await connect_upstream(url)
+    except BaseException:
+        claim.cancel()
+        # No answer at all: the next start asks the VM anew (agent_workspace._ready).
+        agent_vm.lose_contact(agent_vm.workspace_name(uid))
+        raise
+    try:
+        return await claim, upstream
+    except BaseException:
+        try:
+            await upstream.close()
+        except Exception:
+            pass
+        raise
+
+
 def _until(uid):
     """About when the browser's start ends (agent_workspace.start_until), for
     the view's progress bar: {"until": ISO time} or {}.
@@ -384,9 +481,11 @@ CLOSE_ENDED, CLOSE_REPLACED, CLOSE_NO_TIME, CLOSE_TOO_MANY = 4410, 4409, 4402, 4
 CLOSE_FORBIDDEN = 4403
 # The server's safety rules closed the workspace: until the next UTC day, or until consens.io looked at it.
 CLOSE_GUARDED, CLOSE_LOCKED = 4423, 4424
+# The provider does not start the VM, and its restore did not help (_repairing).
+CLOSE_STUCK = 4503
 CLOSE_REASONS = {CLOSE_ENDED: "ended", CLOSE_REPLACED: "replaced", CLOSE_NO_TIME: "no_time",
                  CLOSE_TOO_MANY: "too_many", CLOSE_FORBIDDEN: "forbidden", CLOSE_GUARDED: "guarded",
-                 CLOSE_LOCKED: "locked"}
+                 CLOSE_LOCKED: "locked", CLOSE_STUCK: "stuck"}
 
 
 def _guard_code(guard):
@@ -431,11 +530,12 @@ async def _admit(websocket, kind):
     except ApiUidRateLimitExceeded:
         await _refuse(websocket, kind, CLOSE_TOO_MANY)
         return None
-    guard = await asyncio.to_thread(workspace_guard.status, uid)
+    # Two reads of the account, side by side: the user waits for both.
+    guard, (seconds, day_left) = await asyncio.gather(asyncio.to_thread(workspace_guard.status, uid),
+                                                      asyncio.to_thread(_time_left, uid))
     if guard.closed:
         await _refuse(websocket, kind, _guard_code(guard))
         return None
-    seconds, day_left = await asyncio.to_thread(_time_left, uid)
     if seconds < 1:
         await _refuse(websocket, kind, CLOSE_NO_TIME)
         return None
@@ -550,9 +650,26 @@ async def workspace_view(websocket: WebSocket):
     # also that of the account's provisioning when it sets it up right now.
     start = agent_workspace.Start(uid, "browser")
     try:
-        url = await _waking(websocket, uid, seconds, start)
-        view_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds)
-        upstream = await connect_upstream(url)
+        try:
+            url = await _waking(websocket, uid, seconds, start)
+        except agent_vm.VMUnavailable as exc:
+            if not agent_vm.unresponsive(exc):
+                raise
+            start.end()
+            url = await _repairing(websocket, uid, seconds, start)
+            # The wait for the repair is not the view's time.
+            started = time.monotonic()
+        view_id, upstream = await _connect(uid, seconds, url)
+    except WebSocketDisconnect:
+        start.end()
+        return
+    except _Stuck:
+        start.end()
+        logging.warning("Agent workspace view unavailable category=stuck")
+        await asyncio.to_thread(_count, "view", "failed_stuck")
+        await _state(websocket, "stuck")
+        await _end(websocket, CLOSE_STUCK)
+        return
     except Exception as exc:
         start.end()
         logging.warning("Agent workspace view unavailable category=%s", safe_exception(exc))
@@ -615,10 +732,15 @@ async def workspace_view(websocket: WebSocket):
         ending.setdefault("by", "upstream")
         ending.setdefault("upstream_code", getattr(upstream, "close_code", None))
 
+    _viewing[uid] = _viewing.get(uid, 0) + 1
     try:
         await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser, ending, meter)
     finally:
         start.end()
+        if _viewing.get(uid, 0) <= 1:
+            _viewing.pop(uid, None)
+        else:
+            _viewing[uid] -= 1
 
 
 # Who steers the browser, for the safety rules: until when each account's
@@ -673,8 +795,7 @@ async def workspace_terminal(websocket: WebSocket):
     started = time.monotonic()
     try:
         url = await asyncio.to_thread(_open_terminal, uid, seconds, size)
-        terminal_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds, "terminal")
-        upstream = await connect_upstream(url)
+        terminal_id, upstream = await _connect(uid, seconds, url, "terminal")
     except Exception as exc:
         logging.warning("Agent workspace terminal unavailable category=%s", safe_exception(exc))
         await _state(websocket, "error")

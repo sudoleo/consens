@@ -115,6 +115,9 @@ describe("the start's bar", () => {
     const { App, host, advance } = setup();
     expect(App.startProgress.leftText(150_000)).toBe("About 3 minutes left");
     expect(App.startProgress.leftText(9_000)).toBe("Almost done…");
+    // A start clearly past its estimate stops promising.
+    expect(App.startProgress.leftText(-9_000)).toBe("Almost done…");
+    expect(App.startProgress.leftText(-11_000)).toBe("Taking longer than usual…");
     const bar = App.startProgress.create();
     host.append(bar.node);
     bar.set(NOW + 60_000);

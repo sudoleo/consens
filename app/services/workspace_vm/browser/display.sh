@@ -177,16 +177,28 @@ fi
 flags="webgl-1 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"
 pid="$(browser_pid)"
 why=""
+started=""
+# A Chrome under a minute old that does not answer yet is still starting:
+# after the VM's cold start its files load slowly (prod 2026-11-15: no
+# answer within 15 s, the live view said "not reachable", and the next try
+# found it running). It is waited for below like one started here; ending
+# it for its silence would start the same wait again with every call.
+starting() {
+  local age
+  age="$(ps -o etimes= -p "$1" 2>/dev/null | tr -d ' ')"
+  [ -n "$age" ] && [ "$age" -lt 60 ]
+}
 if [ -n "$pid" ] && [ "$mode" != "--keep" ]; then
   if [ "$(cat "$dir/chrome-flags" 2>/dev/null)" != "$flags" ]; then why="new flags"
   elif [ "$mode" = "--restart" ]; then why="a call it could not finish"
-  elif [ ! -S "$cdp" ] || ! runs "$hub" || { ! answers && ! answers; }; then why="no answer on its debugging pipe"
+  elif [ ! -S "$cdp" ] || ! runs "$hub"; then why="no answer on its debugging pipe"
+  elif ! answers && ! answers; then
+    if starting "$pid"; then started=1; else why="no answer on its debugging pipe"; fi
   fi
 elif [ -z "$pid" ] && { runs "$chrome" || runs "$hub"; }; then
   why="its browser process was gone"
 fi
 [ -n "$why" ] && stop_chrome
-started=""
 if [ -z "$(browser_pid)" ]; then
   started=1
   # A Chrome the VM stopped leaves its lock behind; nothing else uses the profile.
@@ -204,10 +216,15 @@ if [ -z "$(browser_pid)" ]; then
     >>"$log" 2>&1 </dev/null 8>&- &
   echo "$flags" >"$dir/chrome-flags"
 fi
-# A Chrome started here is ready once it answers; one that ran was asked
-# above (and with --keep is not asked: a hung one there held the lock for
-# 150 answers of 5 s). At most 15 s either way.
-until=$((SECONDS + 15))
+# A Chrome started here is ready once it answers, as is one still starting;
+# one that ran was asked above (and with --keep is not asked: a hung one
+# there held the lock for 150 answers of 5 s). At most 15 s for one that ran
+# and for --restart, whose caller waits no longer (browser.py
+# RESTART_SECONDS); 40 s for one that starts, within browser.py's limit for
+# this script.
+limit=15
+[ -n "$started" ] && [ "$mode" != "--restart" ] && limit=40
+until=$((SECONDS + limit))
 while [ "$SECONDS" -lt "$until" ]; do
   [ -S "$cdp" ] && runs "$hub" && [ -S "$dir/vnc.sock" ] && { [ -z "$started" ] || answers 2; } && exit 0
   sleep 0.1

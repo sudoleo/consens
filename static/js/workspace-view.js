@@ -25,6 +25,13 @@
 // composes from the field's change, Backspace, Enter, Tab and the arrows on
 // their own. Tapping the screen keeps it open (focusOnClick off meanwhile).
 //
+// Before it is opened the app asks the server to wake the workspace (warm:
+// when the account's status arrives, while the user is active, and with the
+// pointer or focus on its button), so the view finds it running. A workspace
+// the provider did not start keeps the view waiting ("repairing", with the
+// bar) while the server brings it back, and "stuck" says when it could not.
+// The server's "error" is tried once more by itself.
+//
 // A connection that drops without a reason from the server (the phone went
 // to its 2FA app and iOS closed the socket, a network change) comes back by
 // itself: after 1, 2, 5 and 10 s, and at once when the page is in front
@@ -118,6 +125,10 @@
     setup: 'Setting up the browser. This happens once.',
     waking: 'Starting the browser…',
     starting: 'Starting the browser…',
+    // The provider did not start the VM: the server asks again and sets it
+    // back to its last checkpoint (routers/agent_workspace.py _repairing).
+    repairing: 'Your workspace did not start. Bringing it back…',
+    stuck: 'Your workspace does not start right now, not from its last restore point either. Try again in a few minutes.',
     error: 'The workspace is not reachable right now. Try again in a moment.',
     ended: 'The view closed after an hour. Open it again to go on.',
     // One view per account, its time counts as VM time (routers/agent_workspace.py).
@@ -143,11 +154,15 @@
     setup: ['Installing the browser’s screen…', 'Installing a window manager and fonts…',
       'Installing the browser’s tools…', 'Setting the browser’s safety rules…'],
     starting: ['Starting the screen…', 'Starting Chrome…', 'Opening your tabs…'],
+    repairing: ['Trying to start it once more…', 'Going back to its last restore point…', 'Starting it again…'],
   };
   // Why the server closed the view, by close code: noVNC owns the socket's
   // messages once it is ready, so these come as codes, not states.
   const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many', 4423: 'guarded',
-    4424: 'locked' };
+    4424: 'locked', 4503: 'stuck' };
+  // The workspace is asked for before it is opened (warm) at most this often;
+  // the server holds the same pace (agent_workspace.WARM_EVERY_SECONDS).
+  const WARM_MS = 240_000;
   // Closes the view does not try again by itself: the server said why
   // (4403 before it opened, 1011 after "error").
   const FINAL = { ...CLOSED, 4403: 'forbidden', 1011: 'error' };
@@ -177,6 +192,8 @@
   const MIN_CHAT = 520;
   const KEY_STEP = 40;
   const STORAGE_KEY = 'consens.workspaceWidth';
+  // This browser opened the view before (warm).
+  const OPENED_KEY = 'consens.workspaceOpened';
   // Typed in key by key: enough for a password or a few lines, not a document.
   const PASTE_MAX = 2000;
   const XK_RETURN = 0xff0d;
@@ -315,6 +332,34 @@
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || data.detail || 'Try again.');
     return data;
+  }
+
+  // ---- Before it is opened ------------------------------------------------
+  // The server wakes the workspace and starts its Chrome in the background
+  // (routers/agent_workspace.py warm_workspace), so the view finds both
+  // running instead of waiting for them, and a workspace that does not start
+  // is repaired before the user asks for it. `intent`: the user reaches for
+  // the workspace's button. Without it only in a browser that opened the
+  // view before (OPENED_KEY): most accounts never do, and every wake costs.
+  // Never while the view is open (it keeps the workspace awake itself) or
+  // the tab is hidden.
+  let warmedAt = 0;
+  function openedBefore() {
+    try { return localStorage.getItem(OPENED_KEY) === '1'; } catch (error) { return false; }
+  }
+  function warm(intent = false) {
+    if (view || document.hidden || !window.auth?.currentUser) return;
+    if (!document.body.classList.contains('viewer-has-workspace')) return;
+    if (!intent && !openedBefore()) return;
+    const now = Date.now();
+    if (warmedAt && now - warmedAt < WARM_MS) return;
+    warmedAt = now;
+    post('/agent/workspace/warm', { intent: Boolean(intent) }).catch(() => {});
+  }
+  // The pointer or the focus is on the workspace's button: noVNC loads too.
+  function reach() {
+    warm(true);
+    loadRFB().catch(() => {});
   }
 
   // What comes, drawn calmly while it loads: a browser window (its address
@@ -980,7 +1025,7 @@
         }
         // Coming back: "Reconnecting…" stays until the relay says more.
         if (STATES[state] && !(state === 'connecting' && view.again)) say(STATES[state]);
-        if (state === 'error') loading('browser', false);
+        if (state === 'error' || state === 'stuck') loading('browser', false);
         return;
       }
       clearTimeout(view.slow);
@@ -989,6 +1034,7 @@
       view.connecting = false;
       view.again = false;
       view.final = null;
+      view.triedAgain = false;
       view.readyAt = Date.now();
       view.reconnectButton.hidden = true;
       // Synchronously, inside this event: noVNC takes over the socket's
@@ -1036,6 +1082,11 @@
       // Let go on purpose while the tab was hidden (pause): back with the tab.
       view.pausing = null;
       letGo();
+    } else if (code === 1011 && !view.triedAgain) {
+      // "error" once: a start that gave up (a slow Chrome after the VM's
+      // cold start) usually finds it running on the next try.
+      view.triedAgain = true;
+      retryLater();
     } else if (FINAL[code]) {
       stop(FINAL[code]);
     } else {
@@ -1068,7 +1119,7 @@
   // `fresh`: asked for (the button, the tab or the network back), the tries start over.
   function reconnect({ fresh = false } = {}) {
     if (!view || view.connecting || view.rfb || !view.RFB) return;
-    if (fresh) view.retries = 0;
+    if (fresh) { view.retries = 0; view.triedAgain = false; }
     clearTimeout(view.retry);
     view.retry = null;
     view.again = true;
@@ -1248,6 +1299,7 @@
       return;
     }
     view = build();
+    try { localStorage.setItem(OPENED_KEY, '1'); } catch (error) { /* per browser only */ }
     // The account it shows (onAuthState closes it for any other).
     view.uid = window.auth?.currentUser?.uid || null;
     view.wantControl = Boolean(take);
@@ -1357,6 +1409,10 @@
         App.closeAttachMenu?.();
         open();
       });
+      // On its way to the click: the workspace wakes, noVNC loads (reach).
+      for (const type of ['pointerenter', 'focus', 'touchstart']) {
+        opener.addEventListener(type, reach, { passive: true });
+      }
       opener._workspace = true;
     }
     const host = document.getElementById('agentWorkspaceSettings');
@@ -1377,6 +1433,8 @@
   // arrives, agent-chat.js whenever its shell renders.
   function syncSettings() {
     const time = App.vmTime || null;
+    // The account's status arrived: its workspace wakes while the user is still elsewhere (warm).
+    if (time) warm();
     const row = document.getElementById('agentWorkspaceSettings');
     if (row) row.hidden = !(App.agentChat?.canUse?.() === true && Boolean(time));
     const line = document.getElementById('agentVmTime');
@@ -1405,6 +1463,12 @@
   else init();
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('online', nudge);
+  // The user is back in the tab or at work in the app: the workspace stays
+  // within reach (warm paces itself, WARM_MS).
+  document.addEventListener('visibilitychange', () => warm());
+  for (const type of ['pointerdown', 'keydown']) {
+    document.addEventListener(type, () => warm(), { capture: true, passive: true });
+  }
   // The account is known (auth-session-state.js): a takeover from before a
   // reload is taken up again, also when that was said before this script ran.
   // A logout does not reload the page: the view of an account that is no

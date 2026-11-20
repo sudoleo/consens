@@ -194,7 +194,10 @@ def main():
         state("error")
         return 1
     state("starting")
-    if not run("display.sh"):
+    # A second try where the first gave up: after the VM's cold start the
+    # screen may come up later than display.sh waits for it, and --keep
+    # starts what is missing without ending what the first try started.
+    if not run("display.sh") and not run("display.sh", "--keep"):
         state("error")
         return 1
     try:

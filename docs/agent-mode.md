@@ -1518,8 +1518,11 @@ waren unauffällig, die Ursache liegt beim Anbieter. Ein Restore auf einen
 Checkpoint startete Max' Arbeitsplatz sofort wieder (v9: 58 s, danach 0,1 s je
 Anfrage). Der Ablauf:
 
-- Der erste Ausfall eines Starts plant eine Nachprüfung nach einer Minute
-  (`agent_vm.watch`), auch ohne nächste Nachricht.
+- Der erste Ausfall eines Starts plant eine Nachprüfung (`agent_vm.watch`),
+  auch ohne nächste Nachricht: bis 2026-11-20 nach einer Minute, seither nach
+  `WATCH_SECONDS` = 5 s. Jede der beiden Antworten wartet ohnehin die ganze
+  Frist des Gateways ab (rund 48 s); die Minute dazwischen verlängerte nur
+  die Wartezeit bis zum Restore.
 - Antwortet die VM auch dann mit 502/503/504, gilt sie als festgefahren:
   `heal_later` setzt sie auf ihren neuesten Checkpoint zurück. Der steht seit
   2026-11-06 im Datensatz des Kontos (`checkpoint`, `record_checkpoint`).
@@ -1528,12 +1531,79 @@ Anfrage). Der Ablauf:
 - Zurückgesetzt wird nur auf einen Checkpoint, der nach `restorable` noch
   zurückführen darf. Gelöschte Chats und ein „Überall abmelden“ kommen also
   nie zurück.
-- Nie unter einer Nachricht (`in_use`, höchstens 10 min gewartet), höchstens
-  einmal je Stunde und Konto.
+- Nie unter einer Nachricht (`in_use`, höchstens 10 min gewartet). Nach einem
+  Restore frühestens eine Stunde später wieder (`HEAL_SECONDS`).
+- Der Restore ist selbst eine Anfrage an die festgefahrene VM und kann
+  dieselbe 502 bekommen (Prod 2026-11-20, 20:17 UTC: `restore: HTTP 502` nach
+  48 s; die Heilung gab nach diesem einen Versuch auf und war für eine Stunde
+  gesperrt, der Arbeitsplatz blieb tot). Seither versucht `heal` ihn
+  `HEAL_TRIES` = 3 Mal mit `HEAL_RETRY_SECONDS` = 10 s Pause, und eine
+  Heilung ohne Restore darf nach `HEAL_AGAIN_SECONDS` = 5 min neu beginnen.
 - Verloren geht, was sich nach dem Checkpoint änderte, also höchstens die
   Arbeit der letzten Nachricht in der VM. Geteilte Dateien bleiben im Chat.
 - Die nächste Nachricht jedes Chats, der den Arbeitsplatz benutzt hat, liest
   `HEALED_NOTE` (`restored_by: "heal"` im Datensatz).
+
+Hilft auch der Restore nicht, bleibt nur der Anbieter: Die öffentliche API
+(OpenAPI 0.1.12, gelesen am 2026-11-20) hat keinen Endpunkt, der eine Sprite
+neu startet. Eine neue VM (löschen, neu öffnen) kostet Dateien und
+Anmeldungen und bleibt Handarbeit.
+
+#### Sofort da: Vorwärmen und der kurze Weg (seit 2026-11-20)
+
+Max am 2026-11-20: „Wenn der User die VM öffnet, soll sie sofort da sein,
+egal wann“, nach einem Start mit 49 s Fortschrittsbalken und dann „not
+reachable“. Von 54 Öffnungen der Live-Ansicht seit 2026-10-30 scheiterten
+sechs (`ops_metrics/workspace-view-*`), von Max' letzten drei zwei. Was sich
+geändert hat:
+
+- **Vorwärmen** (`POST /agent/workspace/warm`, `agent_workspace.warm_later`,
+  `workspace-view.js` `warm`): Die App bittet um den Arbeitsplatz, bevor der
+  Nutzer ihn öffnet: wenn der Kontostatus ankommt, wenn der Tab wieder
+  sichtbar wird, bei Tasten und Klicks in der App und mit `intent`, sobald
+  Zeiger oder Fokus auf dem Arbeitsplatz-Knopf liegen (dann lädt auch noVNC).
+  Der Server weckt die VM, bringt ihre Werkzeuge auf Stand, startet Chrome und
+  hält sie wie nach einer Nachricht zwei Minuten wach (`warm` und `rest` des
+  Helfers). Eine VM, die nicht startet, wird so repariert, bevor jemand auf
+  sie wartet. Grenzen: nie eine VM anlegen, nie unter einer Nachricht, nie
+  während eine Ansicht des Kontos offen ist oder der Nutzer den Browser hat
+  (der Start sieht nach Chrome und würde einen trägen neu starten), nie
+  über die Tageszeit der VM oder die Sicherheitsregeln hinaus; ohne `intent`
+  nur für ein Konto, das Ansicht oder Terminal schon einmal offen hatte
+  (Datensatz `view`/`terminal`, im Browser `consens.workspaceOpened`); je
+  Konto höchstens alle `WARM_EVERY_SECONDS` = 240 s und `WARMS_PER_DAY` = 150
+  Mal am Tag. Notaus `AGENT_WORKSPACE_WARM=off`. Die Wachzeit des Vorwärmens
+  zählt nicht auf die Tageszeit des Nutzers.
+- **Kurzer Weg** (`agent_workspace._ready`, `agent_vm.reached_within`): Eine
+  VM, die dieser Prozess auf Stand gebracht und in den letzten
+  `WAKE_AFTER_SECONDS` = 5 min erreicht hat, wird beim Öffnen nicht noch
+  einmal gefragt (kein `GET` der Sprite, kein Lesen der Version): Die nächste
+  Anfrage weckt sie. Eine Anfrage ganz ohne Antwort (`agent_vm.lose_contact`),
+  eine 502 und ein Restore heben das auf. Die Ansicht liest Sicherheitsregeln
+  und Tageszeit nebeneinander und belegt die Ansicht (`claim_view`), während
+  der Exec-Socket aufgeht (`_connect`).
+- **Reparatur in der Ansicht** (`_repairing`): Bekommt die Ansicht die 502
+  des Gateways, endet sie nicht mit „not reachable“, sondern sagt
+  `repairing` mit einer Schätzung (`REPAIR_SECONDS` = 150 s) und wartet, bis
+  die VM wieder erreicht wird. Läuft keine Probe und keine Heilung mehr oder
+  sind `REPAIR_WAIT_SECONDS` = 7 min um, sagt sie `stuck` und schließt mit
+  4503; „Reconnect“ bleibt.
+- **Chrome nach dem Kaltstart** (`display.sh`, `relay.py`): Am 2026-11-15
+  antwortete Chrome nach einem Kaltstart nicht in 15 s, die Ansicht meldete
+  einen Fehler, der zweite Versuch fand ihn laufend. Ein Chrome, der jünger
+  als eine Minute ist und noch nicht antwortet, gilt als startend: Er wird
+  nicht mehr beendet, und `display.sh` wartet bis 40 s auf ihn (bei
+  `--restart` weiter 15 s, mehr wartet `browser.py` nicht). Das Relay
+  versucht einen gescheiterten Start einmal mit `--keep` nach, und die
+  Ansicht verbindet nach `error` einmal von selbst neu.
+- **Ehrliche Restzeit** (`start-progress.js`): Mehr als 10 s über der
+  Schätzung steht „Taking longer than usual…“ statt „Almost done…“.
+
+Nicht gebaut, mit Grund: VMs dauerhaft wach halten (jede Stunde kostet, und
+die Liste der Sprites nennt für die Organisation `running_limit` 10); Bildschirm
+und Chrome als Dienste der Sprite, die nach einem Kaltstart von selbst
+kommen (spart den Chrome-Start, ändert aber den Startweg mit seinen
+Sicherheitsprüfungen; erst an einer Test-Sprite messen).
 
 Eine
 unerwartete Ausnahme eines Werkzeugs des Arbeitsplatzes (Dateiablage,

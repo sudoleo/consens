@@ -800,14 +800,117 @@ def test_a_stuck_workspace_waits_for_its_message_and_never_brings_back_what_left
     restores = len([call for call in fake_vm.calls if call[0] == "restore"])
     assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend) is False
     assert len([call for call in fake_vm.calls if call[0] == "restore"]) == restores
-    # Once per hour and account at most (heal_later).
-    monkeypatch.setattr(agent_workspace, "heal", lambda *args, **kwargs: None)
-    assert agent_workspace.heal_later(store.db, UID) is not None
+
+
+def test_a_restore_the_gateway_refuses_is_tried_again(store, fake_vm, monkeypatch):
+    """Prod 2026-11-20: the stuck VM's restore met the same answer as its
+    wake ("restore: HTTP 502" after 48 s), the heal gave up after that one
+    try, and the workspace stayed dead."""
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    checkpoint = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]["checkpoint"]
+    refusals, waits = [2], []
+
+    def restore(self, name, point):
+        self.vm.calls.append(("restore", name, point))
+        if refusals[0]:
+            refusals[0] -= 1
+            raise VMUnavailable("restore: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "restore", restore)
+    agent_vm.mark_unresponsive(NAME, 502)
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend, sleep=waits.append) is True
+    assert [call for call in fake_vm.calls if call[0] == "restore"] == [("restore", NAME, checkpoint)] * 3
+    assert waits == [agent_workspace.HEAL_RETRY_SECONDS] * 2 and agent_vm.unresponsive_status(NAME) is None
+    # A restore that never answers ends the heal without telling the chats of one.
+    restores = agent_workspace.record(store.db, UID)["restores"]
+    refusals[0] = agent_workspace.HEAL_TRIES
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend, sleep=waits.append) is False
+    assert len([call for call in fake_vm.calls if call[0] == "restore"]) == 3 + agent_workspace.HEAL_TRIES
+    assert agent_workspace.record(store.db, UID)["restores"] == restores
+
+
+def test_a_heal_pauses_an_hour_after_a_restore_and_minutes_after_none(store, monkeypatch):
+    """One heal at a time. After a restore the next waits HEAL_SECONDS (each
+    costs the last message's changes); one that restored nothing may begin
+    again after HEAL_AGAIN_SECONDS, so a workspace whose restore the provider
+    refused is not left dead for the hour."""
+    outcomes, release = [True], threading.Event()
+
+    def heal(db, uid, factory=None):
+        release.wait(5)
+        return outcomes[0]
+    monkeypatch.setattr(agent_workspace, "heal", heal)
+    clock = Clock()
+    monkeypatch.setattr(agent_workspace.time, "monotonic", clock)
+    running = agent_workspace.heal_later(store.db, UID)
+    assert running is not None and agent_workspace.healing(UID)
     assert agent_workspace.heal_later(store.db, UID) is None
+    release.set()
+    running.join(5)
+    assert not agent_workspace.healing(UID)
+    clock.now += agent_workspace.HEAL_SECONDS - 1
+    assert agent_workspace.heal_later(store.db, UID) is None
+    clock.now += 2
+    outcomes[0] = False
+    agent_workspace.heal_later(store.db, UID).join(5)
+    clock.now += agent_workspace.HEAL_AGAIN_SECONDS - 1
+    assert agent_workspace.heal_later(store.db, UID) is None
+    clock.now += 2
+    assert agent_workspace.heal_later(store.db, UID) is not None
 
 
-def test_a_first_unresponsive_answer_is_checked_again_a_minute_later_and_a_stuck_vm_heals(store, fake_vm,
-                                                                                         monkeypatch):
+def test_a_vm_reached_a_moment_ago_is_opened_without_asking_it_again(fake_vm):
+    """Opening asks the provider for the VM and reads its version before the
+    first request that does anything. A VM this process brought up to date
+    and reached within WAKE_AFTER_SECONDS is opened without either (the live
+    view right after the warm-up); one that gave no answer since, one the
+    gateway called unresponsive and one that was restored are asked."""
+    def opened():
+        fake_vm.calls.clear()
+        assert agent_workspace.open_workspace(fake_vm.backend(), UID) == NAME
+        return [call[0] for call in fake_vm.calls]
+    assert "ensure" in opened()
+    # FakeVM reaches nothing (SpritesBackend notes each answer, _touch).
+    assert "ensure" in opened()
+    agent_vm._touch(NAME)
+    assert opened() == []
+    agent_vm._contact[NAME] -= agent_vm.WAKE_AFTER_SECONDS + 1
+    assert opened() == ["ensure", "read"]
+    agent_vm._touch(NAME)
+    agent_vm.lose_contact(NAME)
+    assert opened() == ["ensure", "read"]
+    agent_vm._touch(NAME)
+    agent_workspace._ready.discard(NAME)
+    assert opened() == ["ensure", "read"]
+
+
+def test_the_watch_asks_a_marked_vm_again_right_away(monkeypatch):
+    """The second answer follows the first after WATCH_SECONDS, not after
+    the minute other starts wait between probes: each answer already took
+    the gateway's whole wait, and the user waits for the restore."""
+    monkeypatch.setattr(agent_vm, "WATCH_SECONDS", .05)
+    asked, stuck = [], threading.Event()
+
+    class Backend:
+        def reach(self, name):
+            asked.append(name)
+            agent_vm.mark_unresponsive(name, 502)
+            raise VMUnavailable("wake: HTTP 502", 502)
+
+        def close(self):
+            pass
+    agent_vm.mark_unresponsive(NAME, 502)
+    assert agent_vm.probe(NAME, factory=Backend) is None
+    assert agent_vm.watch(NAME, stuck.set, factory=Backend) is not None and agent_vm.checking(NAME)
+    assert agent_vm.watch(NAME, stuck.set, factory=Backend) is None
+    assert stuck.wait(5) and asked == [NAME]
+    deadline = time.monotonic() + 5
+    while agent_vm.checking(NAME) and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert not agent_vm.checking(NAME) and agent_vm.unresponsive_status(NAME) == 502
+
+
+def test_a_first_unresponsive_answer_is_checked_again_and_a_stuck_vm_heals(store, fake_vm, monkeypatch):
     watched, healed = [], []
     monkeypatch.setattr(agent_vm, "watch", lambda name, stuck, factory=None: watched.append((name, stuck)))
     monkeypatch.setattr(agent_workspace, "heal_later", lambda db, uid, **kwargs: healed.append(uid))

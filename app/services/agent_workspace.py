@@ -63,6 +63,10 @@ left (setup_lock, the browser's own installation lock). The time a start
 still takes (START_SECONDS, start_until) is what the chat and the live view
 count down.
 
+The warm-up (warm_later): the app asks for the workspace before the user
+opens it, so the live view finds the VM awake with its Chrome running, and a
+VM the provider does not start is restored (heal) before anyone waits for it.
+
 The kit (KIT_APT, KIT_PYTHON): what the agent kept installing before it
 could work is on every workspace, installed in the background where it is
 missing (kit_later), after the account's provisioning and after a message
@@ -508,8 +512,10 @@ def mark_restored(store, uid, by="user"):
     that uses it is told (claim), who did it too (``by``: "user", or "heal"
     when it was stuck)."""
     # The checkpoint may be from before the kit, or from the middle of its
-    # installation; also when the note below cannot be written.
+    # installation, and from before this version's tools; also when the note
+    # below cannot be written.
     forget_kit(uid)
+    _ready.discard(agent_vm.workspace_name(uid))
     workspace = ref(store.db, uid)
 
     def operation(tx):
@@ -579,9 +585,13 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     own goes once the workspace is ready (retire_old_browser). ``timeout``: at
     most this long for a setup (prepare). A VM the gateway called
     unresponsive before raises at once, or once its probe did not reach it
-    (reachable); one that does so now is asked again a minute later, and
-    restores itself when it is stuck (heal_later, with ``db``)."""
+    (reachable); one that does so now is asked again right after, and
+    restores itself when it is stuck (heal_later, with ``db``). A VM this
+    process brought up to date and reached a moment ago is asked nothing
+    (_ready): its next request wakes it."""
     name = agent_vm.workspace_name(uid)
+    if name in _ready and agent_vm.reached_within(name, agent_vm.WAKE_AFTER_SECONDS):
+        return name
     stuck = None if db is None else (lambda: heal_later(db, uid))
     lock = setup_lock(name)
     while not lock.acquire(timeout=.2):
@@ -608,7 +618,9 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
                 elif phase:
                     start.phase(phase)
             prepare(vm, name, cancellation, timeout=timeout, on_setup=None if start is None else setting_up)
+            _ready.add(name)
         except agent_vm.VMUnavailable as exc:
+            _ready.discard(name)
             if stuck is not None and agent_vm.unresponsive(exc):
                 agent_vm.watch(name, stuck)
             raise
@@ -617,6 +629,16 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     if db is not None:
         retire_old_browser(db, uid, vm)
     return name
+
+
+# The VMs this process found at its VERSION (open_workspace). Opening one
+# costs two requests before the first that does anything (the provider's
+# record of it, the version on its disk), each a round trip the user waits
+# for when the live view opens right after the warm-up or a message. While
+# the VM was reached within agent_vm.WAKE_AFTER_SECONDS both are known. A
+# restore brings back an older disk (mark_restored forgets it); a VM deleted
+# by hand in that time fails its next request, which opens it anew.
+_ready: set[str] = set()
 
 
 def reachable(name, cancellation=None, timeout=None, on_unresponsive=None):
@@ -773,6 +795,102 @@ def _provision(store, uid, factory):
         logging.warning("Agent workspace provision failed category=%s", safe_exception(exc))
     finally:
         start.end()
+        if vm is not None:
+            vm.close()
+
+
+# The warm-up before the user opens the workspace
+# (routers/agent_workspace.py warm_workspace). A VM that slept takes its
+# wake and Chrome's start before the live view shows a picture (15 to 30 s
+# from cold), and one the provider does not start at all is found only then
+# (prod 2026-11-20: 49 s of a progress bar, then "not reachable"). So the
+# app asks for the VM while the user is still elsewhere in it: when it
+# loads, while they use it, and when they reach for the workspace's button
+# (``intent``). The VM is woken, its tools brought up to date, its Chrome
+# started and held awake as after a message (the helper's warm and rest);
+# a VM that does not start is restored before the user asks for it
+# (open_workspace, heal_later). Never a VM that is not there (a warm-up
+# makes none), never past the day's VM time or the safety rules, and
+# without the user's hand on the button only for an account that opened
+# the view or the terminal before: most accounts with a VM never do, and
+# every wake is paid for. WARM_EVERY_SECONDS and WARMS_PER_DAY bound what
+# an open tab can cost.
+WARM_EVERY_SECONDS = 240
+WARMS_PER_DAY = 150
+WARM_SECONDS = 120
+# Per account in this process: when its last warm-up began (time.monotonic),
+# the UTC day and how many began on it, and whether one runs.
+_warms: dict[str, dict] = {}
+_warms_lock = threading.Lock()
+
+
+def warming_on():
+    """AGENT_WORKSPACE_WARM=off: no warm-up before the workspace is opened."""
+    import os
+    return os.getenv("AGENT_WORKSPACE_WARM", "").strip().lower() != "off"
+
+
+def warm_later(store, uid, *, intent=False, factory=None):
+    """The account's warm-up on a thread of its own, unless one runs, the
+    last began within WARM_EVERY_SECONDS or the day's WARMS_PER_DAY are
+    used. ``intent``: the user reaches for the workspace now. Returns the
+    thread, or None."""
+    if not warming_on():
+        return None
+    now, day = time.monotonic(), _now().date().isoformat()
+    with _warms_lock:
+        seen = _warms.get(uid) or {}
+        count = seen.get("count", 0) if seen.get("day") == day else 0
+        if seen.get("running") or count >= WARMS_PER_DAY:
+            return None
+        if seen.get("at") is not None and now - seen["at"] < WARM_EVERY_SECONDS:
+            return None
+        _warms[uid] = {"at": now, "day": day, "count": count + 1, "running": True}
+    thread = threading.Thread(target=_warm, args=(store, uid, intent, factory or agent_vm.backend),
+                              name="agent-workspace-warm", daemon=True)
+    thread.start()
+    return thread
+
+
+def _warm(store, uid, intent, factory):
+    from app.services import agent_browser, agent_vm_time, workspace_guard
+    from app.services.llm.provider_runtime import ProviderCancellation
+    vm, began, passed = None, time.monotonic(), False
+    try:
+        if workspace_guard.status(uid).closed:
+            return
+        current = record(store.db, uid)
+        if current.get("name") != agent_vm.workspace_name(uid):
+            return
+        if not intent and not (current.get("view") or current.get("terminal")):
+            # Not this account's turn yet: its first reach for the button is not held up by this.
+            passed = True
+            return
+        # A message has it: awake already, and its own calls hold it. Nor
+        # while the user has the browser: the start looks at Chrome and
+        # would restart one that is slow to answer, under their hands.
+        if _held_by_other(current.get("lease"), None, _now()) or control_of(current)[0]:
+            return
+        limit = agent_vm_time.daily_limit(uid)
+        if limit is not None and agent_vm_time.used(store.db, uid) >= limit:
+            return
+        vm = factory()
+        if vm is None:
+            return
+        name = open_workspace(vm, uid, db=store.db)
+        agent_browser.helper(vm, name, {"action": "warm"}, WARM_SECONDS, ProviderCancellation())
+        # As in _provision: a message that began meanwhile keeps its hold.
+        if not in_use(store, uid):
+            agent_browser.helper(vm, name, {"action": "rest"}, agent_browser.REST_SECONDS, ProviderCancellation())
+        logging.info("Agent workspace warmed seconds=%.1f intent=%s", time.monotonic() - began, bool(intent))
+    except Exception as exc:
+        logging.info("Agent workspace warm-up failed category=%s", safe_exception(exc))
+    finally:
+        with _warms_lock:
+            if uid in _warms:
+                _warms[uid]["running"] = False
+                if passed:
+                    _warms[uid]["at"] = None
         if vm is not None:
             vm.close()
 
@@ -1370,34 +1488,55 @@ def record_checkpoint(db, uid, checkpoint, taken):
         logging.warning("Agent workspace checkpoint not recorded category=%s", safe_exception(exc))
 
 
-# A stuck workspace (agent_vm.PROBE_SECONDS: the gateway answered 502, 503
-# or 504 twice, a minute or more apart) goes back to its newest checkpoint
+# A stuck workspace (the gateway answered 502, 503 or 504 twice in a row,
+# agent_vm.watch) goes back to its newest checkpoint
 # by itself instead of staying so until a restore by hand. It loses what changed
 # after that checkpoint, which a message takes before its own commands, so
 # at most that message's changes; the files it shared stay in the chat.
 # Only a checkpoint that may still bring the workspace back (restorable),
 # never under a message (in_use: waited for, at most HEAL_WAIT_SECONDS),
-# at most once per HEAL_SECONDS and account in this process.
+# and after one that restored it not again for HEAL_SECONDS in this process.
+# The restore is the stuck VM's own request and may meet the same gateway
+# answer (prod 2026-11-20: 502 after 48 s): it is tried HEAL_TRIES times, and
+# a heal that restored nothing may begin again after HEAL_AGAIN_SECONDS
+# instead of leaving the workspace dead for the hour.
 HEAL_SECONDS = 3600
+HEAL_AGAIN_SECONDS = 300
+HEAL_TRIES = 3
+HEAL_RETRY_SECONDS = 10
 HEAL_WAIT_SECONDS = 600
 HEAL_POLL_SECONDS = 5
+# Per account: before when (time.monotonic) no heal begins, and the one running.
 _heals: dict[str, float] = {}
+_healing: dict[str, threading.Thread] = {}
 _heals_lock = threading.Lock()
 
 
 def heal_later(db, uid, *, factory=None):
-    """heal on a thread of its own, unless one began within HEAL_SECONDS.
-    Returns the thread, or None."""
-    now = time.monotonic()
+    """heal on a thread of its own, unless one runs or the last one's pause
+    (HEAL_SECONDS after a restore, HEAL_AGAIN_SECONDS after none) still
+    holds. Returns the thread, or None."""
+    def run():
+        restored = False
+        try:
+            restored = heal(db, uid, factory=factory) is True
+        finally:
+            with _heals_lock:
+                _healing.pop(uid, None)
+                _heals[uid] = time.monotonic() + (HEAL_SECONDS if restored else HEAL_AGAIN_SECONDS)
     with _heals_lock:
-        began = _heals.get(uid)
-        if began is not None and now - began < HEAL_SECONDS:
+        if uid in _healing or time.monotonic() < _heals.get(uid, 0.0):
             return None
-        _heals[uid] = now
-    thread = threading.Thread(target=heal, args=(db, uid), kwargs={"factory": factory}, name="agent-workspace-heal",
-                              daemon=True)
+        thread = _healing[uid] = threading.Thread(target=run, name="agent-workspace-heal", daemon=True)
     thread.start()
     return thread
+
+
+def healing(uid):
+    """Whether a heal of the account's workspace runs now (the live view
+    waits for it, routers/agent_workspace.py)."""
+    with _heals_lock:
+        return uid in _healing
 
 
 def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
@@ -1421,7 +1560,16 @@ def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
         if not restorable(current, point):
             logging.warning("Agent workspace stuck without a checkpoint it may go back to")
             return False
-        agent_vm.restore_workspace(uid, point["checkpoint"], factory=factory)
+        for attempt in range(1, HEAL_TRIES + 1):
+            try:
+                agent_vm.restore_workspace(uid, point["checkpoint"], factory=factory)
+                break
+            except agent_vm.VMUnavailable as exc:
+                logging.warning("Agent workspace stuck, restore failed attempt=%d category=%s", attempt,
+                                safe_exception(exc))
+                if attempt == HEAL_TRIES:
+                    return False
+                sleep(HEAL_RETRY_SECONDS)
         mark_restored(store, uid, by="heal")
     except Exception as exc:
         logging.warning("Agent workspace stuck, restore failed category=%s", safe_exception(exc))

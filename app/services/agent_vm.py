@@ -155,10 +155,14 @@ def unresponsive(exc):
 # back by itself (three of 20 sprites on 2026-11-06, one idle since
 # 2026-10-30, one an old chat VM), while a restore to a checkpoint started
 # it again at once (Max's workspace, v9: 58 s, then 0.1 s per request):
-# a VM that answers so again a minute later (watch, probe) restores itself
-# (agent_workspace.heal_later).
+# a VM that answers so again right after (watch, probe) restores itself
+# (agent_workspace.heal_later). Each of the two answers takes the gateway's
+# whole wait for the VM's start (about 48 s), so a VM that only started
+# slowly is up by the second; a longer pause between them would only add to
+# the user's wait for the restore (WATCH_SECONDS).
 PROBE_SECONDS = 60
 PROBE_WAIT_SECONDS = 15
+WATCH_SECONDS = 5
 # Name -> the status the gateway answered; when each VM's last probe began
 # (time.monotonic) and the probe running, under _contact_lock.
 _unresponsive: dict[str, int] = {}
@@ -177,6 +181,8 @@ def _unavailable(reason):
 # backends of all messages in this process: the exec WebSocket's handshake
 # is no place to wait for a VM's wake (WAKE_AFTER_SECONDS).
 _contact: dict[str, float] = {}
+# The VMs whose last request got no answer at all (lose_contact), until one reaches them.
+_lost: set[str] = set()
 _contact_lock = threading.Lock()
 
 
@@ -184,9 +190,20 @@ def _touch(name):
     """``name`` was reached just now: also no longer unresponsive."""
     with _contact_lock:
         _contact[name] = time.monotonic()
+        _lost.discard(name)
         cleared = _unresponsive.pop(name, None) is not None
     if cleared:
         logging.info("Agent VM reached again after it was unresponsive")
+
+
+def lose_contact(name):
+    """A request to ``name`` got no answer at all (no connection, a
+    handshake out of time): it no longer counts as reached lately
+    (reached_within), so the next start asks it with a request that waits
+    for its wake (agent_workspace.open_workspace) instead of trusting the
+    last contact. When it was last reached stays as it is (_asleep)."""
+    with _contact_lock:
+        _lost.add(name)
 
 
 def mark_unresponsive(name, status):
@@ -215,15 +232,15 @@ def unresponsive_status(name):
         return _unresponsive.get(name)
 
 
-def probe(name, factory=None, on_unresponsive=None):
+def probe(name, factory=None, on_unresponsive=None, *, soon=False):
     """The probe of ``name`` while it is marked unresponsive: the one that
     runs, or a new one on a thread of its own when the last began
-    PROBE_SECONDS ago or more, else None. It asks the VM with a request the
-    VM itself answers (SpritesBackend.reach) on a backend of its own
-    (``factory``, the configured provider by default); an answer clears the
-    mark, a gateway's 502/503/504 renews it and calls ``on_unresponsive``:
-    the VM answered so twice, a minute or more apart, and is stuck
-    (agent_workspace.heal_later)."""
+    PROBE_SECONDS ago or more (``soon``: whenever none runs, the watch's),
+    else None. It asks the VM with a request the VM itself answers
+    (SpritesBackend.reach) on a backend of its own (``factory``, the
+    configured provider by default); an answer clears the mark, a gateway's
+    502/503/504 renews it and calls ``on_unresponsive``: the VM answered so
+    twice and is stuck (agent_workspace.heal_later)."""
     now = time.monotonic()
     with _contact_lock:
         if name not in _unresponsive:
@@ -232,7 +249,7 @@ def probe(name, factory=None, on_unresponsive=None):
         if running is not None:
             return running
         began = _probe_began.get(name)
-        if began is not None and now - began < PROBE_SECONDS:
+        if not soon and began is not None and now - began < PROBE_SECONDS:
             return None
         _probe_began[name] = now
 
@@ -268,21 +285,39 @@ def probe(name, factory=None, on_unresponsive=None):
 
 
 def watch(name, on_unresponsive, factory=None):
-    """Probes ``name`` once PROBE_SECONDS after it was marked, whether or not
+    """Probes ``name`` once WATCH_SECONDS after it was marked, whether or not
     a start asks for it then: a stuck VM is known to be stuck (and its
     ``on_unresponsive`` runs) without the user's next message. One pending
     per VM; returns the timer, or None when one is pending."""
     def run():
+        # The probe first: whoever waits for the outcome (checking) never
+        # finds neither of them between the two.
+        probe(name, factory=factory, on_unresponsive=on_unresponsive, soon=True)
         with _contact_lock:
             _watches.pop(name, None)
-        probe(name, factory=factory, on_unresponsive=on_unresponsive)
     with _contact_lock:
         if name in _watches:
             return None
-        timer = _watches[name] = threading.Timer(PROBE_SECONDS + 1, run)
+        timer = _watches[name] = threading.Timer(WATCH_SECONDS, run)
         timer.daemon = True
         timer.start()
     return timer
+
+
+def checking(name):
+    """Whether a probe of ``name`` runs or its watch is pending: its mark may
+    still change without anyone asking."""
+    with _contact_lock:
+        return name in _watches or name in _probes
+
+
+def reached_within(name, seconds):
+    """Whether the server reached ``name`` within ``seconds`` and nothing
+    called it unresponsive since."""
+    with _contact_lock:
+        last = _contact.get(name)
+        return (name not in _unresponsive and name not in _lost and last is not None
+                and time.monotonic() - last <= seconds)
 
 
 def _asleep(name):
@@ -572,6 +607,8 @@ class SpritesBackend(VMBackend):
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
             logging.warning("Agent VM request failed operation=%s category=%s", operation, safe_exception(exc))
+            if vm is not None:
+                lose_contact(vm)
             raise VMUnavailable(f"{operation}: no connection") from None
         if response.is_success or (missing_ok and response.status_code == 404):
             return response
@@ -843,17 +880,24 @@ class SpritesBackend(VMBackend):
             except InvalidStatus as exc:
                 status = exc.response.status_code
                 logging.warning("Agent VM request refused operation=%s status=%s", operation, status)
-                if name is not None and status in UNRESPONSIVE_STATUSES:
-                    mark_unresponsive(name, status)
+                if name is not None:
+                    # Also a VM that is gone (404): the next start asks for it anew.
+                    lose_contact(name)
+                    if status in UNRESPONSIVE_STATUSES:
+                        mark_unresponsive(name, status)
                 raise VMUnavailable(f"{operation}: HTTP {status}", status) from None
             except TimeoutError as exc:
                 logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
                                 safe_exception(exc))
+                if name is not None:
+                    lose_contact(name)
                 raise VMUnavailable(f"{operation}: handshake timed out") from None
             except (OSError, InvalidHandshake) as exc:
                 logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
                                 safe_exception(exc))
                 if attempt == 2:
+                    if name is not None:
+                        lose_contact(name)
                     raise VMUnavailable(f"{operation}: no connection") from None
                 time.sleep(HANDSHAKE_RETRY_SECONDS)
 

@@ -82,6 +82,9 @@ def _no_workspace_provisioning(monkeypatch):
     No VM begins marked unresponsive (agent_vm.mark_unresponsive) either,
     no later probe of an earlier test runs into this one (agent_vm.watch),
     and no account restored itself before (agent_workspace.heal_later).
+    No VM counts as reached or up to date from an earlier test
+    (agent_vm.reached_within, agent_workspace._ready), and no account was
+    warmed before (agent_workspace.warm_later).
     The workspace's kit (agent_workspace.kit_later) is off the same way: it
     runs commands of its own after a message, and no account's is done yet."""
     monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
@@ -89,10 +92,13 @@ def _no_workspace_provisioning(monkeypatch):
     from app.services import agent_vm, agent_workspace
     agent_workspace._starts.clear()
     agent_workspace._setup_locks.clear()
+    agent_workspace._ready.clear()
     with agent_workspace._kits_lock:
         agent_workspace._kits.clear()
         agent_workspace._kits_running.clear()
     with agent_vm._contact_lock:
+        agent_vm._contact.clear()
+        agent_vm._lost.clear()
         agent_vm._unresponsive.clear()
         agent_vm._probe_began.clear()
         agent_vm._probes.clear()
@@ -101,6 +107,9 @@ def _no_workspace_provisioning(monkeypatch):
         agent_vm._watches.clear()
     with agent_workspace._heals_lock:
         agent_workspace._heals.clear()
+        agent_workspace._healing.clear()
+    with agent_workspace._warms_lock:
+        agent_workspace._warms.clear()
 
 
 @pytest.fixture(autouse=True)

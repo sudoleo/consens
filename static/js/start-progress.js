@@ -9,7 +9,8 @@
 //
 // The bar never runs backwards and never fills before the start is done: it
 // moves evenly to 90% at the estimate, then creeps on toward 98% while the
-// line says "Almost done…". A later estimate goes on from where the bar
+// line says "Almost done…" and, LATE_MS past the estimate, "Taking longer
+// than usual…". A later estimate goes on from where the bar
 // stands. It shows only once a start took SHOW_MS, so a quick one never
 // flashes a bar. done() fills it.
 //
@@ -37,6 +38,7 @@
   const SHOW_MS = 1200;
   const DONE_MS = 400;
   const AT_ESTIMATE = 0.9, CEILING = 0.98;
+  const LATE_MS = 10_000;
   // The server's clock minus this one, once they differ clearly.
   const SKEW_MS = 5000;
   let skew = 0;
@@ -53,6 +55,9 @@
     if (ms > 90_000) return App.t('About {count} minutes left', { count: Math.round(ms / 60_000) });
     if (ms > 50_000) return App.t('About a minute left');
     if (ms >= 10_000) return App.t('About {count} seconds left', { count: Math.round(ms / 5_000) * 5 });
+    // Clearly past the estimate, the line says so: "Almost done…" for most
+    // of a minute reads as a promise the start does not keep.
+    if (ms < -LATE_MS) return App.t('Taking longer than usual…');
     return App.t('Almost done…');
   }
 

@@ -1139,3 +1139,158 @@ describe("the workspace view after the runtime audit", () => {
     }
   });
 });
+
+// Max 2026-11-20: "Wenn der User die VM öffnet, sie sofort da ist", after a
+// start that showed a progress bar for 49 s and then "not reachable".
+describe("the workspace before it is opened, and one that does not start", () => {
+  const warms = window => window.fetch.mock.calls.filter(([path]) => path === "/agent/workspace/warm")
+    .map(([, options]) => JSON.parse(options.body).intent);
+  const status = env => env.document.querySelector(".workspace-view-status");
+  // An account with the workspace (firebase.js, /user_status vm_time), in a browser that opened its view before or not.
+  function account({ openedBefore = true } = {}) {
+    return setup({ prepare(window) {
+      window.document.body.classList.add("viewer-has-workspace");
+      window.App.vmTime = { used_seconds: 0, limit_seconds: null };
+      if (openedBefore) window.localStorage.setItem("consens.workspaceOpened", "1");
+    } });
+  }
+
+  it("asks the server to wake the workspace when the app loads and while the user is active, at a pace", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = account();
+      let now = Date.parse("2026-11-20T20:13:00Z");
+      env.window.Date.now = () => now;
+      // The account's status arrived (firebase.js).
+      env.workspace.syncSettings();
+      await vi.waitFor(() => expect(warms(env.window)).toEqual([false]));
+      // Every key and click asks; the server hears it every few minutes.
+      env.document.dispatchEvent(new env.window.Event("keydown"));
+      env.document.dispatchEvent(new env.window.Event("pointerdown"));
+      await vi.advanceTimersByTimeAsync(50);
+      expect(warms(env.window)).toEqual([false]);
+      now += 241_000;
+      env.document.dispatchEvent(new env.window.Event("keydown"));
+      await vi.waitFor(() => expect(warms(env.window)).toEqual([false, false]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("wakes it and loads noVNC when the user reaches for the button, also in a browser that never opened it", async () => {
+    const env = account({ openedBefore: false });
+    const loads = [];
+    env.workspace._setLoader(async () => { loads.push(1); return FakeRFB; });
+    // Nothing on its own: most accounts with a workspace never open the view.
+    env.workspace.syncSettings();
+    env.document.dispatchEvent(new env.window.Event("keydown"));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(warms(env.window)).toEqual([]);
+    const button = env.document.getElementById("composerWorkspaceButton");
+    button.dispatchEvent(new env.window.Event("pointerenter"));
+    await vi.waitFor(() => expect(warms(env.window)).toEqual([true]));
+    expect(loads).toEqual([1]);
+    // Opened once, this browser is warmed with the app from then on.
+    button.click();
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    expect(env.window.localStorage.getItem("consens.workspaceOpened")).toBe("1");
+    // The open view keeps the workspace awake itself.
+    button.dispatchEvent(new env.window.Event("focus"));
+    env.document.dispatchEvent(new env.window.Event("keydown"));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(warms(env.window)).toEqual([true]);
+  });
+
+  it("asks nothing for an account without the workspace or a visitor who is not signed in", async () => {
+    const env = setup({ prepare(window) { window.localStorage.setItem("consens.workspaceOpened", "1"); } });
+    env.workspace.syncSettings();
+    env.document.getElementById("composerWorkspaceButton").dispatchEvent(new env.window.Event("pointerenter"));
+    const signedOut = account();
+    signedOut.window.auth.currentUser = null;
+    signedOut.workspace.syncSettings();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(warms(env.window)).toEqual([]);
+    expect(warms(signedOut.window)).toEqual([]);
+  });
+
+  it("waits with the bar while the server brings back a workspace that did not start", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup({ progress: true });
+      let now = Date.parse("2026-11-20T20:14:42Z");
+      env.window.Date.now = () => now;
+      const socket = await opened(env);
+      const screen = env.document.querySelector("#workspacePane-browser");
+      const bar = screen.querySelector(".workspace-view-progress");
+      socket.deliver(JSON.stringify({ state: "connecting" }));
+      socket.deliver(JSON.stringify({ state: "waking", until: new Date(now + 15_000).toISOString() }));
+      // Well past the estimate, the line stops promising.
+      now += 40_000;
+      await vi.advanceTimersByTimeAsync(300);
+      expect(bar.querySelector(".start-progress-left").textContent).toBe("Taking longer than usual…");
+      socket.deliver(JSON.stringify({ state: "repairing", until: new Date(now + 150_000).toISOString() }));
+      expect(status(env).textContent).toBe("Your workspace did not start. Bringing it back…");
+      await vi.advanceTimersByTimeAsync(300);
+      expect(bar.querySelector(".start-progress-left").textContent).toBe("About 3 minutes left");
+      expect(bar.querySelector(".start-progress-step").textContent).toBe("Trying to start it once more…");
+      expect(screen.classList.contains("is-loading")).toBe(true);
+      // The same socket goes on to the picture once it is back.
+      socket.deliver(JSON.stringify({ state: "starting", until: new Date(now + 150_000).toISOString() }));
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      expect(FakeRFB.made.length).toBe(1);
+      expect(screen.classList.contains("is-loading")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says when nothing brought it back, with Reconnect for later", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "stuck" }));
+      socket.closedBy(4503);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(FakeSocket.last).toBe(socket);
+      expect(status(env).textContent).toBe(
+        "Your workspace does not start right now, not from its last restore point either. Try again in a few minutes.");
+      expect(env.document.querySelector(".workspace-view-reconnect").hidden).toBe(false);
+      expect(env.document.querySelector("#workspacePane-browser").classList.contains("is-loading")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Prod 2026-11-15: Chrome did not answer within its limit after the VM's
+  // cold start, the view said "not reachable", and "Reconnect" found it running.
+  it("tries once more by itself after the server's error, then says so", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const first = await opened(env);
+      first.deliver(JSON.stringify({ state: "error" }));
+      first.closedBy(1011);
+      expect(status(env).textContent).toBe("Reconnecting…");
+      await vi.advanceTimersByTimeAsync(1_000);
+      const second = FakeSocket.last;
+      expect(second).not.toBe(first);
+      await second.onopen();
+      second.deliver(JSON.stringify({ state: "error" }));
+      second.closedBy(1011);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(FakeSocket.last).toBe(second);
+      expect(status(env).textContent).toBe("The workspace is not reachable right now. Try again in a moment.");
+      const again = env.document.querySelector(".workspace-view-reconnect");
+      expect(again.hidden).toBe(false);
+      // Asked for, it gets its second try again.
+      again.click();
+      const third = FakeSocket.last;
+      await third.onopen();
+      third.closedBy(1011);
+      expect(status(env).textContent).toBe("Reconnecting…");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

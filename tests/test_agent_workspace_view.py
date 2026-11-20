@@ -5,6 +5,7 @@ The VMs are FakeVM (test_agent_vm.py), the exec socket a fake; nothing calls
 Sprites.
 """
 import json
+import time
 
 import pytest
 from fastapi import FastAPI
@@ -307,6 +308,150 @@ def test_the_view_says_so_when_the_vm_is_not_reachable(view_api, fake_vm):
         ws.send_text(json.dumps({"id_token": "verified"}))
         assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "error"]
     assert gateway.url is None
+
+
+def _never_starts(monkeypatch):
+    """The view's _open as against a VM the provider does not start: the
+    gateway's 502 marks it (SpritesBackend) until something reaches it. The
+    tries so far, and _open as it was."""
+    opened, tries = workspace_router._open, []
+
+    def stuck_open(uid, seconds, start=None):
+        tries.append(uid)
+        if agent_vm.unresponsive_status(NAME) is not None or len(tries) == 1:
+            agent_vm.mark_unresponsive(NAME, 502)
+            raise agent_vm.VMUnavailable("read: HTTP 502", 502)
+        return opened(uid, seconds, start)
+    monkeypatch.setattr(workspace_router, "_open", stuck_open)
+    return tries
+
+
+def test_the_view_waits_while_a_vm_that_did_not_start_is_brought_back(view_api, fake_vm, monkeypatch):
+    """Prod 2026-11-20: the provider did not start the VM, the view said
+    "not reachable" after 49 s, and "Reconnect" met the same answer while the
+    server restored the VM behind it. The view now waits for that with
+    "repairing" and about how long, and opens once the VM is reached again."""
+    import threading
+    from datetime import datetime, timezone
+    client, _, gateway, _ = view_api
+    tries = _never_starts(monkeypatch)
+    monkeypatch.setattr(workspace_router, "REPAIR_LOOK_SECONDS", .02)
+    # Its restore runs (agent_workspace.heal) and brings it back shortly.
+    monkeypatch.setattr(agent_workspace, "healing", lambda uid: True)
+    threading.Timer(.3, agent_vm.forget_unresponsive, args=(NAME,)).start()
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        messages = [json.loads(ws.receive_text()) for _ in range(4)]
+        assert ws.receive_bytes() == b"RFB 003.008\n"
+    assert [message["state"] for message in messages] == ["connecting", "repairing", "starting", "ready"]
+    left = (datetime.fromisoformat(messages[1]["until"]) - datetime.now(timezone.utc)).total_seconds()
+    assert workspace_router.REPAIR_SECONDS - 10 < left <= workspace_router.REPAIR_SECONDS
+    assert len(tries) == 2 and gateway.url is not None
+
+
+def test_a_vm_that_nothing_brings_back_ends_the_view_with_its_reason(view_api, fake_vm, monkeypatch):
+    """No probe asks the VM and no restore runs (none it may go back to, or
+    the provider refused them all): the view says so with a close code of
+    its own, since "Reconnect" may help later, not now."""
+    client, _, gateway, _ = view_api
+    _never_starts(monkeypatch)
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "stuck"]
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+    assert closed.value.code == workspace_router.CLOSE_STUCK and gateway.url is None
+    # A VM still stuck after its restore ended ends the same way.
+    monkeypatch.setattr(workspace_router, "REPAIR_LOOK_SECONDS", .02)
+    healing = [True]
+    monkeypatch.setattr(agent_workspace, "healing", lambda uid: healing[0])
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "repairing"]
+        healing[0] = False
+        assert json.loads(ws.receive_text())["state"] == "stuck"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+    assert closed.value.code == workspace_router.CLOSE_STUCK
+
+
+def test_the_app_warms_the_workspace_before_the_user_opens_it(view_api, fake_vm, monkeypatch):
+    """The view waited for the VM's wake and Chrome's start after the click
+    (15 to 30 s from cold). The app asks for the workspace beforehand
+    (workspace-view.js warm): woken, its Chrome started and held awake as
+    after a message. Never a VM that is not there, without the user's hand
+    on the button only for an account that opened the view before, never
+    under a message, and no more often than WARM_EVERY_SECONDS."""
+    client, store, _, _ = view_api
+    threads, warm_later = [], agent_workspace.warm_later
+
+    def later(*args, **kwargs):
+        threads.append(warm_later(*args, **kwargs))
+        return threads[-1]
+    monkeypatch.setattr(agent_workspace, "warm_later", later)
+    monkeypatch.setattr(agent_workspace, "WARM_EVERY_SECONDS", 0)
+
+    def warm(intent):
+        answer = client.post("/agent/workspace/warm", json={"intent": intent}, headers=AUTH)
+        assert answer.status_code == 200
+        if threads[-1] is not None:
+            threads[-1].join(10)
+        return answer.json()["warming"]
+    # No workspace yet: a warm-up makes none.
+    assert warm(True) is True and fake_vm.backends == 0 and NAME not in fake_vm.vms
+    agent_workspace.record_for_view(store, UID, provider="fake")
+    # The app's own warm-up (it loaded, the user is active) waits for an account that opened the view.
+    assert warm(False) is True and fake_vm.backends == 0
+    # The user reaches for the button: the VM wakes, Chrome starts, the hold is a message's end's.
+    assert warm(True) is True
+    assert fake_vm.warmed == [NAME] and fake_vm.rested == [NAME]
+    assert fake_vm.vms[NAME]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+    agent_workspace.claim_view(store, UID, 60)
+    assert warm(False) is True and fake_vm.warmed == [NAME] * 2
+    # A message has the workspace: it is awake, and its own calls hold it.
+    chat, _ = pending(store)
+    agent_workspace.claim(store, UID, chat, "turn", provider="fake")
+    assert warm(True) is True and fake_vm.warmed == [NAME] * 2
+    agent_workspace.release(store, UID, "turn")
+    # The day's VM time is used up: the view would not open either.
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 100)
+    assert warm(True) is True and fake_vm.warmed == [NAME] * 2
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: None)
+    # The user has the browser: the start would look at the Chrome under their hands.
+    agent_workspace.set_control(store.db, UID, fake_vm.backend(), "user")
+    assert warm(True) is True and fake_vm.warmed == [NAME] * 2
+    agent_workspace.set_control(store.db, UID, fake_vm.backend(), "agent")
+    # An open view keeps the workspace awake itself: another tab of the account asks in vain.
+    ws = open_view(client)
+    assert warm(True) is False and fake_vm.warmed == [NAME] * 2
+    ws.__exit__(None, None, None)
+    for _ in range(200):
+        if not workspace_router._viewing:
+            break
+        time.sleep(.02)
+    assert warm(True) is True and fake_vm.warmed == [NAME] * 3
+    # Paced: an open tab asks with every key, the VM wakes every few minutes at most.
+    monkeypatch.setattr(agent_workspace, "WARM_EVERY_SECONDS", 240)
+    assert warm(True) is False and fake_vm.warmed == [NAME] * 3
+    # The switch (AGENT_WORKSPACE_WARM=off) and an account without the workspace.
+    monkeypatch.setattr(agent_workspace, "WARM_EVERY_SECONDS", 0)
+    monkeypatch.setenv("AGENT_WORKSPACE_WARM", "off")
+    assert warm(True) is False and fake_vm.warmed == [NAME] * 3
+    view_api[3].clear()
+    assert client.post("/agent/workspace/warm", json={"intent": True}, headers=AUTH).status_code == 403
+
+
+def test_a_warm_up_that_waited_for_the_account_does_not_hold_up_the_users_reach(store, fake_vm, monkeypatch):
+    """The app's own warm-up of an account that never opened the view does
+    nothing; the user's first reach for the button right after must not
+    meet its pace."""
+    agent_workspace.record_for_view(store, UID, provider="fake")
+    agent_workspace.warm_later(store, UID).join(10)
+    assert fake_vm.warmed == []
+    agent_workspace.warm_later(store, UID, intent=True).join(10)
+    assert fake_vm.warmed == [NAME]
+    assert agent_workspace.warm_later(store, UID, intent=True) is None
 
 
 def test_taking_over_and_handing_back_write_the_vms_control_files(view_api, fake_vm, monkeypatch):

@@ -458,6 +458,28 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Automatisiert: `test_agent_workspace.py` (provision, Start),
       `test_agent_browser.py` (starting_until), `start-progress.test.mjs`,
       `workspace-view.test.mjs`.
+- [ ] Arbeitsplatz sofort da (2026-11-20, echter Provider, Konto, das die
+      Live-Ansicht schon einmal offen hatte; `docs/agent-mode.md` „Sofort da“):
+      Arbeitsplatz mindestens 15 min ruhen lassen, dann `/app` laden und nichts
+      weiter tun. Render-Log binnen ~40 s: `Agent workspace warmed seconds=…
+      intent=False`. Danach die Live-Ansicht öffnen: Das Bild kommt, bevor der
+      Balken erscheint (er zeigt sich erst nach 1,2 s); die Zeit vom Klick bis
+      zum Bild messen und in `docs/agent-mode.md` nachtragen (vor dem Deploy
+      nicht gemessen). Schließen, 3 min in der App tippen (kein
+      Arbeitsplatz), wieder öffnen: wieder sofort. Gegenprobe in einem
+      frischen Browserprofil desselben Kontos: Beim Laden kommt kein
+      `warmed`, erst wenn der Zeiger auf dem Arbeitsplatz-Knopf liegt
+      (`intent=True`). Kaltstart ohne Vorwärmen (`AGENT_WORKSPACE_WARM=off`
+      oder Klick in den ersten Sekunden nach dem Laden): Der Balken läuft
+      durch, auch wenn Chrome über 15 s braucht, und endet nie mit „not
+      reachable“. Festgefahrene VM (nicht nachstellbar, nur beobachten): Die
+      Ansicht sagt „Dein Arbeitsplatz ist nicht gestartet. Er wird
+      zurückgeholt…“ mit Restzeit und öffnet danach von selbst; im Log
+      `restore failed attempt=N` je Versuch, am Ende `went back to its newest
+      checkpoint` oder die Ansicht mit „… startet gerade nicht …“ und
+      „Reconnect“. Automatisiert: `test_agent_workspace_view.py`,
+      `test_agent_vm.py`, `test_agent_workspace.py`, `workspace-view.test.mjs`,
+      `start-progress.test.mjs`.
 - [ ] Flüssige Live-Ansicht (2026-11-02, echter Provider, nach dem Deploy mit
       `--ws-per-message-deflate false` im Render-Startbefehl): Live-Ansicht eines
       Kontos öffnen, dessen Arbeitsplatz von vorher ist. Einmal „Der Browser wird

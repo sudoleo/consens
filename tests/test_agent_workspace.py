@@ -1405,16 +1405,42 @@ def test_only_the_users_own_stream_sockets_on_xs_name_count():
     assert xsocket.main(["xsocket.py"]) == 2 and xsocket.main(["xsocket.py", "x"]) == 2
 
 
-def test_display_sh_waits_at_most_fifteen_seconds_and_asks_only_a_chrome_it_started():
-    """The last wait asks Chrome for at most 15 s: 150 times with 5 s each,
+def test_display_sh_waits_a_bounded_time_and_asks_only_a_chrome_that_starts():
+    """The last wait asks Chrome for a bounded time: 150 times with 5 s each,
     a hung Chrome under the live view's --keep would hold the lock for
-    almost 13 minutes, and browser.py's own restart would wait in vain."""
+    almost 13 minutes, and browser.py's own restart would wait in vain. 15 s
+    for a Chrome that ran and for --restart (browser.py waits RESTART_SECONDS
+    for that); 40 s for one that starts, since after the VM's cold start it
+    did not answer within 15 s (prod 2026-11-15), within the 60 s browser.py
+    gives this script."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     wait = display[display.index("# A Chrome started here is ready once it answers"):]
-    assert "until=$((SECONDS + 15))" in wait and 'while [ "$SECONDS" -lt "$until" ]' in wait
+    assert 'limit=15\n[ -n "$started" ] && [ "$mode" != "--restart" ] && limit=40\nuntil=$((SECONDS + limit))' in wait
+    assert 'while [ "$SECONDS" -lt "$until" ]' in wait
     assert '{ [ -z "$started" ] || answers 2; }' in wait and "seq 150" not in display
     start = display[display.index('started=""'):display.index("# A Chrome started here is ready once it answers")]
     assert start.index('if [ -z "$(browser_pid)" ]; then\n  started=1') < start.index('"$here/cdp.py"')
+    browser = (VM_FILES / "browser" / "browser.py").read_text(encoding="utf-8")
+    assert "RESTART_SECONDS = 30" in browser
+    assert 'os.path.join(HERE, "display.sh")], capture_output=True, text=True, timeout=60)' in browser
+
+
+def test_a_chrome_that_is_still_starting_is_waited_for_never_ended():
+    """Prod 2026-11-15: after the VM's cold start Chrome did not answer within
+    display.sh's wait, the live view said "not reachable", and the next call
+    would have ended it for its silence and started the same wait again. A
+    Chrome under a minute old that does not answer yet is waited for like
+    one started here; the relay tries a start that gave up once more with
+    --keep, which ends nothing."""
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    decide = display[display.index('pid="$(browser_pid)"'):display.index('[ -n "$why" ] && stop_chrome')]
+    assert 'age="$(ps -o etimes= -p "$1" 2>/dev/null | tr -d \' \')"\n  [ -n "$age" ] && [ "$age" -lt 60 ]' in decide
+    assert ('elif ! answers && ! answers; then\n    if starting "$pid"; then started=1; '
+            'else why="no answer on its debugging pipe"; fi') in decide
+    # Before the choice, so the wait at the end knows of it.
+    assert decide.index('started=""') < decide.index('if starting "$pid"')
+    relay = (VM_FILES / "browser" / "relay.py").read_text(encoding="utf-8")
+    assert 'if not run("display.sh") and not run("display.sh", "--keep"):\n        state("error")' in relay
 
 
 def test_a_chrome_that_no_longer_answers_starts_anew():
@@ -1451,7 +1477,8 @@ def test_a_chrome_that_no_longer_answers_starts_anew():
     assert 'curl -s -m "${1:-5}" -o /dev/null --unix-socket "$cdp" "http://localhost/json/list"' in display
     decide = display[display.index('pid="$(browser_pid)"'):display.index('[ -n "$why" ] && stop_chrome')]
     assert '[ "$mode" != "--keep" ]' in decide and '[ "$mode" = "--restart" ]' in decide
-    assert '[ ! -S "$cdp" ] || ! runs "$hub" || { ! answers && ! answers; }' in decide
+    assert 'elif [ ! -S "$cdp" ] || ! runs "$hub"; then why="no answer on its debugging pipe"' in decide
+    assert 'elif ! answers && ! answers; then' in decide
     assert 'elif [ -z "$pid" ] && { runs "$chrome" || runs "$hub"; }; then' in decide
     # Never two Chromes on one profile: cdp.py and Chrome get TERM, then KILL,
     # then the script waits until all are gone.
