@@ -484,22 +484,21 @@ def test_sidebar_head_stands_on_one_grid():
     """Max: the desktop head looked out of place, its spacing
     unlike everything else (the mark at 18px, the row glyphs at 25, the
     wordmark at 47, the words at 51; four right edges). Now one glyph column
-    at 22px, one word column at 50px, one right edge, steps of 4 and 8, and
-    "Chats" a quiet section word as in the drawer."""
+    at 22px, one word column at 50px, one right edge, steps of 4 and 8. The
+    head is New chat's row with the search and the panel glyph beside it;
+    the panel glyph keeps the place the floating toggle hands over."""
     raw = read("shell.css")
     desktop = raw.split("Desktop head on one grid", 1)[1].split("44px to the finger", 1)[0]
     desktop = strip_comments(desktop.split("@media (min-width: 1100px) {", 1)[1])
-    assert "padding: 0 3px 0 10px" in rule_body(desktop, ".sidebar-brand-row")
-    assert "width: 28px" in rule_body(desktop, ".sidebar-brand-link .app-favicon")
+    head = rule_body(desktop, ".sidebar-head")
+    assert "min-height: 40px" in head and "padding-right: 3px" in head
+    # The search field ends before the panel glyph: 3 + 34 + the gap of 6.
+    assert "--head-tools: 43px" in rule_body(desktop, ".sidebar-search-box")
     rows = rule_body(desktop, ".sidebar-new-run, .sidebar-model-entry")
     for part in ("margin: 0", "column-gap: 10px", "min-height: 36px", "padding: 0 10px",
                  "font-weight: var(--font-weight-regular)"):
         assert part in rows, part
     assert "width: 18px; height: 18px" in rule_body(desktop, ".sidebar-new-run svg, .sidebar-model-entry > svg")
-    heading = rule_body(desktop, ".sidebar-bookmarks-head .sidebar-toggle-btn")
-    assert "padding: 0 10px" in heading and "color: var(--ink-3)" in heading
-    assert "display: none" in rule_body(desktop, ".sidebar-bookmarks-head .sidebar-heading-label svg")
-    assert "right: 2px" in rule_body(desktop, ".sidebar-search-trigger")
     assert "var(--sidebar-gutter, 0px)" in rule_body(desktop, ".sidebar > .sidebar-content")
     assert "padding-left: 10px" in rule_body(desktop, ".sidebar .bookmark")
     assert "padding: 4px 10px" in rule_body(desktop, ".chat-list-heading")
@@ -508,9 +507,9 @@ def test_sidebar_head_stands_on_one_grid():
     assert "--sidebar-gutter" in resize and "scrollbar-gutter:stable;scrollbar-width:thin" in resize
 
 
-def test_logo_toggle_and_switch_move_with_the_sidebar():
-    """Opening the sidebar the switch jumped 130 px in one frame and the logo
-    vanished; closing it two logos and two toggles stood side by side."""
+def test_toggle_and_switch_move_with_the_sidebar():
+    """Opening the sidebar the switch jumped 130 px in one frame; closing it
+    two toggles stood side by side."""
     watch = strip_comments(read("components-watch.css"))
     switch = rule_body(watch, ".view-switch")
     assert "left: 50vw" in switch
@@ -521,7 +520,6 @@ def test_logo_toggle_and_switch_move_with_the_sidebar():
     layout = strip_comments(read("layout.css"))
     desktop = layout.split("@media (min-width: 1100px)", 1)[1]
     assert "left var(--dur-layer) var(--ease-standard)" in rule_body(desktop, ".container")
-    assert "transition: opacity var(--dur-state) var(--ease-out) calc(var(--dur-layer) / 2)" in layout
     shell = strip_comments(read("shell.css"))
     handover = [b for s, b in rules(shell) if s == "body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle"]
     assert any("visibility 0s var(--ease-linear) var(--dur-layer)" in body for body in handover)

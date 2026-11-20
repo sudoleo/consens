@@ -46,7 +46,7 @@ describe("sidebar resize", () => {
     expect(handle.getAttribute("aria-controls")).toBe("appSidebar");
     expect(handle.tabIndex).toBe(0);
     expect([handle.getAttribute("aria-valuemin"), handle.getAttribute("aria-valuenow"), handle.getAttribute("aria-valuemax")])
-      .toEqual(["200", "260", "480"]);
+      .toEqual(["230", "260", "480"]);
     dom.window.close();
   });
 
@@ -83,23 +83,23 @@ describe("sidebar resize", () => {
     handle.dispatchEvent(pointer(window, "pointermove", { clientX: 2000 }));
     expect(width(window)).toBe("480px");
     handle.dispatchEvent(pointer(window, "pointermove", { clientX: -500 }));
-    expect(width(window)).toBe("200px");
+    expect(width(window)).toBe("230px");
     handle.dispatchEvent(pointer(window, "pointercancel", {}));
-    expect(window.localStorage.getItem("sidebar_width")).toBe("200");
+    expect(window.localStorage.getItem("sidebar_width")).toBe("230");
     const key = (name, shiftKey = false) => handle.dispatchEvent(new window.KeyboardEvent("keydown", { key: name, shiftKey, bubbles: true, cancelable: true }));
     key("ArrowRight");
-    expect(window.App.sidebarResize.get()).toBe(210);
-    key("ArrowRight", true);
-    expect(window.App.sidebarResize.get()).toBe(250);
-    key("ArrowLeft");
     expect(window.App.sidebarResize.get()).toBe(240);
+    key("ArrowRight", true);
+    expect(window.App.sidebarResize.get()).toBe(280);
+    key("ArrowLeft");
+    expect(window.App.sidebarResize.get()).toBe(270);
     key("End");
     expect(window.App.sidebarResize.get()).toBe(480);
     key("Home");
-    expect(window.App.sidebarResize.get()).toBe(200);
-    expect(handle.getAttribute("aria-valuenow")).toBe("200");
+    expect(window.App.sidebarResize.get()).toBe(230);
+    expect(handle.getAttribute("aria-valuenow")).toBe("230");
     key("Enter");
-    expect(window.App.sidebarResize.get()).toBe(200);
+    expect(window.App.sidebarResize.get()).toBe(230);
     dom.window.close();
   });
 

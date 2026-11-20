@@ -81,12 +81,17 @@ def test_dragging_the_edge_resizes_the_sidebar_and_everything_beside_it(app_page
     assert page.evaluate("() => document.querySelector('.sidebar').getBoundingClientRect().width") == 380
 
     # Limits: never wider than 480 px (40 % of a 1440 px window is more),
-    # never narrower than 200 px.
+    # never narrower than 230 px: the head's one row (New chat, search, panel
+    # glyph) still holds its word there, in German too.
     _open_sidebar(page)
     _drag(page, 600)
     assert _geometry(page)["sidebar"] == 480
     _drag(page, -800)
-    assert _geometry(page)["sidebar"] == 200
+    assert _geometry(page)["sidebar"] == 230
+    fits = page.evaluate("""() => { const word = document.querySelector('#newRunButton span');
+      return word.scrollWidth <= word.clientWidth
+        && word.getBoundingClientRect().right <= document.getElementById('bookmarkSearchTrigger').getBoundingClientRect().left; }""")
+    assert fits
 
     # Double-click restores the default and forgets the stored width.
     page.locator("#sidebarResizer").dblclick()
@@ -108,9 +113,9 @@ def test_keyboard_resizing_and_collapsed_or_narrow_sidebars(app_page):
     page.keyboard.press("End")
     assert _geometry(page)["sidebar"] == 480
     page.keyboard.press("Home")
-    assert _geometry(page)["sidebar"] == 200
+    assert _geometry(page)["sidebar"] == 230
     page.keyboard.press("ArrowRight")
-    assert _geometry(page)["stored"] == "210"
+    assert _geometry(page)["stored"] == "240"
 
     # A collapsed sidebar has no handle.
     page.locator("#sidebarToggleInner").click()
@@ -118,7 +123,7 @@ def test_keyboard_resizing_and_collapsed_or_narrow_sidebars(app_page):
     expect(handle).to_be_hidden()
     page.locator(".app-nav-float .sidebar-toggle").click()
     expect(handle).to_be_visible()
-    assert _geometry(page)["sidebar"] == 210
+    assert _geometry(page)["sidebar"] == 240
 
     # A smaller window caps the chosen width without forgetting it; the
     # narrow overlay sidebar keeps its own width and has no handle.
@@ -139,19 +144,16 @@ def test_keyboard_resizing_and_collapsed_or_narrow_sidebars(app_page):
 
 
 # Opening the sidebar, the Chat | Watches switch once jumped 130 px
-# in one frame and the logo vanished; closing it, two logos and two panel
-# glyphs stood side by side for about 200 ms. Sampled per frame: the switch
-# glides with the column, and there is only ever one logo and one toggle.
+# in one frame; closing it, two panel glyphs stood side by side for about
+# 200 ms. Sampled per frame: the switch glides with the column, and there is
+# only ever one toggle.
 _FRAMES = """(ms) => new Promise(resolve => {
   const shown = el => { const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return 0;
     let o = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) o *= Number(getComputedStyle(n).opacity); return o; };
   const x = el => el.getBoundingClientRect().x;
   const out = [], t0 = performance.now();
   const step = () => {
-    const panelLogo = document.querySelector('#logoLink').getBoundingClientRect();
     out.push({ switchX: x(document.querySelector('#viewSwitch')),
-      floatLogo: shown(document.querySelector('.app-nav-float .brand-float')),
-      panelLogoOnScreen: panelLogo.right > 0 && shown(document.querySelector('#logoLink')) > 0,
       floatToggle: shown(document.querySelector('#toggleSidebarButton')), floatToggleX: x(document.querySelector('#toggleSidebarButton')),
       panelToggle: shown(document.querySelector('#sidebarToggleInner')), panelToggleX: x(document.querySelector('#sidebarToggleInner')) });
     if (performance.now() - t0 < ms) requestAnimationFrame(step); else resolve(out);
@@ -164,12 +166,11 @@ def _assert_one_of_each(frames):
     steps = [abs(b["switchX"] - a["switchX"]) for a, b in zip(frames, frames[1:])]
     assert sum(1 for s in steps if s > 0.5) >= 4, steps
     assert max(steps) < 0.6 * sum(steps), steps
-    assert not [f for f in frames if f["floatLogo"] > 0.05 and f["panelLogoOnScreen"]]
     assert not [f for f in frames if f["floatToggle"] > 0 and f["panelToggle"] > 0
                 and abs(f["floatToggleX"] - f["panelToggleX"]) > 2]
 
 
-def test_logo_toggle_and_switch_move_with_the_sidebar(app_page, get_console_errors):
+def test_toggle_and_switch_move_with_the_sidebar(app_page, get_console_errors):
     page = app_page
     _open_sidebar(page)
     page.locator("#sidebarToggleInner").click()

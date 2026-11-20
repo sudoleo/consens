@@ -244,15 +244,24 @@ def test_composer_row_is_reduced_to_attach_run_switch_and_send():
     assert 'id="newRunButton"' in template
 
 
-def test_sidebar_header_groups_brand_and_toggle_before_new_comparison():
+def test_sidebar_head_is_one_row_of_new_chat_search_and_panel_glyph():
     template = read("templates/index.html")
 
-    brand = template.index('class="sidebar-brand-row"')
-    toggle = template.index('id="sidebarToggleInner"')
+    head = template.index('class="sidebar-head"')
     new_run = template.index('id="newRunButton"')
-    search = template.index('id="chatSearch"')
+    search = template.index('id="bookmarkSearchTrigger"')
+    toggle = template.index('id="sidebarToggleInner"')
+    field = template.index('id="chatSearch"')
+    pinned = template.index('class="sidebar-pinned"')
 
-    assert brand < toggle < new_run < search
+    # Reading order is tab order: New chat, search, the panel glyph; the
+    # search field lies over the same row.
+    assert head < new_run < search < toggle < field < pinned
+    # No brand in the app's chrome (Max: the address bar names the product),
+    # neither in the sidebar nor beside the floating toggle, and no "Chats"
+    # row that folds the list away.
+    for gone in ("sidebar-brand", "brand-float", 'id="logoLink"', 'id="bookmarksToggle"', "sidebar-bookmarks-head"):
+        assert gone not in template, gone
     assert 'class="sidebar-top"' not in template
     # Exactly one sidebar toggle in the markup besides the floating one.
     assert template.count('id="sidebarToggleInner"') == 1

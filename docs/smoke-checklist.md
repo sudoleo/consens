@@ -887,7 +887,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Abbruch/Fehler. Light/Dark, Mobile und Reduced Motion pruefen.
 - [ ] Frischer `/app`-Load passt ohne vertikales Scrollen in den Desktop-
       Viewport; der Consensus-Picker hat keinen horizontalen Scrollbalken.
-- [ ] Frischer `/app`-Load: keine Topbar; Brand + Collapse im Sidebar-Kopf,
+- [ ] Frischer `/app`-Load: keine Topbar und keine Marke; der Sidebar-Kopf
+      ist eine Zeile (New chat, Lupe, Panel-Glyph),
       eingeloggter Account (Name/Plan + Avatar) und Settings im Sidebar-Footer.
       Ausgeloggt stehen Login/Sign-up nur oben rechts; die Sidebar zeigt kein
       zweites Login-Feld. Das Account-Popup hat in Light und Dark einen
@@ -915,12 +916,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Auch die Modell-Icons unter dem Input öffnen per Klick, Enter und
       Leertaste den Picker; Gäste sehen denselben Login-Hinweis. Nach einem
       Modellwechsel bleiben die neu gerenderten Icons anklickbar.
-      Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte;
-      mobil verschwindet die schwebende Brand vollständig.
+      Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte.
+- [ ] Sidebar-Kopf (2026-11-20): Lupe oder Ctrl+K legt das Suchfeld über die
+      Zeile, das Panel-Glyph bleibt daneben bedienbar; Escape schließt und der
+      Fokus steht auf der Lupe; ein leeres Feld schließt beim Wegtabben. Als
+      Gast fehlt die Lupe, New chat reicht bis vor das Panel-Glyph und ändert
+      beim Laden seine Breite nicht. Am Handy das Menü öffnen: kein Tooltip
+      „Collapse sidebar“ unter dem Finger; mit Tab am Desktop erscheint er.
 - [ ] Mobile Sidebar (ChatGPT-Sprache, 2026-10-18): New chat und Watches sind
       schlichte Zeilen mit Glyph, getönt nur die aktuelle Ansicht (leerer
       Start → New chat, Watch-Seite → Watches, offener Chat → seine Zeile).
-      „Chats“ ist eine leise Überschrift mit Lupe; jede Chat-Zeile trägt ein
+      Die Lupe steht neben New chat in der Kopfzeile; jede Chat-Zeile trägt ein
       gedämpftes ···, Antippen zeigt „Delete“, erst das zweite löscht. Die Liste
       läuft oben/unten weich aus, keine Trennlinien. Bei 320–1099 px,
       Light/Dark und Tastaturbedienung bleiben New chat, Watches, Suche und

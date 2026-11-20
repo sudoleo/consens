@@ -118,7 +118,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
     transition: visibility 0s var(--ease-linear) 0s;
   }
 
-  body.is-sidebar-settling :is(.brand-float, .app-nav-float .sidebar-toggle, #sidebarToggleInner) {
+  body.is-sidebar-settling :is(.app-nav-float .sidebar-toggle, #sidebarToggleInner) {
     transition: none !important;
   }
 }
@@ -134,44 +134,29 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   }
 }
 
-/* Wordmark and collapse control form one deliberate header. The #logoLink id
-   rule (layout.css) centers and shrinks it; the id-qualified selector here
-   wins, so the mark sits flush left. */
-.sidebar-brand-row {
+/* The head is one row: New chat, then the search glyph and the panel glyph,
+   the two glyphs outside New chat's tint. No brand: the address bar names
+   the product, and a mark that left with the open panel would look lost
+   beside the floating toggle. */
+.sidebar-head {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
   flex-shrink: 0;
-  padding: 0 2px 2px 6px;
   min-height: 34px;
 }
 
-.sidebar-brand-link,
-#logoLink.sidebar-brand-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  min-width: 0;
-  margin-bottom: 0;
-  text-decoration: none;
-  color: var(--ink);
+.sidebar-head > .sidebar-new-run {
+  flex: 1 1 auto;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .sidebar-brand-link:hover {
-    color: var(--ink);
-  }
-}
-
-.sidebar-brand-link .sidebar-brand-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-}
-
-.sidebar-brand-link .app-favicon {
-  height: 16px;
+/* The sidebar's least width (sidebar-resize.js) leaves the word its room; a
+   longer word or a larger type still ends inside the tint, not in the
+   glyphs. */
+.sidebar-head > .sidebar-new-run span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* One line under the account: the legal pages as quiet words on the left,
@@ -307,12 +292,12 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   color: inherit;
 }
 
-/* ---- One row, three entries -----------------------------------------------
-   New comparison, Models and Chats are the same component: a 16px glyph
-   centred in an 18px column, the label 9px after it in 14px/500, 36px tall
-   with 6/8px of padding, and the same 4px inset as the sections below, so
-   glyphs and words stand on two straight lines. Models adds its count as a
-   quiet second line in --ink-3. */
+/* ---- One row, two entries -------------------------------------------------
+   New chat and Models are the same component: a 16px glyph centred in an
+   18px column, the label 9px after it in 14px/500, 36px tall with 6/8px of
+   padding, and the same 4px inset as the sections below, so glyphs and
+   words stand on two straight lines. Models adds its count as a quiet
+   second line in --ink-3. */
 .sidebar-new-run {
   flex: 0 0 auto;
   width: auto;
@@ -359,118 +344,43 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   justify-self: center;
 }
 
-/* Bookmarks stays visible as the navigation label, with the search glyph
-   beside it; only clicking it (or Ctrl/Cmd+K, app-init.js) replaces the row
-   with the input. */
-.sidebar-bookmarks-head {
-  position: relative;
-  min-height: 36px;
-  margin-bottom: 5px;
-}
-
-.sidebar-bookmarks-head .sidebar-toggle-heading {
-  margin-bottom: 0 !important;
-}
-
-/* Models and Bookmarks are sibling navigation rows. Match their icon/text
-   columns and title typography even though Bookmarks also owns the search
-   overlay and collapse affordance. */
-.sidebar-bookmarks-head .sidebar-toggle-btn {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 9px;
-  min-height: 36px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: normal;
-  line-height: var(--line-height-tight);
-  text-transform: none;
-}
-
-/* The glyph and the word are cells of the row itself. */
-.sidebar-bookmarks-head .sidebar-heading-label {
-  display: contents;
-}
-
-.sidebar-bookmarks-head .sidebar-heading-label span {
-  color: var(--ink);
-  min-width: 0;
-  justify-self: start;
-  text-align: left;
-}
-
-.sidebar-bookmarks-head .sidebar-heading-label svg {
-  width: 16px;
-  height: 16px;
-  justify-self: center;
-  color: currentColor;
-}
-
-/* Keep the collapse affordance clickable while the full-width search overlay
-   covers the old button background. */
-.sidebar-bookmarks-head .sidebar-toggle-arrow {
-  position: relative;
-  left: 0.25px;
-  z-index: 2;
-  justify-self: end;
-  pointer-events: auto;
-}
-
-.sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible {
-  background: var(--hover);
-  color: var(--ink);
-}
-@media (hover: hover) and (pointer: fine) {
-  .sidebar-bookmarks-head .sidebar-toggle-btn:hover {
-    background: var(--hover);
-    color: var(--ink);
-  }
-}
-
-.bookmarks-section.is-locked .sidebar-toggle-btn {
-  color: var(--ink-3);
-  cursor: default;
-  opacity: 1;
-}
-
-.bookmarks-section.is-locked .sidebar-search-box {
-  display: none;
-}
-
+/* Search is a glyph in the head, the same square as the panel glyph and
+   close to it like a toolbar pair. Clicking it (or Ctrl/Cmd+K, app-init.js)
+   lays the field over the row. A guest has no chats to search:
+   body.is-guest is set before the first paint (app-bootstrap.js), so the
+   glyph never arrives late and never moves New chat's tint. */
 .sidebar-search-trigger {
-  position: absolute;
-  top: 50%;
-  right: 29px;
-  z-index: 3;
-  width: 28px;
-  height: 28px;
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  /* The head's gap of 6px separates New chat from the glyphs; the pair
+     itself stands 2px apart. */
+  margin-right: -4px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ink-3);
-  opacity: 0;
-  transform: translateY(-50%);
-  pointer-events: none;
+  color: var(--ink-2);
   cursor: pointer;
-  transition: opacity var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
+  transition: color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
 .sidebar-search-trigger svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
-/* Always there while the list is open: hidden until hover, nobody would find it. */
-.bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger {
-  opacity: 1;
-  pointer-events: auto;
+.sidebar-search-trigger:disabled {
+  cursor: default;
+}
+
+body.is-guest .sidebar-search-trigger,
+body.is-guest .sidebar-search-box {
+  display: none;
 }
 
 .sidebar-search-trigger:focus-visible {
@@ -478,37 +388,36 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   color: var(--ink);
 }
 @media (hover: hover) and (pointer: fine) {
-  .sidebar-search-trigger:hover {
+  .sidebar-search-trigger:not(:disabled):hover {
     background: var(--hover);
     color: var(--ink);
   }
 }
 
-.bookmarks-section .sidebar-bookmarks-head.is-searching .sidebar-search-trigger {
-  opacity: 0;
-  pointer-events: none;
-}
-
+/* The field takes the row's place up to the panel glyph, which stays: the
+   sidebar can still be closed while searching. Hidden, it is out of the
+   tab order too, and so is the row beneath it while it shows. */
 .sidebar-search-box {
+  --head-tools: 40px;
   position: absolute;
-  inset: -4px;
+  inset: 0 var(--head-tools) 0 0;
   margin: 0;
   display: flex;
   align-items: center;
   z-index: 1;
-  border-radius: var(--radius-sm);
-  background: var(--ground);
   opacity: 0;
+  visibility: hidden;
   transform: translateY(2px);
-  pointer-events: none;
-  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
+  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard),
+    visibility 0s var(--ease-linear) var(--dur-press);
 }
 
+/* The field's glyph and words stand on New chat's glyph and word. */
 .sidebar-search-icon {
   position: absolute;
   left: 11px;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: var(--ink-3);
   pointer-events: none;
 }
@@ -519,8 +428,8 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   background: var(--raise);
   color: var(--ink);
   border-radius: var(--radius-sm);
-  min-height: 32px;
-  padding: 7px 32px 7px 32px;
+  min-height: 36px;
+  padding: 7px 10px 7px 38px;
   font-size: var(--font-size-sm);
   transition: background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
 }
@@ -541,15 +450,19 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   box-shadow: inset 0 0 0 1px var(--field-focus-border), var(--field-focus-ring);
 }
 
-.sidebar-bookmarks-head.is-searching .sidebar-search-box {
+.sidebar-head.is-searching .sidebar-search-box {
   opacity: 1;
+  visibility: visible;
   transform: translateY(0);
-  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.sidebar-head.is-searching > :is(.sidebar-new-run, .sidebar-search-trigger) {
+  visibility: hidden;
 }
 
 /* Section headings shrink to quiet eyebrows — the list is the content. */
-.sidebar-static-heading,
-.sidebar-toggle-btn {
+.sidebar-static-heading {
   color: var(--ink);
 }
 
@@ -3709,6 +3622,8 @@ body:not(.claim-counts-visible) .consensus-answer-body .claim-badge {
   .quota-track i,
   .quota-ring-arc,
   .sidebar-new-run,
+  .sidebar-search-trigger,
+  .sidebar-search-box,
   .sidebar-toggle-square {
     transition: none;
   }
@@ -4203,21 +4118,6 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     outline: var(--focus-ring); outline-offset: -3px;
   }
 
-  /* The start screen names the product, the way the public header does;
-     in a thread the bar belongs to the answer's actions. */
-  .app-mobile-header .brand-float,
-  body:not(.is-hero) .app-mobile-header .brand-float { display: none; }
-  body.is-hero .app-mobile-header .brand-float {
-    display: inline-flex;
-    min-width: 0;
-    min-height: 44px;
-    padding-inline: 2px 6px;
-    border-radius: var(--radius-xs);
-  }
-  body.is-hero .app-mobile-header .brand-float:focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
-  /* layout.css drops the name below 641px; the bar has room for it. */
-  body.is-hero .app-mobile-header .brand-float-title { display: inline; }
-
   body:has(.watch-page:not([hidden])) .app-mobile-header .app-nav-float { display: flex; }
 
   /* The right group: New chat, then the answer's actions, bare like the
@@ -4323,11 +4223,6 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .app-mobile-header #authTopActions button { padding-inline: 6px; font-size: var(--font-size-xs); }
 }
 
-/* Beside Log in and Sign up the narrowest phones keep the mark, not the name. */
-@media (max-width: 359px) {
-  body.is-hero .app-mobile-header:has(#authTopActions:not([hidden])) .brand-float-title { display: none; }
-}
-
 /* --------------------------------------------------------------------------
    Figures that change while you watch keep their width
    A clock, a count or a score that ticks must not make its neighbours jump:
@@ -4390,8 +4285,9 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
    glyph sizes stay; only the hit areas and spacing change. */
 @media (max-width: 1099px) {
   .sidebar { padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
-  .sidebar-brand-row { min-height: 44px; }
+  .sidebar-head { min-height: 44px; }
   #sidebarToggleInner.sidebar-toggle-square,
+  .sidebar-search-trigger,
   .sidebar-settings #editSystemPromptBtn { width: 44px; height: 44px; }
   .sidebar-new-run { min-height: 44px; }
   .sidebar-footer-meta { min-height: 44px; padding-left: 6px; gap: 4px; }
@@ -4414,12 +4310,14 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
   }
 
-  /* Head: the mark and the panel glyph, nothing else. */
-  .sidebar-brand-row { min-height: 52px; padding: 0 0 0 10px; margin-bottom: 4px; }
-  .sidebar-brand-link .app-favicon { height: 20px; }
-  .sidebar-brand-link .sidebar-brand-title { font-size: var(--font-size-base); }
+  /* Head: New chat, then the two glyphs at a finger's size. */
+  .sidebar-head { min-height: 52px; margin-bottom: 4px; }
   #sidebarToggleInner.sidebar-toggle-square { color: var(--ink-2); border-radius: var(--radius-sm); }
   #sidebarToggleInner svg { width: 22px; height: 22px; }
+  .sidebar-search-trigger svg { width: 20px; height: 20px; }
+  .sidebar-search-box { --head-tools: 50px; }
+  .sidebar-search-icon { width: 18px; height: 18px; }
+  .sidebar-search-box input { min-height: 44px; padding-left: 42px; }
 
   /* Navigation rows: glyph + word, transparent at rest. */
   .sidebar .sidebar-new-run,
@@ -4464,31 +4362,14 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .sidebar .sidebar-model-chevron,
   .sidebar-pinned .sidebar-separator { display: none; }
 
-  /* Section label: a quiet word, not a control. The list runs out softly at
-     both ends instead of cutting a row in half; the extra bottom room lets
-     the last chat scroll clear of the fade. */
+  /* The list runs out softly at both ends instead of cutting a row in
+     half; the extra bottom room lets the last chat scroll clear of the
+     fade. */
   .sidebar > .sidebar-content {
-    margin-top: 0; padding: 0 0 24px;
+    margin-top: 10px; padding: 0 0 24px;
     -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 32px), transparent);
     mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 32px), transparent);
   }
-  .sidebar-bookmarks-head { min-height: 36px; margin: 18px 0 2px; }
-  .sidebar-bookmarks-head .sidebar-toggle-btn {
-    min-height: 36px; padding: 0 10px; background: transparent;
-    color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-medium);
-  }
-  .sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible { background: transparent; color: var(--ink-2); }
-  @media (hover: hover) and (pointer: fine) {
-    .sidebar-bookmarks-head .sidebar-toggle-btn:hover { background: transparent; color: var(--ink-2); }
-  }
-  .sidebar-bookmarks-head .sidebar-heading-label { display: block; text-align: left; }
-  .sidebar-bookmarks-head .sidebar-heading-label span { color: inherit; }
-  .sidebar-bookmarks-head .sidebar-heading-label svg { display: none; }
-  /* The arrow only speaks when the list is folded away. */
-  .bookmarks-section:not(.is-collapsed) .sidebar-bookmarks-head .sidebar-toggle-arrow { visibility: hidden; }
-  .sidebar-search-trigger { right: 2px; width: 40px; height: 36px; border-radius: var(--radius-xs); }
-  .sidebar-search-trigger svg { width: 17px; height: 17px; }
-  .sidebar-search-box { inset: 0 2px; }
 
   /* Chats: a title per row, the row's menu glyph quiet on the right. */
   .sidebar .bookmark {
@@ -4529,29 +4410,23 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .sidebar-footer-meta { padding-left: 10px; }
 }
 
-/* ---- Desktop head on one grid (2026-10-29) --------------------------------
-   Max: the head "sieht unpassig aus", its spacing unlike everything else.
-   Measured on consens.io: the mark at 18px, the row glyphs at 25, the
-   wordmark at 47, the row words at 51; on the right the panel glyph at 22,
-   New chat's tint at 17, the Chats row at 27 (the list's scrollbar room),
-   its arrow at 35, the search glyph at 63; rows in 500 where the chats are
-   400, and "Chats" a second navigation row with a bookmark glyph. Now the
-   drawer's language (above) on the desktop too, on one grid:
-   - a glyph column at 22px: the mark, the row glyphs (18px), the section
-     word, the group words and the chat titles start there;
-   - a word column at 50px: the wordmark and the row words;
-   - one right edge at 22px: the panel glyph, the search glyph, the arrow
-     and every tint (the list reaches into the scrollbar room it keeps,
+/* ---- Desktop head on one grid ---------------------------------------------
+   The drawer's language (above) on the desktop too. Head, rows and list
+   stand on one grid, so no part has an edge of its own:
+   - a glyph column at 22px: the row glyphs (18px), the group words and the
+     chat titles start there;
+   - a word column at 50px: the row words;
+   - one right edge at 22px: the panel glyph, the "+" of Projects and every
+     tint of the list (which reaches into the scrollbar room it keeps,
      --sidebar-gutter from sidebar-resize.js);
-   - steps of 4 and 8: head 40, 8, rows of 36, 16, the section word in 32. */
+   - steps of 4 and 8: the head 40 with New chat's row of 36 in it, 16, the
+     group words. */
 @media (min-width: 1100px) {
   .sidebar { gap: 0; }
 
-  /* Head: the mark in the glyph column, the wordmark in the word column. */
-  .sidebar-brand-row { min-height: 40px; padding: 0 3px 0 10px; margin-bottom: 8px; }
-  #logoLink.sidebar-brand-link { gap: 0; }
-  .sidebar-brand-link .app-favicon { width: 28px; height: 16px; }
-  .sidebar-brand-link .sidebar-brand-title { letter-spacing: -0.01em; }
+  /* Head: the panel glyph keeps the place the floating toggle hands over. */
+  .sidebar-head { min-height: 40px; padding-right: 3px; }
+  .sidebar-search-box { --head-tools: 43px; }
 
   /* Rows: glyph and word, regular like the chats, one inset. */
   .sidebar-new-run,
@@ -4567,26 +4442,9 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .sidebar .sidebar-section { padding-inline: 0; }
   .sidebar-pinned .sidebar-separator { display: none; }
 
-  /* Section word: quiet, not a control; the arrow only while folded away. */
   .sidebar > .sidebar-content {
     margin: 16px calc(-1 * var(--sidebar-gutter, 0px)) 0 0; padding: 0;
   }
-  .sidebar-bookmarks-head { min-height: 32px; margin: 0 0 2px; }
-  .sidebar-bookmarks-head .sidebar-toggle-btn {
-    grid-template-columns: minmax(0, 1fr) auto;
-    min-height: 32px; padding: 0 10px; background: transparent;
-    color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-medium);
-  }
-  .sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible { background: transparent; color: var(--ink); }
-  @media (hover: hover) and (pointer: fine) {
-    .sidebar-bookmarks-head .sidebar-toggle-btn:hover { background: transparent; color: var(--ink); }
-  }
-  .sidebar-bookmarks-head .sidebar-heading-label span { color: inherit; }
-  .sidebar-bookmarks-head .sidebar-heading-label svg { display: none; }
-  .bookmarks-section:not(.is-collapsed) .sidebar-bookmarks-head .sidebar-toggle-arrow { visibility: hidden; }
-  .sidebar-search-trigger { right: 2px; width: 32px; height: 32px; border-radius: var(--radius-xs); }
-  .sidebar-search-trigger svg { width: 16px; height: 16px; }
-  .sidebar-search-box { inset: 0; }
 
   /* The list: titles and group words on the glyph column. */
   .sidebar .bookmark { padding-left: 10px; }
@@ -4594,24 +4452,20 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
 }
 
 /* 44px to the finger (Apple-Audit F5) for what is smaller in the sidebar,
-   in the drawer and beside the page (a tablet on its side): the brand, the
-   Chats heading, the search glyph, the initial and the address under it.
-   The rows keep their drawing. */
+   in the drawer and beside the page (a tablet on its side): the search
+   glyph, the initial and the address under it. The rows keep their
+   drawing. */
 @media (pointer: coarse) {
-  #logoLink.sidebar-brand-link,
-  .sidebar-bookmarks-head .sidebar-toggle-btn,
   .sidebar .email-icon { position: relative; }
-  #logoLink.sidebar-brand-link::after,
-  .sidebar-bookmarks-head .sidebar-toggle-btn::after,
   .sidebar-search-trigger::after,
   .sidebar .email-icon::after {
     content: "";
     position: absolute;
     inset: var(--hit-slop);
   }
-  /* The first chat starts 2px under the heading and takes its own taps;
-     the heading reaches into the free room above it instead. */
-  .sidebar-bookmarks-head .sidebar-toggle-btn::after { top: calc(2 * var(--hit-slop)); }
+  /* The panel glyph stands 2px beside the search glyph and takes its own
+     taps. */
+  .sidebar-search-trigger::after { right: 0; }
   /* The name needs nothing here: its hit area is the whole account row
      (layout.css, .sidebar-account), and a Free plan's "Early access" link
      sits above it with its own taps. */

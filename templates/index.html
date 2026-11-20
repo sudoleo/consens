@@ -110,10 +110,6 @@
     <button id="toggleSidebarButton" class="sidebar-toggle" type="button" aria-label="Open sidebar" aria-controls="appSidebar" aria-expanded="false" title="Open sidebar">
       <svg class="sidebar-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="4"></rect><path d="M9.5 4.5v15"></path></svg>
     </button>
-    <a href="/" class="brand-float" aria-label="consens.io home">
-      {{ brand_mark("app-favicon") }}
-      <span class="brand-float-title">consens.io</span>
-    </a>
   </div>
   <!-- Oben rechts: der Schalter fuer einen temporaeren Chat und, nur
        ausgeloggt, Login + Registrieren. Die Gruppe ist fixiert und weicht den
@@ -165,27 +161,40 @@
   </div>
   </header>
   <nav id="appSidebar" class="sidebar" aria-label="Chats">
-    <!-- Kompakter Sidebar-Kopf: Wortmarke links, Collapse-Aktion rechts. Der
-         schwebende Toggle erscheint weiterhin nur bei geschlossener Sidebar. -->
-    <div class="sidebar-brand-row">
-      <a href="/" id="logoLink" aria-label="consens.io home" class="sidebar-brand-link">
-        {{ brand_mark("app-favicon", fit="xMinYMid meet") }}
-        <span class="sidebar-brand-title">consens.io</span>
-      </a>
+    <!-- Der Kopf ist eine Zeile: New chat, rechts die Suche und das
+         Panel-Glyph. Keine Marke: die Adresszeile nennt sie schon. Die Suche
+         legt ihr Feld ueber die Zeile bis vor das Panel-Glyph (app-init.js),
+         damit die Leiste sich auch waehrend der Suche schliessen laesst.
+         Ohne Konto gibt es nichts zu durchsuchen: der Suchknopf bleibt
+         deaktiviert und unsichtbar (firebase.js setBookmarksAccess). -->
+    <div class="sidebar-head">
+      <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path>
+          <path d="M17.4 3.6a1.8 1.8 0 0 1 2.6 2.6L11.6 14.6 8 16l1.4-3.6Z"></path>
+        </svg>
+        <span>New chat</span>
+      </button>
+      <button id="bookmarkSearchTrigger" class="sidebar-search-trigger" type="button"
+              aria-label="Search chats" aria-expanded="false" aria-controls="chatSearch"
+              aria-disabled="true" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.8"></circle>
+          <path d="M15.8 15.8l4.7 4.7"></path>
+        </svg>
+      </button>
       <button id="sidebarToggleInner" class="sidebar-toggle sidebar-toggle-square" type="button"
         aria-label="Collapse sidebar" aria-controls="appSidebar" aria-expanded="true" title="Collapse sidebar">
         <svg class="sidebar-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="4"></rect><path d="M9.5 4.5v15"></path></svg>
       </button>
+      <div class="sidebar-search-box">
+        <svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+        </svg>
+        <input type="search" id="chatSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats" disabled>
+      </div>
     </div>
-    <!-- Neuer Vergleich: eigenständiges Navigationselement; leert den Lauf
-         und setzt den Hero-Zustand zurück. -->
-    <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new chat">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path>
-        <path d="M17.4 3.6a1.8 1.8 0 0 1 2.6 2.6L11.6 14.6 8 16l1.4-3.6Z"></path>
-      </svg>
-      <span>New chat</span>
-    </button>
     <!-- Pinned: model controls — does not scroll with bookmarks.
          Usage lebt im Kontingent-Panel über dem Account-Footer. -->
     <div class="sidebar-pinned">
@@ -233,37 +242,12 @@
 
     </div>
 
-    <!-- Scrollable: Bookmarks with search -->
+    <!-- Scrollable: the chat list -->
     <div class="sidebar-content">
       <div class="sidebar-section bookmarks-section is-locked">
-        <div class="sidebar-bookmarks-head">
-          <h2 class="sidebar-toggle-heading">
-            <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" aria-expanded="true" aria-controls="bookmarksContainer" aria-disabled="true" disabled data-tooltip="All your chats if you are logged in.">
-              <span class="sidebar-heading-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <span>Chats</span>
-              </span>
-              <span class="sidebar-toggle-arrow chevron" aria-hidden="true"></span>
-            </button>
-          </h2>
-          <button id="bookmarkSearchTrigger" class="sidebar-search-trigger" type="button"
-                  aria-label="Search chats" aria-expanded="false" aria-controls="chatSearch"
-                  aria-disabled="true" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
-            </svg>
-          </button>
-          <div class="sidebar-search-box">
-            <svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
-            </svg>
-            <input type="search" id="chatSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats" disabled>
-          </div>
-        </div>
+        <!-- Die Liste traegt ihre Gruppen selbst (Projects, Today, ...); die
+             Ueberschrift ordnet sie nur fuer Screenreader ein. -->
+        <h2 class="visually-hidden">Chats</h2>
         <div id="bookmarksContainer"></div>
       </div>
     </div>

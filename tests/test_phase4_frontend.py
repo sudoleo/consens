@@ -26,7 +26,7 @@ def section(text: str, start: str, end: str) -> str:
 
 def test_usage_countdown_tracks_utc_midnight_and_refreshes_server_state():
     app_init = read("static/js/app-init.js")
-    countdown = section(app_init, "function utcDayKey", 'document.getElementById("logoLink")')
+    countdown = section(app_init, "function utcDayKey", "// Demo-Chip automatisch")
 
     assert "getUTCFullYear()" in countdown
     assert "Date.UTC(" in countdown

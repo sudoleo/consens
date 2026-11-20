@@ -23,17 +23,16 @@ const APP_SCRIPTS = bundles.groups
 const APP_MARKUP = `
   <button id="toggleSidebarButton" class="sidebar-toggle" type="button"></button>
   <aside id="appSidebar" class="sidebar">
-    <button id="sidebarToggleInner" class="sidebar-toggle" type="button"></button>
+    <div class="sidebar-head">
+      <button id="bookmarkSearchTrigger" type="button" aria-expanded="false"></button>
+      <button id="sidebarToggleInner" class="sidebar-toggle" type="button"></button>
+      <div class="sidebar-search-box"><input id="chatSearch" type="search"></div>
+    </div>
     <div class="bookmarks-section">
-      <div class="sidebar-bookmarks-head">
-        <button id="bookmarksToggle" type="button" aria-expanded="true"></button>
-        <button id="bookmarkSearchTrigger" type="button" aria-expanded="false"></button>
-        <input id="chatSearch" type="search">
-      </div>
       <div id="bookmarksContainer"></div>
     </div>
   </aside>
-  <div class="container"><a id="logoLink" href="#home"></a></div>
+  <div class="container"></div>
   <button class="theme-toggle" type="button"></button>
   <button id="reasoningToggle" type="button"></button>
   <button id="feedbackButton" type="button"></button>
@@ -81,13 +80,14 @@ describe("Escape in the sidebar drawer", () => {
     const search = document.getElementById("chatSearch");
     search.focus();
     search.value = "budget";
-    expect(document.querySelector(".sidebar-bookmarks-head").classList.contains("is-searching")).toBe(true);
+    expect(document.querySelector(".sidebar-head").classList.contains("is-searching")).toBe(true);
 
     escape(window, search);
     expect(sidebar.classList.contains("active")).toBe(true);
     expect(search.value).toBe("");
-    expect(document.querySelector(".sidebar-bookmarks-head").classList.contains("is-searching")).toBe(false);
-    expect(document.activeElement.id).toBe("bookmarksToggle");
+    expect(document.querySelector(".sidebar-head").classList.contains("is-searching")).toBe(false);
+    // Back on the glyph that opened it.
+    expect(document.activeElement.id).toBe("bookmarkSearchTrigger");
 
     escape(window, document.activeElement);
     expect(sidebar.classList.contains("active")).toBe(false);

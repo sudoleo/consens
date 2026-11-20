@@ -1382,9 +1382,10 @@
           window.App.chatList?.sync?.();
         };
 
-        const bookmarkSearchHead = document.querySelector(".sidebar-bookmarks-head");
+        const bookmarkSearchHead = document.querySelector(".sidebar-head");
         const bookmarkSearchTrigger = document.getElementById("bookmarkSearchTrigger");
         const bookmarkSearchInput = document.getElementById("chatSearch");
+        const bookmarkSearchBox = bookmarkSearchInput?.closest(".sidebar-search-box");
 
         function setBookmarkSearchOpen(isOpen, { focus = false, clear = false } = {}) {
           if (!bookmarkSearchHead || !bookmarkSearchTrigger || !bookmarkSearchInput) return;
@@ -1403,8 +1404,7 @@
         });
 
         // Ctrl+K (Cmd+K on a Mac) finds a chat from anywhere, as in other chat
-        // apps: a closed sidebar opens, a folded list unfolds, and the
-        // search field takes the keys. On a Mac only Cmd: Ctrl+K deletes to
+        // apps: a closed sidebar opens and the search field takes the keys. On a Mac only Cmd: Ctrl+K deletes to
         // the end of the line in every text field there, and was taken
         // (in the rename field, leaving it then saved half a name).
         const onApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
@@ -1422,7 +1422,6 @@
             ? sidebar?.classList.contains("active")
             : !sidebar?.classList.contains("collapsed");
           if (sidebar && !sidebarOpen) handleSidebarToggle();
-          if (document.querySelector(".bookmarks-section")?.classList.contains("is-collapsed")) window.toggleBookmarks?.();
           setBookmarkSearchOpen(true, { focus: true });
         });
 
@@ -1439,43 +1438,19 @@
           if (event.key !== "Escape") return;
           event.preventDefault();
           setBookmarkSearchOpen(false, { clear: true });
-          document.getElementById("bookmarksToggle")?.focus();
+          bookmarkSearchTrigger?.focus();
         });
 
-        bookmarkSearchHead?.addEventListener("focusout", function () {
+        // The field lies over the head's row: left empty, it gives the row
+        // back as soon as the focus is anywhere else, the panel glyph
+        // beside it included.
+        bookmarkSearchBox?.addEventListener("focusout", function () {
           setTimeout(() => {
-            if (!bookmarkSearchHead.contains(document.activeElement) && !bookmarkSearchInput?.value.trim()) {
+            if (!bookmarkSearchBox.contains(document.activeElement) && !bookmarkSearchInput?.value.trim()) {
               setBookmarkSearchOpen(false);
             }
           }, 0);
         });
-
-        window.toggleBookmarks = function () {
-          const section = document.querySelector(".bookmarks-section");
-          const container = document.getElementById("bookmarksContainer");
-          const toggle = document.getElementById("bookmarksToggle");
-          if (!section || !container || !toggle) return;
-
-          const isCollapsed = section.classList.toggle("is-collapsed");
-          container.classList.toggle("hidden", isCollapsed);
-          toggle.setAttribute("aria-expanded", String(!isCollapsed));
-          if (isCollapsed) setBookmarkSearchOpen(false, { clear: true });
-          writeStored("bookmarks_collapsed", String(isCollapsed));
-        };
-
-        function restoreBookmarksState() {
-          const section = document.querySelector(".bookmarks-section");
-          const container = document.getElementById("bookmarksContainer");
-          const toggle = document.getElementById("bookmarksToggle");
-          if (!section || !container || !toggle) return;
-
-          const isCollapsed = readStored("bookmarks_collapsed") === "true";
-          section.classList.toggle("is-collapsed", isCollapsed);
-          container.classList.toggle("hidden", isCollapsed);
-          toggle.setAttribute("aria-expanded", String(!isCollapsed));
-        }
-
-        restoreBookmarksState();
 
         // Custom-Model-Picker (eigene Listbox ueber den nativen <select>) ist
         // nach static/js/model-picker.js ausgelagert: getModelPickerState,
@@ -1826,12 +1801,6 @@
         }
         document.addEventListener("visibilitychange", syncCountdownTimer);
         syncCountdownTimer();
-
-        document.getElementById("logoLink").addEventListener("click", () => {
-          trackAppEvent("app_logo_home_click");
-          // Raeumt nur einen alten Merker weg: visitedLanding liest keine Seite.
-          writeStored("visitedLanding", null);
-        });
 
         // Demo-Chip automatisch beim ersten echten Besuch (wenn noch nie benutzt)
         if (!readStored("marketingPopupShown") || !readStored("demoChipDismissed")) {

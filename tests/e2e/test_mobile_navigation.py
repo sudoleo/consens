@@ -93,7 +93,6 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
             expect(island).to_have_css('box-shadow', 'none')
         expect(menu).to_have_css('border-top-left-radius', '50%')
         expect(page.locator('#mobileConversationActions')).to_have_css('border-top-left-radius', '999px')
-        expect(header.locator('.brand-float')).to_be_hidden()
         expect(header.locator('#mobileNewRunButton')).to_be_visible()
         expect(header.locator('#mobileNewRunButton')).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         assert header.locator('#mobileNewRunButton svg').bounding_box()['width']>=20
@@ -639,15 +638,14 @@ def test_mobile_composer_rises_with_a_known_keyboard_before_safari_reports_it(br
 
 
 @pytest.mark.parametrize('width', [320, 375, 390])
-def test_mobile_header_names_the_product_on_the_start_screen(browser, phase4_server, width):
+def test_mobile_header_is_two_bare_glyphs_on_the_start_screen(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server, before_goto=with_agent_access)
     try:
         page.set_viewport_size({'width': width, 'height': 820})
         header = page.locator('.app-mobile-header')
-        brand = header.locator('.brand-float')
         expect(page.locator('body')).to_have_class(re.compile(r'\bis-hero\b'))
-        expect(brand).to_be_visible()
-        expect(brand.locator('.brand-float-title')).to_be_visible()
+        # No brand in the app's chrome: the address bar names the product.
+        expect(page.locator('.brand-float, .sidebar-brand-link')).to_have_count(0)
         # Nothing scrolls beneath the islands on an empty start screen, so
         # there is no fade; one icon ink for menu and new chat.
         expect(header).not_to_have_class(re.compile(r'\bis-scrolled\b'))
@@ -655,13 +653,10 @@ def test_mobile_header_names_the_product_on_the_start_screen(browser, phase4_ser
         assert header.locator('#mobileNewRunButton').evaluate('el => getComputedStyle(el).color') == \
             header.locator('#toggleSidebarButton').evaluate('el => getComputedStyle(el).color')
         menu, new_chat = (header.locator(sel).bounding_box() for sel in ('#toggleSidebarButton', '#mobileNewRunButton'))
-        mark = brand.bounding_box()
-        assert menu['x'] + menu['width'] <= mark['x'] and mark['x'] + mark['width'] <= new_chat['x']
-        assert mark['height'] >= 44
+        assert menu['x'] + menu['width'] <= new_chat['x']
         reader_screenshot(page, f'mobile-header-start-{width}')
 
         seed_long_answer(page)
-        expect(brand).to_be_hidden()
         page.evaluate('window.scrollTo(0, 200)')
         expect(header).to_have_class(re.compile(r'\bis-scrolled\b'))
         page.evaluate('window.scrollTo(0, 0)')
@@ -671,20 +666,14 @@ def test_mobile_header_names_the_product_on_the_start_screen(browser, phase4_ser
 
 
 @pytest.mark.parametrize('width', [320, 390])
-def test_guest_start_header_keeps_the_mark_beside_the_auth_buttons(browser, phase4_server, width):
+def test_guest_start_header_has_room_for_the_auth_buttons(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None)
     try:
         page.set_viewport_size({'width': width, 'height': 820})
-        brand = page.locator('.app-mobile-header .brand-float')
         expect(page.locator('#authTopLoginBtn')).to_be_visible()
-        expect(brand).to_be_visible()
-        title = brand.locator('.brand-float-title')
-        if width < 360:
-            expect(title).to_be_hidden()
-        else:
-            expect(title).to_be_visible()
-        mark = brand.bounding_box()
-        assert mark['x'] + mark['width'] <= page.locator('#authTopLoginBtn').bounding_box()['x']
+        expect(page.locator('#authTopSignupBtn')).to_be_visible()
+        menu = page.locator('#toggleSidebarButton').bounding_box()
+        assert menu['x'] + menu['width'] <= page.locator('#authTopLoginBtn').bounding_box()['x']
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     finally:
         context.close()

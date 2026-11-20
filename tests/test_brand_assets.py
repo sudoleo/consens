@@ -113,8 +113,7 @@ def test_the_mark_beside_the_wordmark_is_inline():
         text = read(template)
         assert "brand_mark(" in text, template
         assert "favicon.png" not in text, template
-    for sheet in ("static/css/layout.css", "static/css/public-pages.css", "static/css/landing.css",
-                  "static/css/auth-modal.css"):
+    for sheet in ("static/css/public-pages.css", "static/css/landing.css", "static/css/auth-modal.css"):
         css = re.sub(r"/\*.*?\*/", "", read(sheet), flags=re.S)
         rules = re.findall(r"([^{}]*(?:app-favicon|auth-mark|brand-mark)[^{}]*)\{([^}]*)\}", css)
         assert rules, sheet

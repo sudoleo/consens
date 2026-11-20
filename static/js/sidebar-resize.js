@@ -18,7 +18,9 @@
   const App = window.App = window.App || {};
   const STORAGE_KEY = 'sidebar_width';
   const DEFAULT_WIDTH = 260;
-  const MIN_WIDTH = 200;
+  // The head is one row (New chat, search, panel glyph): narrower than this
+  // the German "Neuer Chat" no longer fits beside the two glyphs.
+  const MIN_WIDTH = 230;
   const MAX_WIDTH = 480;
   // The reading column keeps at least 60 % of the window.
   const MAX_SHARE = 0.4;

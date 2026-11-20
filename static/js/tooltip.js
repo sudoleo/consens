@@ -7,7 +7,10 @@
 //
 //   - pointer: after a short rest (500 ms; at once when moving on from one
 //     mark to the next), in the app's material, beside the mark;
-//   - keyboard: the same line when the mark gets focus;
+//   - keyboard: the same line when a key brings the focus to the mark. A
+//     focus the app moves after a tap or a click (the open drawer's first
+//     control) is nobody reading by keys, and under a finger nothing would
+//     take the line away again;
 //   - touch: a tap on a mark that does nothing else (a model logo, a token
 //     count, a status) shows it for a moment. A control keeps its tap; what
 //     its tooltip says is written out where it leads.
@@ -43,6 +46,7 @@
   let timer = 0;
   let hideTimer = 0;
   let lastHiddenAt = 0;
+  let keys = false;       // the last input was a key, not a pointer
 
   function ensure() {
     if (tip?.isConnected) return tip;
@@ -197,7 +201,7 @@
 
   function onFocusIn(event) {
     const element = findTarget(event.target);
-    if (!element || element !== event.target) return;
+    if (!element || element !== event.target || !keys) return;
     let keyboard = false;
     try { keyboard = element.matches(":focus-visible"); } catch (_) { keyboard = false; }
     if (!keyboard) return;
@@ -224,9 +228,15 @@
     document.addEventListener("pointerout", onPointerOut);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", event => { if (event.target === target) hide(); });
-    document.addEventListener("pointerdown", event => { if (event.pointerType !== "touch") hide(); }, true);
+    document.addEventListener("pointerdown", event => {
+      keys = false;
+      if (event.pointerType !== "touch") hide();
+    }, true);
     document.addEventListener("pointerup", onPointerUp);
-    document.addEventListener("keydown", event => { if (event.key === "Escape") hide(); }, true);
+    document.addEventListener("keydown", event => {
+      keys = true;
+      if (event.key === "Escape") hide();
+    }, true);
     window.addEventListener("scroll", hide, true);
     window.addEventListener("blur", hide);
   }

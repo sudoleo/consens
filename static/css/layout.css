@@ -53,14 +53,13 @@ body {
 
 /* --------------------------------------------------------------------------
    Kopflose App: schwebende Navigation statt Topbar.
-   .app-nav-float = Sidebar-Toggle + Mini-Brand oben links (fixed).
-   Das Brand-Element erscheint nur bei geschlossener Sidebar; ist die Sidebar
-   offen, zeigt .sidebar-brand-row Logo + Namen im Sidebar-Kopf.
+   .app-nav-float = Sidebar-Toggle oben links (fixed), ohne Marke: die
+   Adresszeile nennt das Produkt.
    -------------------------------------------------------------------------- */
 .app-nav-float {
   position: fixed;
   /* 16px: Button-Mitte (16 + 34/2 = 33px) liegt auf der Mitte der
-     Sidebar-Brand-Zeile (12px Sidebar-Padding + 4px Brand-Padding + 34/2). */
+     Sidebar-Kopfzeile (.sidebar-head). */
   top: 16px;
   /* Offene Sidebar (Desktop): Toggle sitzt in ihrer rechten oberen Ecke
      (Sidebar-Breite − 34px Button − 12px Rand). Eingeklappt: links oben. */
@@ -85,15 +84,10 @@ body:has(.sidebar.collapsed) .app-nav-float {
   body:has(.sidebar.collapsed) .app-nav-float {
     left: 12px;
   }
-
-  .brand-float,
-  body:has(.sidebar.collapsed) .brand-float {
-    display: none;
-  }
 }
 
 /* Scroll edge on a wide screen: with the sidebar folded, the
-   floating toggle and brand sit over the thread, and an Agent chat never
+   floating toggle sits over the thread, and an Agent chat never
    hides them while reading (initReadingChrome follows the Consensus answer
    only), so the answer ran through the logo. Once the page has moved beneath
    them (.app-mobile-header.is-scrolled, mobile-header.js), the phone bar's
@@ -148,70 +142,6 @@ body:has(.sidebar.collapsed) .app-nav-float {
   .view-switch {
     transition-duration: 0s !important;
   }
-}
-
-.brand-float {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  color: var(--text-color);
-}
-
-body:has(.sidebar.collapsed) .brand-float {
-  display: inline-flex;
-}
-
-/* Desktop: there is only ever one logo. Opening, the
-   floating mark fades out at once, before the panel brings its own; closing,
-   it fades in once the panel's mark has slid out of view, so the two never
-   stand side by side. It stays laid out, invisible, to fade at all. */
-@media (min-width: 1100px) {
-  .brand-float {
-    display: inline-flex;
-    opacity: 0;
-    visibility: hidden;
-    /* Gone within the first frames, before the panel's own mark reaches the
-       screen edge (about 55 ms into the slide). */
-    transition: opacity calc(var(--dur-press) / 2) var(--ease-linear), visibility 0s var(--ease-linear) calc(var(--dur-press) / 2);
-  }
-
-  body:has(.sidebar.collapsed) .brand-float {
-    opacity: 1;
-    visibility: visible;
-    transition: opacity var(--dur-state) var(--ease-out) calc(var(--dur-layer) / 2), visibility 0s var(--ease-linear) 0s;
-  }
-}
-
-/* Offene Overlay-Sidebar (mobil): Brand ausblenden, der Sidebar-Kopf zeigt es. */
-body:has(.sidebar.active) .brand-float {
-  display: none;
-}
-
-.app-favicon {
-  height: 22px;
-  width: auto;
-  aspect-ratio: 279 / 200;
-  display: block;
-  flex: none;
-}
-
-.brand-float-title,
-.sidebar-brand-title {
-  color: var(--text-color);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--line-height-solid);
-  white-space: nowrap;
-  font-feature-settings: "kern" 1;
-}
-
-#logoLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
 }
 
 /* Die eine Pro-Kennzeichnung (#proBadge im Kontingent-Panel,
@@ -650,18 +580,6 @@ body:has(.watch-page:not([hidden])) .temporary-chat-button,
   overscroll-behavior: contain;
 }
 
-/* Bündig mit der Bookmarks-Liste: kein Extra-Margin (die Section bringt
-   bereits 4px Padding mit), Input-Padding = Bookmark-Padding (8px), damit
-   Placeholder-Text und Bookmark-Text auf einer Linie liegen. */
-.sidebar-search-box {
-  margin: 0 0 8px;
-}
-
-/* Eingeklappte Bookmarks: das Suchfeld gehört zur Liste und verschwindet mit. */
-.bookmarks-section.is-collapsed .sidebar-search-box {
-  display: none;
-}
-
 .sidebar-search-box input {
   width: 100%;
   box-sizing: border-box;
@@ -982,71 +900,9 @@ body:has(.watch-page:not([hidden])) .temporary-chat-button,
   font-weight: var(--font-weight-bold);
 }
 
-/* Geoeffnete Sections: etwas Abstand zwischen Heading und Inhalt */
-.sidebar-section:not(.is-collapsed) h2 {
+/* Etwas Abstand zwischen Heading und Inhalt */
+.sidebar-section h2 {
   margin-bottom: 8px;
-}
-
-.sidebar-section .sidebar-toggle-heading {
-  padding: 0;
-}
-
-.sidebar-toggle-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--sidebar-text-muted);
-  font: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-  transition: color var(--dur-press) var(--ease-standard), opacity var(--dur-press) var(--ease-standard);
-}
-
-.sidebar-heading-label {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  gap: 5px;
-}
-
-.sidebar-heading-label svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-  color: color-mix(in srgb, var(--sidebar-text-muted) 82%, var(--text-color));
-}
-
-.sidebar-toggle-btn:focus-visible {
-  color: var(--accent);
-}
-
-/* The chevron of foundation.css: down while the list is open, right when
-   it is folded; its tone comes from the colour, not from opacity. */
-.sidebar-toggle-arrow {
-  color: var(--ink-3);
-  font-size: var(--font-size-sm);
-  transition: transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-.sidebar-toggle-btn:focus-visible .sidebar-toggle-arrow {
-  color: var(--ink);
-}
-@media (hover: hover) and (pointer: fine) {
-  .sidebar-toggle-btn:hover .sidebar-toggle-arrow {
-    color: var(--ink);
-  }
-}
-
-/* Collapsed state */
-.sidebar-section.is-collapsed .sidebar-toggle-arrow {
-  --chevron-turn: -90deg;
 }
 
 /* Commit + GitHub-Mark als ein Ziel. Die Mark ist bewusst winzig und traegt
@@ -1593,11 +1449,6 @@ body:has(.watch-page:not([hidden])) .temporary-chat-button,
 }
 
 @media (max-width: 1099px) {
-  .brand-float,
-  body:has(.sidebar.collapsed) .brand-float {
-    display: none;
-  }
-
   /* Während das mobile Navigationspanel offen ist, gehören die fixierten
      View-/Auth-Aktionen zur verdeckten Seite und dürfen den Sidebar-Kopf
      nicht überlagern. Der Burger bleibt als Close-Aktion sichtbar. */
@@ -1655,14 +1506,6 @@ body:has(.watch-page:not([hidden])) .temporary-chat-button,
 @media (max-width: 640px) {
   body {
     padding-inline: max(6px, env(safe-area-inset-left, 0px)) max(6px, env(safe-area-inset-right, 0px));
-  }
-
-  .brand-float-title {
-    display: none;
-  }
-
-  .app-favicon {
-    height: 20px;
   }
 
   .login-text {

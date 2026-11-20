@@ -25,11 +25,6 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn("consens.io", response.text)
         self.assertNotEqual(str(response.url.path), "/app")
 
-    def test_app_logo_links_to_landing_page(self):
-        template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('<a href="/" id="logoLink"', template)
-        self.assertIn('id="logoLink" aria-label="consens.io home"', template)
-
     def test_robots_txt_points_to_sitemap(self):
         content = robots_txt()
 

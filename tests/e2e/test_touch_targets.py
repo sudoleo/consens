@@ -104,7 +104,8 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
         # The address takes the room of the plan line under it (a Free plan's
         # "Early access" link there keeps its own taps; the initial beside
         # them opens the same menu).
-        for selector in ("#logoLink", "#bookmarksToggle", "#emailIcon", "#accountIdentity"):
+        for selector in ("#newRunButton", "#bookmarkSearchTrigger", "#sidebarToggleInner", "#emailIcon",
+                         "#accountIdentity"):
             assert_tappable(page, selector)
         page.locator("#sidebarToggleInner").tap()
 

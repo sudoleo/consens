@@ -15,10 +15,9 @@ import { bootApp, settle, templateSlice } from "./helpers/appBoot.mjs";
 const BODY = `
   <button id="toggleSidebarButton" class="sidebar-toggle" type="button"></button>
   <aside class="sidebar">
-    <div class="bookmarks-section"><button id="bookmarksToggle" type="button"></button><div id="bookmarksContainer"></div></div>
+    <div class="bookmarks-section"><div id="bookmarksContainer"></div></div>
     <button type="button" id="feedbackButton" aria-label="Send feedback">Feedback</button>
   </aside>
-  <a id="logoLink" href="#home"></a>
   <input id="reasoningToggle" type="checkbox">
   <textarea id="questionInput"></textarea>
   <button id="sendButton" type="button"></button>

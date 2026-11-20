@@ -263,16 +263,10 @@ function isCurrentAuthenticatedUser(uid, generation) {
 
 function setBookmarksAccess(isLoggedIn) {
   const section = document.querySelector(".bookmarks-section");
-  const toggle = document.getElementById("bookmarksToggle");
-  const searchHead = document.querySelector(".sidebar-bookmarks-head");
+  const searchHead = document.querySelector(".sidebar-head");
   const searchTrigger = document.getElementById("bookmarkSearchTrigger");
   const search = document.getElementById("chatSearch");
   section?.classList.toggle("is-locked", !isLoggedIn);
-  if (toggle) {
-    toggle.disabled = !isLoggedIn;
-    toggle.setAttribute("aria-disabled", String(!isLoggedIn));
-    toggle.title = isLoggedIn ? "Show or hide your chats" : "Log in to keep your chats";
-  }
   if (searchTrigger) {
     searchTrigger.disabled = !isLoggedIn;
     searchTrigger.setAttribute("aria-disabled", String(!isLoggedIn));

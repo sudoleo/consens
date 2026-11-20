@@ -32,9 +32,8 @@ function setHidden(window, state, hidden) {
 describe("allowance countdown", () => {
   const BODY = `
     <button id="toggleSidebarButton" class="sidebar-toggle" type="button"></button>
-    <aside class="sidebar"><div class="bookmarks-section"><button id="bookmarksToggle" type="button"></button><div id="bookmarksContainer"></div></div></aside>
-    <a id="logoLink" href="#home"></a>
-    <input id="reasoningToggle" type="checkbox">
+    <aside class="sidebar"><div class="bookmarks-section"><div id="bookmarksContainer"></div></div></aside>
+      <input id="reasoningToggle" type="checkbox">
     <textarea id="questionInput"></textarea>
     <button id="sendButton" type="button"></button>
     <input id="openrouterKey">

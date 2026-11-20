@@ -649,8 +649,8 @@ Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
 hat eine Zeichnung, `static/brand/mark.svg` (Regeln in `docs/brand.md`): Neben
 der Wortmarke steht sie als Inline-SVG aus dem Makro `brand_mark`
 (`templates/partials/brand.html`, Farbe des Wortes über `currentColor`; Kopf
-der öffentlichen Seiten, `.app-favicon` in Kopf und Sidebar von `/app`,
-`.auth-mark` im Login-Dialog), in Reihen aus Anbieter-Icons bleibt sie
+der öffentlichen Seiten, `.auth-mark` im Login-Dialog; die Leisten von `/app`
+tragen keine Marke), in Reihen aus Anbieter-Icons bleibt sie
 `static/favicon.png`. Tab-, Homescreen- und Such-Icons bindet jede Seite über
 `templates/partials/head_icons.html` ein; alle Icon-Dateien schreibt
 `scripts/render_brand_assets.py` aus der Zeichnung (`--check` meldet
@@ -1458,8 +1458,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Reduzierte Bewegung: sofort.
 - **`tooltip.js`** (`window.App.tooltip`, `init()` ruft `app-init.js` als
   Letztes) — der eine Tooltip (`.global-tooltip`, `role=tooltip`) für `title`
-  und `data-tooltip`: Zeiger nach 500 ms (beim Weiterziehen sofort), Tastatur-
-  Fokus, Tipp auf eine Marke ohne eigene Aktion; das `title`-Attribut wird nur
+  und `data-tooltip`: Zeiger nach 500 ms (beim Weiterziehen sofort), Fokus,
+  den eine Taste bewegt hat (ein Fokus, den die App nach Tipp oder Klick
+  selbst setzt, etwa auf das Panel-Glyph des geöffneten Menüs, zeigt keinen:
+  unter dem Finger blieb „Collapse sidebar“ sonst stehen), Tipp auf eine Marke
+  ohne eigene Aktion; das `title`-Attribut wird nur
   während des Hoverns geparkt (`data-tooltip-title`), damit der Browser keinen
   zweiten zeichnet. Wiederholt ein Tooltip nur den sichtbaren Text, erscheint
   er nicht; Ausnahme `data-tooltip-overflow` (seit 2026-10-22, Chat-Titel der
@@ -1727,16 +1730,36 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Scroll-Padding verlieren. Der
   Zusatzabstand vor `.sidebar-pinned` ist auf 8 px reduziert (plus 10 px
   Container-Gap), damit `New comparison → Models` enger bleibt. Seit
-  2026-10-20 (Apple-Audit G2) sind `#newRunButton`, `#sidebarModelPicker` und
-  `#bookmarksToggle` EIN Zeilenbauteil: Grid `18px minmax(0, 1fr) auto`,
+  2026-10-20 (Apple-Audit G2) sind `#newRunButton` und `#sidebarModelPicker`
+  EIN Zeilenbauteil: Grid `18px minmax(0, 1fr) auto`,
   16-px-Glyphe mittig in der 18-px-Spalte, 9 px Abstand, Label 14 px/500,
   `min-height: 36px`, `padding: 6px 8px`, derselbe 4-px-Einzug wie die
   Sektionen (Glyphen bei x = 24, Wörter bei x = 51); Models trägt die Anzahl
   als zweite Zeile in `--ink-3` (12 px). New comparison ist in Ruhe transparent
   und auf dem leeren Start als „hier bist du“ `--selected` getönt. In der
   Schublade (≤1099 px) verlieren die Sektionen ihren 4-px-Einzug, damit Models
-  und Chat-Titel bündig mit New chat stehen. Der Bookmark-Toggle sowie seine
-  Suche sind bis zum verifizierten Login nativ deaktiviert.
+  und Chat-Titel bündig mit New chat stehen. Die Suche der Chatliste ist bis
+  zum verifizierten Login nativ deaktiviert.
+- **Sidebar-Kopf in einer Zeile (seit 2026-11-20, Max' Wahl aus zwei
+  Entwürfen)** — `.sidebar-head` (`templates/index.html`, `shell.css`) ist die
+  erste Zeile der Sidebar: `#newRunButton`, dann `#bookmarkSearchTrigger`
+  (Lupe) und `#sidebarToggleInner` (Panel-Glyph) als Glyphen-Paar außerhalb
+  der Tönung von New chat. Die App trägt keine Marke mehr, weder in der
+  Sidebar noch neben dem schwebenden Toggle noch im Handy-Kopf (Max: die
+  Adresszeile nennt sie schon); `#logoLink`, `.brand-float` und die
+  Überschrift „Chats“ samt Einklappen der Liste (`#bookmarksToggle`,
+  `toggleBookmarks`, `bookmarks_collapsed`) gibt es nicht mehr. Die Liste
+  beginnt mit ihren Gruppen (Projects, Today, …); ein unsichtbares
+  `<h2>Chats</h2>` ordnet sie für Screenreader ein. Die Suche legt ihr Feld
+  `.sidebar-search-box` über die Zeile bis vor das Panel-Glyph
+  (`.sidebar-head.is-searching`, `--head-tools` = Platz des Glyphs), damit
+  sich die Leiste auch während der Suche schließen lässt; Zeile und Lupe
+  darunter sind dann `visibility: hidden`, das verborgene Feld ebenso (beides
+  aus der Tab-Reihenfolge). Escape leert, schließt und gibt den Fokus an die
+  Lupe zurück; ein leeres Feld schließt, sobald der Fokus es verlässt
+  (`app-init.js`). Gäste haben nichts zu durchsuchen: `body.is-guest` (vor
+  dem ersten Paint aus `app-bootstrap.js`) nimmt Lupe und Feld heraus, sodass
+  die Tönung von New chat nie nachträglich springt.
 - **Ziehbare Sidebar-Breite** (seit 2026-10-08) — `static/js/sidebar-resize.js`
   (Head-Bundle, `App.sidebarResize` `{get, set, reset, bounds}`) setzt
   `--sidebar-width` auf `<html>` (Default 260px in `layout.css :root`), schon vor
@@ -1748,7 +1771,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   die Overlay-Sidebar (≤1099px) behält `min(82vw, 360px)`. Ziehen (Pointer
   Capture, `body.is-resizing-sidebar` schaltet Transitions und Textauswahl ab),
   Doppelklick = 260px und Speicher löschen, Pfeiltasten ±10 (Shift ±40),
-  Pos1/Ende = Grenzen. Grenzen 200px bis min(480px, 40 % des Fensters); ein
+  Pos1/Ende = Grenzen. Grenzen 230px (darunter passt „Neuer Chat“ nicht mehr
+  neben Lupe und Panel-Glyph der Kopfzeile) bis min(480px, 40 % des Fensters); ein
   schmaleres Fenster deckelt nur die Anzeige, die gewählte Breite bleibt
   gespeichert. Neue Stellen, die neben der Sidebar Platz rechnen, nutzen
   `var(--sidebar-width)` statt 260px. Seit 2026-10-29 misst dasselbe Skript vor
@@ -1758,29 +1782,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `--sidebar-gutter` auf `<html>` (erneut bei `resize`, Zoom ändert ihn). Ab
   1100px greift die Liste damit in den Innenabstand der Sidebar, sodass alle
   Zeilen auf einem Raster stehen (`shell.css` „Desktop head on one grid“:
-  Glyphen-Spalte 22px, Wortspalte 50px, eine rechte Kante; „Chats“ als leises
-  Abschnittswort wie im Menü unter 1100px).
+  Glyphen-Spalte 22px, Wortspalte 50px, eine rechte Kante).
 - **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
-  nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt rechts neben der
-  Wortmarke in `.sidebar-brand-row`. Beide zeichnen dasselbe Panel-Icon (`.sidebar-panel-icon`,
+  nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt rechts in der
+  Kopfzeile `.sidebar-head`. Beide zeichnen dasselbe Panel-Icon (`.sidebar-panel-icon`,
   Rechteck mit linker Schiene statt Burger, 20 px, flacher Hover).
   `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
   (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. **Ein- und Ausklappen ab
-  1100 px (seit 2026-10-20, Apple-Audit C3):** es gibt nie zwei Logos und nie
-  zwei Panel-Glyphen. Der schwebende Toggle liegt bei offener Leiste genau auf
+  1100 px (seit 2026-10-20, Apple-Audit C3):** es gibt nie zwei
+  Panel-Glyphen. Der schwebende Toggle liegt bei offener Leiste genau auf
   `#sidebarToggleInner` (`left: sidebar-width - 46px`) und ist dort
   `visibility: hidden` statt `display: none`; beim Schließen tritt der innere
   sofort ab und der schwebende gleitet (`left`, `--dur-layer`,
   `--ease-standard`, wie Leiste und Spalte) in die Ecke, beim Öffnen gleitet er
   zurück und übergibt per verzögerter `visibility` (`--dur-layer`), wenn die
-  Leiste angekommen ist. Die schwebende Wortmarke `.brand-float` bleibt ab
-  1100 px gelegt und blendet: aus in 60 ms, bevor die Marke der Leiste den
-  Rand erreicht; ein, nachdem sie hinausgeglitten ist (Verzögerung
-  `--dur-layer / 2`). `.app-nav-float` selbst nimmt keine Klicks
+  Leiste angekommen ist. `.app-nav-float` selbst nimmt keine Klicks
   (`pointer-events: none`, nur seine sichtbaren Teile). `body.is-sidebar-settling`
-  schaltet alle drei Übergänge ab. Auch die Agent-Spalte (≥1200 px) gleitet
+  schaltet beide Übergänge ab. Auch die Agent-Spalte (≥1200 px) gleitet
   mit `--dur-layer` statt 200 ms. Regression pro Bild:
-  `tests/e2e/test_sidebar_resize.py::test_logo_toggle_and_switch_move_with_the_sidebar`. `app-init.js` bindet
+  `tests/e2e/test_sidebar_resize.py::test_toggle_and_switch_move_with_the_sidebar`. `app-init.js` bindet
   **alle** `.sidebar-toggle`-Buttons an denselben Handler; `updateToggleButton`
   pflegt aria/title auf allen. Eine geschlossene Sidebar wird zusätzlich
   `inert` + `aria-hidden`, damit ihre offscreen liegenden Controls weder in der
@@ -1827,10 +1847,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   damit der Dialog den Fokus dorthin zurückgibt). Der Toggle zeigt in der Insel
   drei Punkte statt des Zitatzeichens und heißt dort „Share, copy and cite“
   (`mobile-header.js`), im Desktop-Footer weiter „Citation and copy options“.
-  Auf dem Startbildschirm (`body.is-hero`) steht neben dem Menü die Marke
-  (`.brand-float`, Logo + „consens.io“, 44 px Touchfläche; ≤359 px neben
-  Log in/Sign up nur das Logo), im Thread gehört der Platz den Aktionen; ein
-  mittlerer Titel entfällt. Der Kopf ist 56 px hoch mit Safe-Area-Zuschlag,
+  Auf dem Startbildschirm (`body.is-hero`) steht links nur das Menü, im
+  Thread gehört der Platz rechts den Aktionen; Marke und mittlerer Titel
+  entfallen. Der Kopf ist 56 px hoch mit Safe-Area-Zuschlag,
   selbst transparent und `pointer-events: none` (nur die Inseln nehmen Taps);
   sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`,
   Window-Scroll, auch auf der Watch-Seite), liegt `--ground` deckend hinter
@@ -1950,9 +1969,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Schatten, in Größe und Zeilenhöhe des Umfelds (wie Zusatztext am Zeilenende
   in Apples Listen); Plus steht da wie „Free“. Im Modellmenü endet es an der
   rechten Kante der Zeile; nur die gewählte Zeile hält die Spalte des Hakens
-  frei, Preset-Zeilen alle (ihre Logo-Stapel stehen untereinander). Die **Wortmarke**
-  ist aus demselben Grund aus dem Footer (unter dem Account-Icon) nach oben in
-  `.sidebar-brand-row` gewandert; unten bleibt nur die Meta-Zeile.
+  frei, Preset-Zeilen alle (ihre Logo-Stapel stehen untereinander). Unter dem
+  Account-Icon bleibt nur die Meta-Zeile; eine Wortmarke trägt die Sidebar
+  nicht mehr (siehe „Sidebar-Kopf in einer Zeile“).
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
   `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models
   und Bookmarks sind Sidebar-Abschnitte mit integrierten Icons. Models bleibt
@@ -1965,8 +1984,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Leertaste öffnen damit die vorhandene Modellwahl; nur der Sidebar-Einstieg
   schließt zuvor eine mobile Overlay-Sidebar. Die Provider-Inklusion im Custom-Picker nutzt klare
   Checkboxen statt Toggle-Switches. Die Chat-Suche belegt keine
-  permanente Zeile mehr, sondern ersetzt bei Hover/Fokus den Titel „Chats“
-  (auf Touch-Geräten bleibt sie dauerhaft erreichbar). Die frühere Sidebar-/
+  permanente Zeile: ihre Lupe steht in der Kopfzeile, ihr Feld legt sich auf
+  Klick oder Ctrl+K/⌘K über diese Zeile. Die frühere Sidebar-/
   Help-FAQ-Rangliste lebt jetzt ausschließlich auf `/model-pulse`; die
   Landingpage verlinkt oben dezent dorthin und die App-Shell lädt keinen
   Firestore-Live-Listener mehr. Die gemeinsame Lesespalte für Fragen, Antworten
@@ -1976,7 +1995,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und den Startseiten-View-Switch im verbleibenden Bereich rechts der Navigation;
   eingeklappt und im mobilen Overlay-Modus gilt die Viewport-Mitte. Der mobile
   fixierte Composer verwendet dieselbe Breite wie der Spalteninhalt; mobil
-  stehen Menü und auf dem Startbildschirm die Wortmarke als schwebende Inseln oben. Gast-Login/-Sign-up
+  steht das Menü als schwebende Insel oben. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
   2026-08-17 **Reiter statt einer langen Bahn**: `.settings-layout` trägt links
@@ -8097,9 +8116,9 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   Saves ohne `pinned` lassen den Pin der Meta stehen (`upsertBookmarkMeta`).
   Der Titel nutzt auf dem Desktop die ganze Zeile und läuft nur dort, wo „…“
   erscheint, per Maske darunter aus; abgeschnittene Titel zeigen ihren vollen
-  Text als Tooltip. Die Lupe neben „Chats“ steht immer da (vorher nur bei
-  Hover), Ctrl+K/⌘K öffnet von überall die Suche (Sidebar und Liste klappen
-  auf), und die Suche trifft Titel und Frage (`meta.query`).
+  Text als Tooltip. Die Lupe steht in der Kopfzeile der Sidebar, Ctrl+K/⌘K
+  öffnet von überall die Suche (die Sidebar klappt auf), und die Suche trifft
+  Titel und Frage (`meta.query`).
 - **Chatliste: Projekte (seit 2026-11-19, Entwurf Fable).** `static/js/chat-projects.js`
   (`App.chatProjects`) hält die Projekte des Kontos; `chat-list.js` stellt sie als erste Gruppe in
   `#bookmarksContainer`: Überschrift `div.chat-list-heading.chat-projects-heading` („Projects“ mit „+“),

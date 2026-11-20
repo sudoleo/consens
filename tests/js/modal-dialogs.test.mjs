@@ -18,11 +18,11 @@ import { bootApp, settle, templateSlice } from "./helpers/appBoot.mjs";
 const SIDEBAR = `
   <button id="toggleSidebarButton" class="sidebar-toggle" type="button"></button>
   <aside class="sidebar">
-    <div class="bookmarks-section"><button id="bookmarksToggle" type="button"></button><div id="bookmarksContainer"></div></div>
+    <div class="bookmarks-section"><div id="bookmarksContainer"></div></div>
     <button id="editSystemPromptBtn" type="button" aria-label="Settings">Settings</button>
     <button type="button" id="feedbackButton" aria-label="Send feedback">Feedback</button>
   </aside>
-  <a id="logoLink" href="#home"></a>
+  <a id="pageLink" href="#home"></a>
   <input id="reasoningToggle" type="checkbox">
   <textarea id="questionInput"></textarea>
   <button id="sendButton" type="button"></button>
@@ -142,7 +142,7 @@ describe("Settings and Help", () => {
     expect(document.activeElement).toBe(gear);
 
     // A click on the page itself still closes the overlay sidebar.
-    document.getElementById("logoLink").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    document.getElementById("pageLink").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
     expect(sidebar.classList.contains("active")).toBe(false);
     window.close();
   });

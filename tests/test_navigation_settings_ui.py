@@ -22,8 +22,8 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'id="sidebarRail"' not in template
     assert "sidebar-rail-btn" not in template
     assert "sidebar-rail-btn" not in app_init
-    assert template.count('class="sidebar-heading-label"') == 1
-    assert "<span>Chats</span>" in template
+    # The list has no visible heading of its own; its groups carry it.
+    assert '<h2 class="visually-hidden">Chats</h2>' in template
     assert 'id="sidebarModelPicker"' in template
     assert '<strong>Models</strong>' in template
     assert '<span>Leaderboard</span>' not in template
@@ -39,30 +39,28 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert ".faq-item > p, .faq-item > .faq-answer" in app_init
     assert 'id="authTopActions"' in template
     assert 'id="loginContainer" class="login-text" hidden></div>' in template
-    assert 'class="sidebar-bookmarks-head"' in template
+    assert 'class="sidebar-head"' in template
     assert 'class="sidebar-section bookmarks-section is-locked"' in template
-    assert 'id="bookmarksToggle"' in template and 'aria-disabled="true" disabled' in template
     assert 'id="bookmarkSearchTrigger"' in template
     assert 'aria-label="Search chats"' in template
     assert 'aria-disabled="true" disabled' in template
-    assert ".sidebar-bookmarks-head.is-searching .sidebar-search-box" in shell
-    assert ".sidebar-bookmarks-head:hover .sidebar-search-box" not in shell
+    assert ".sidebar-head.is-searching .sidebar-search-box" in shell
+    assert ".sidebar-head:hover .sidebar-search-box" not in shell
+    # The row under the open field is out of the tab order, and so is the
+    # field while it is not shown.
+    assert ".sidebar-head.is-searching > :is(.sidebar-new-run, .sidebar-search-trigger)" in shell
     assert "setBookmarkSearchOpen(true, { focus: true })" in app_init
     assert 'event.key !== "Escape"' in app_init
-    assert ".sidebar-bookmarks-head .sidebar-toggle-btn" in shell
-    assert ".sidebar-bookmarks-head .sidebar-heading-label span" in shell
-    assert "justify-self: start" in shell
     assert ".models-section {\n  margin-bottom: 8px;\n}" in shell
     search_rule = shell.split("\n.sidebar-search-box {\n", 1)[1].split("}", 1)[0]
-    assert "inset: -4px" in search_rule
-    assert "24px" not in search_rule
-    assert ".sidebar-bookmarks-head .sidebar-toggle-arrow" in shell
-    arrow_rule = shell.split(".sidebar-bookmarks-head .sidebar-toggle-arrow {", 1)[1].split("}", 1)[0]
-    assert "justify-self: end" in arrow_rule
-    assert "left: 0.25px" in arrow_rule
-    assert "padding: 7px 32px 7px 32px" in shell
+    # Up to the panel glyph, which stays to close the sidebar while searching.
+    assert "inset: 0 var(--head-tools) 0 0" in search_rule
+    assert "visibility: hidden" in search_rule
+    # The field's words start where New chat's word stood.
+    assert "padding: 7px 10px 7px 38px" in shell
     assert "grid-template-columns: 18px minmax(0, 1fr)" in shell
-    assert ".bookmarks-section.is-locked .sidebar-search-box" in shell
+    # A guest has no chats to search; body.is-guest is there before the first paint.
+    assert "body.is-guest .sidebar-search-trigger,\nbody.is-guest .sidebar-search-box {\n  display: none;" in shell
     assert 'id="sidebarModelCount"' in template
     assert 'class="model-selection-check"' not in template
     assert 'id="modelSelectionArea" hidden' in template
@@ -262,8 +260,7 @@ def test_mobile_brand_and_desktop_input_centering_contract():
     assert "left: calc(var(--app-sidebar-offset) / 2)" in layout
     assert "translateX(130px)" not in layout
     assert "@media (max-width: 1099px)" in layout
-    assert ".brand-float," in layout
-    assert "body:has(.sidebar.collapsed) .brand-float" in layout
+    assert "brand-float" not in layout
 
 
 def test_fixed_navigation_yields_while_consensus_or_watch_content_is_read():

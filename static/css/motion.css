@@ -88,8 +88,7 @@ details.is-disclosing {
 
   .container,
   .view-switch,
-  .app-nav-float,
-  .brand-float {
+  .app-nav-float {
     transition: none !important;
   }
 

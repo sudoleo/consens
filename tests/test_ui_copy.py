@@ -42,7 +42,7 @@ def test_the_scanner_sees_the_words_of_the_app():
     assert len(TEXTS) > 1000
     words = {text.text for text in TEXTS}
     assert "Search chats" in words  # an attribute of the template
-    assert "Show or hide your chats" in words  # a literal in firebase.js
+    assert "Your session could not be refreshed. Check your connection and reload." in words  # a literal in firebase.js
     assert "Your question stays here and runs as soon as you’re logged in." in words
     sources = {text.source for text in TEXTS}
     assert {"templates/index.html", "static/firebase.js", "static/js/agent-chat.js", "static/js/app-text.js"} <= sources

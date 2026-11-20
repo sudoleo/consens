@@ -132,31 +132,30 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     metrics = app_page.evaluate(
         """() => {
           const sidebar = document.querySelector('.sidebar');
-          const brand = document.querySelector('.sidebar-brand-link').getBoundingClientRect();
-          const toggle = document.querySelector('#sidebarToggleInner').getBoundingClientRect();
-          const newRun = document.querySelector('#newRunButton').getBoundingClientRect();
+          const box = id => document.getElementById(id).getBoundingClientRect();
+          const head = document.querySelector('.sidebar-head').getBoundingClientRect();
+          const parts = [box('newRunButton'), box('bookmarkSearchTrigger'), box('sidebarToggleInner')];
           return {
-            brandCenter: brand.top + brand.height / 2,
-            toggleCenter: toggle.top + toggle.height / 2,
-            headerBottom: Math.max(brand.bottom, toggle.bottom),
-            newRunTop: newRun.top,
-            newRunWidth: newRun.width,
+            centers: parts.map(part => part.top + part.height / 2),
+            edges: parts.flatMap(part => [part.left, part.right]),
+            headWidth: head.width,
             sidebarInnerWidth: sidebar.clientWidth - 24,
           };
         }"""
     )
-    assert abs(metrics["brandCenter"] - metrics["toggleCenter"]) <= 1
-    assert metrics["newRunTop"] >= metrics["headerBottom"]
-    # One grid: New chat's tint spans the sidebar's inner
-    # width, like the chat rows and the head (shell.css, "Desktop head on one grid").
-    assert abs(metrics["newRunWidth"] - metrics["sidebarInnerWidth"]) <= 1
+    # The head is one row: New chat, the search glyph, the panel glyph, on
+    # one centre line and none over another.
+    assert max(metrics["centers"]) - min(metrics["centers"]) <= 1
+    assert metrics["edges"] == sorted(metrics["edges"])
+    # One grid: the head spans the sidebar's inner width, like the chat rows
+    # (shell.css, "Desktop head on one grid").
+    assert abs(metrics["headWidth"] - metrics["sidebarInnerWidth"]) <= 1
 
     search = app_page.locator(".sidebar-search-box")
     search_trigger = app_page.locator("#bookmarkSearchTrigger")
     expect(search).to_have_css("opacity", "0")
-    app_page.locator(".sidebar-bookmarks-head").hover()
-    expect(search).to_have_css("opacity", "0")
-    expect(search_trigger).to_have_css("opacity", "1")
+    expect(search).to_have_css("visibility", "hidden")
+    expect(search_trigger).to_be_visible()
     trigger_metrics = search_trigger.evaluate(
         """element => {
           const style = getComputedStyle(element);
@@ -170,14 +169,22 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
         }"""
     )
     assert trigger_metrics == {
-        "width": 32,
-        "height": 32,
+        "width": 34,
+        "height": 34,
         "paddingLeft": "0px",
         "paddingRight": "0px",
     }
     search_trigger.click()
     expect(search).to_have_css("opacity", "1")
-    expect(search).to_have_css("pointer-events", "auto")
+    expect(search).to_have_css("visibility", "visible")
+    expect(app_page.locator("#chatSearch")).to_be_focused()
+    # The field lies over New chat's row; the panel glyph stays, so the
+    # sidebar can still be closed while searching.
+    expect(app_page.locator("#newRunButton")).to_be_hidden()
+    expect(app_page.locator("#sidebarToggleInner")).to_be_visible()
+    app_page.keyboard.press("Escape")
+    expect(search_trigger).to_be_focused()
+    expect(app_page.locator("#newRunButton")).to_be_visible()
 
     app_page.locator("#sidebarModelPicker").click()
     picker = app_page.locator("#consensusModelDropdown").locator("xpath=..")

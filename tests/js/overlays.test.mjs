@@ -294,6 +294,48 @@ describe("one tooltip (E12)", () => {
     target.dispatchEvent(event);
   }
 
+  // On a phone the open drawer takes the focus (its panel glyph), and the
+  // browser counts a focus set by script as :focus-visible: "Collapse
+  // sidebar" appeared under the finger and stayed, nothing takes it away
+  // there. The keyboard's line needs a key.
+  it("shows the keyboard's line after a key, not for a focus the app moves after a tap", () => {
+    vi.useFakeTimers();
+    const ctx = loadScripts(["static/js/tooltip.js"], {
+      body: `<button id="menu" type="button">Menu</button>
+        <button id="close" type="button" title="Collapse sidebar" aria-label="Collapse sidebar"></button>`,
+    });
+    contexts.push(ctx);
+    const { window, document } = ctx;
+    window.App.tooltip.init();
+    const tip = document.querySelector(".global-tooltip");
+    const close = document.getElementById("close");
+    // jsdom knows no :focus-visible; a real browser says yes in both cases.
+    const matches = close.matches.bind(close);
+    close.matches = selector => selector === ":focus-visible" || matches(selector);
+
+    pointer(window, "pointerdown", document.getElementById("menu"), "touch");
+    close.focus();
+    vi.advanceTimersByTime(1000);
+    expect(tip.classList.contains("visible")).toBe(false);
+    close.blur();
+
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    close.focus();
+    vi.advanceTimersByTime(499);
+    expect(tip.classList.contains("visible")).toBe(false);
+    vi.advanceTimersByTime(10);
+    expect(tip.classList.contains("visible")).toBe(true);
+    expect(tip.textContent).toBe("Collapse sidebar");
+    close.blur();
+    expect(tip.classList.contains("visible")).toBe(false);
+
+    // A click in between is a pointer again.
+    pointer(window, "pointerdown", document.getElementById("menu"));
+    close.focus();
+    vi.advanceTimersByTime(1000);
+    expect(tip.classList.contains("visible")).toBe(false);
+  });
+
   it("takes over a title for the pointer and gives it back, and shows a mark's on a tap", () => {
     vi.useFakeTimers();
     const ctx = loadScripts(["static/js/tooltip.js"], {

@@ -30,11 +30,9 @@ const APP_MARKUP = `
   <button id="toggleSidebarButton" class="sidebar-toggle" type="button"></button>
   <aside id="appSidebar" class="sidebar">
     <div class="bookmarks-section">
-      <button id="bookmarksToggle" type="button" aria-expanded="true"></button>
       <div id="bookmarksContainer"></div>
     </div>
   </aside>
-  <a id="logoLink" href="#home"></a>
   <button class="theme-toggle" type="button"></button>
   <button id="reasoningToggle" type="button"></button>
   <button id="feedbackButton" type="button"></button>
@@ -105,10 +103,6 @@ describe("app-init.js mit gesperrtem localStorage", () => {
     document.querySelector(".theme-toggle").click();
     expect(document.body.classList.contains("dark-mode")).toBe(false);
 
-    window.toggleBookmarks();
-    expect(document.querySelector(".bookmarks-section").classList.contains("is-collapsed")).toBe(true);
-
-    document.getElementById("logoLink").click();
     await settle(window);
     expect(errors).toEqual([]);
     window.close();
@@ -141,7 +135,6 @@ describe("app-init.js mit funktionierendem localStorage", () => {
       storage: {
         theme: "dark",
         sidebar_collapsed: "true",
-        bookmarks_collapsed: "true",
         openrouterKey: "test-openrouter-key",
         marketingPopupShown: "true",
         demoChipDismissed: "true",
@@ -151,18 +144,13 @@ describe("app-init.js mit funktionierendem localStorage", () => {
     expect(errors).toEqual([]);
     expect(document.body.classList.contains("dark-mode")).toBe(true);
     expect(document.querySelector(".sidebar").classList.contains("collapsed")).toBe(true);
-    expect(document.querySelector(".bookmarks-section").classList.contains("is-collapsed")).toBe(true);
-    expect(document.getElementById("bookmarksContainer").classList.contains("hidden")).toBe(true);
     expect(document.getElementById("openrouterKey").value).toBe("test-openrouter-key");
     expect(window.demoChipShown).toBeUndefined();
     window.close();
   });
 
-  it("schreibt Theme, Sidebar, Bookmarks und Landing-Marke wie bisher", async () => {
-    const { window, document, errors } = await bootApp({
-      storage: { visitedLanding: "true" },
-      prefersDark: true,
-    });
+  it("schreibt Theme und Sidebar wie bisher", async () => {
+    const { window, document, errors } = await bootApp({ prefersDark: true });
 
     // Ohne gespeichertes Theme gilt die Systempraeferenz und wird gemerkt.
     expect(storedValue(window, "theme")).toBe("dark");
@@ -172,12 +160,6 @@ describe("app-init.js mit funktionierendem localStorage", () => {
     // Der Gast beginnt eingeklappt; sein Klick oeffnet, und das wird gemerkt.
     document.getElementById("toggleSidebarButton").click();
     expect(storedValue(window, "sidebar_collapsed")).toBe("false");
-
-    window.toggleBookmarks();
-    expect(storedValue(window, "bookmarks_collapsed")).toBe("true");
-
-    document.getElementById("logoLink").click();
-    expect(storedValue(window, "visitedLanding")).toBeNull();
 
     window.App.restoreQuestionDraft();
     expect(document.getElementById("questionInput").value).toBe("");
