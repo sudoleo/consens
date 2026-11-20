@@ -2541,9 +2541,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `prepare_watch` `report_finding` (`summary`, `evidence_url`, `needs_user`:
   nur mit einer Adresse, die dieser Lauf gesehen hat, ein Suchtreffer dieser
   Nachricht oder eine Adresse in einem ihrer Werkzeugergebnisse, nie nur aus
-  dem Chat) und `finish_watch` (`reason`), beide in `SIDE_TOOLS` und
+  dem Chat), `finish_watch` (`reason`) und `pause_watch` (`reason`, ohne
+  Beleg: der Auftrag ist so nicht machbar, z. B. nennt er nichts zum
+  Beobachten), alle drei in `SIDE_TOOLS` und
   `OWN_CONTENT_TOOLS`, gespeichert als `turn.agent_watch_run`
-  (`finding`, `done`), dazu `agent_watch.RUN_PROMPT`. Die Mail trägt nur
+  (`finding`, `done`, `pause`), dazu `agent_watch.RUN_PROMPT`.
+  `agent_watches.turn_ended` pausiert die Watch bei `pause` (Platz frei,
+  kein nächster Lauf; ein erreichtes Ziel im selben Lauf geht vor) und
+  meldet den Grund als `needs_you` mit `paused` in Mail und Telegram („The
+  Watch is paused until you resume it.“). Die Mail trägt nur
   `summary` und den Link zum Chat, der volle Bericht steht in der Antwort
   des Laufs (`agent_watch.REPORTED`). Niemand wartet auf
   eine Karte: `hold_timeout` 0, `ask_user` hört sofort „keine Antwort“, ein
@@ -3862,6 +3868,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   **ein Feld** (`App.watchComposer`, schmal in `#watchDashCompose`); ohne
   Watch ist das Feld die Seite (`.aw-hero` mit Frage und vier Anfängen
   `.aw-starter`, der Kopf nur für Screenreader: `.watch-page.is-empty`).
+  Ein Anfang füllt das Feld mit `setTask(…, { starter: true })`: „Start“
+  bleibt aus, bis der Nutzer weitergeschrieben hat (die Anfangsworte allein
+  nennen nichts zum Beobachten).
   „Since you last looked“: `.aw-card` (ungelesen; `needs_you` als breite
   Karte mit „Decide“, sonst Fund, erreichtes Ziel oder Ende mit Grund),
   ein Klick öffnet den Chat (`window.openBookmark(bookmark_id)`) und meldet
@@ -11035,7 +11044,7 @@ app/services/
   chat_projects.py           Projekte der Sidebar (seit 2026-11-19): Liste in chat_state/projects (create/rename/delete in einer Transaktion mit Löschsperre, MAX_PROJECTS 100), project_id am Bookmark, clear_bookmarks nach dem Löschen
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
   memory_review.py           Tägliche Gedächtnis-Pflege (seit 2026-11-06): memory_reviews/{uid} fällig per mark_due, Lifespan-Task memory-review, ein Terra-Aufruf (query_openrouter_json) über die Chats seit der letzten Pflege, eine Änderung mit source="review", last_review für Settings
-  agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch. Im geplanten Lauf WatchRunTools: report_finding (nur mit Beleg aus diesem Lauf) und finish_watch, RUN_PROMPT/RUN_NOTE (seit 2026-11-03)
+  agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch. Im geplanten Lauf WatchRunTools: report_finding (nur mit Beleg aus diesem Lauf), finish_watch und pause_watch (Auftrag so nicht machbar, ohne Beleg), RUN_PROMPT/RUN_NOTE (seit 2026-11-03)
   agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenzen für Server und Konto, ein Intervall, das die Stufe nicht mehr erlaubt, wird beim Lauf angepasst), start_run (routers/agent.start_agent_turn mit watch_run; Chatmodell, Reasoning und Prüfer wie zuletzt im Chat, run_models: agent_selection am Chat aus chat_store.create_turn, sonst der Turn des Vorschlags, was das Konto nicht mehr darf, läuft mit dem Standard; 409/429/503 = in 10 min noch mal als derselbe Lauf (`retry_of`, zählt nicht, verschiebt nichts), 404 = Chat weg, 403/422 = Watch endet mit `google_data`/`cannot_run`), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel, liest bis zu 100 fällige, Gleichstand nach längster Wartezeit seit dem letzten Lauf; jedes Laufende weckt den Takt, wartende Läufe sonst nach BLOCKED_RECHECK = 5 min), turn_ended (last_run, Ende beim Ziel, ungelesen, Mail und Telegram über notification_outbox je nach email_enabled/telegram_enabled), pause/resume/seen/set_channels, Anlegen mit eigenem Auftrag auch in einem eigenen Chat (chat_title), unsubscribe_token/stop_emails (Link „Stop emails“), PICTURES (Bild der Watch: beim Anlegen ein Foto des Gegenstands über watch_scheduler.picture_words → consensus_engine.pick_watch_picture_words und picture_search (Brave), sonst die Seiten des Chats; nach Läufen die Seiten, die sie öffneten, über watch_images.find_image; gespeichert unter watch_images/{id}, eigener Thread, höchstens 3 Versuche), Löschen mit Chat/Konto samt Bild
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen (Chatmodell, Reasoning, Vergleichs-Preset der Prüfer, Anzeige; seit 2026-11-01 auch Fakten über consens.io), Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Prompt-Block AUDIT_PROMPT; schreibt nie eine Einstellung (bis 2026-10-31 auch Agent-Vorlieben, Gruppe PREFERENCES)

@@ -10,8 +10,11 @@
 //
 //   const composer = App.watchComposer.create({ mode: 'hero'|'inline'|'sheet',
 //     chatId, task, source, onStarted, onSettle });
-//   composer.element, .focus(), .setTask(text, { interval }), .setOptions({
+//   composer.element, .focus(), .setTask(text, { interval, starter }), .setOptions({
 //     intervals, limitReached }), .setMode(mode), .reset(), .isEmpty()
+//   `starter`: the words only begin a sentence (the empty page's "Ways to
+//   begin"); Start waits until the user has written on from them, since
+//   the words alone name nothing to watch.
 //   App.watchComposer.schedulePicker({ schedule, allowed, onChange })
 //     -> { element, value() }
 //   App.watchComposer.weekdayToday()
@@ -254,7 +257,7 @@
     const id = 'wc' + (++serial);
     const options = { mode: 'inline', chatId: '', source: '', onStarted: null, onSettle: null, ...config };
     const state = { schedule: normalizeSchedule(config.schedule), goal: '', editingGoal: false, busy: false,
-      intervals: null, limitReached: false, loaded: false, popover: false, errorKind: '' };
+      intervals: null, limitReached: false, loaded: false, popover: false, errorKind: '', starter: '' };
 
     const form = node('form', 'wc');
     form.noValidate = true;
@@ -361,6 +364,10 @@
       return first + ' ' + end;
     }
 
+    function unfinished() {
+      return Boolean(state.starter) && line(task.value) === state.starter;
+    }
+
     function sync() {
       whenText.textContent = scheduleText(state.schedule);
       whenText.setAttribute('data-i18n-skip', '');
@@ -370,7 +377,7 @@
       goalSize();
       preview.textContent = previewText();
       preview.setAttribute('data-i18n-skip', '');
-      const ready = line(task.value).length > 0 && !state.busy;
+      const ready = line(task.value).length > 0 && !unfinished() && !state.busy;
       send.disabled = !ready;
       form.classList.toggle('is-busy', state.busy);
       form.classList.toggle('is-ready', ready);
@@ -564,7 +571,7 @@
     async function submit() {
       if (state.busy) return;
       const text = line(task.value);
-      if (text.length < TASK_MIN) {
+      if (text.length < TASK_MIN || unfinished()) {
         showError(App.t('Say in a sentence what the Agent should do.'));
         task.focus();
         return;
@@ -603,8 +610,9 @@
       }
     }
 
-    function setTask(text, { interval } = {}) {
+    function setTask(text, { interval, starter = false } = {}) {
       task.value = String(text || '').replace(/\s+/g, ' ').trimStart().slice(0, TASK_MAX);
+      state.starter = starter ? line(task.value) : '';
       if (interval && ORDER.includes(interval)) {
         picker.set({ ...state.schedule, interval });
         state.schedule = picker.value();
@@ -632,6 +640,7 @@
       }
       task.value = '';
       goal.value = '';
+      state.starter = '';
       state.editingGoal = false;
       error.hidden = true;
       state.errorKind = '';

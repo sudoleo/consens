@@ -113,7 +113,7 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # the user sees and can undo every change.
 OWN_CONTENT_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
                                "update_plan", "create_document", "revise_document", "open_workspace",
-                               "report_finding", "finish_watch"})
+                               "report_finding", "finish_watch", "pause_watch"})
 TURN_TIME_LIMIT = ("This response reached its time limit. "
                    "The available results have been saved; send a follow-up message to continue.")
 TURN_STEP_LIMIT = ("This response reached its step limit without finishing. "

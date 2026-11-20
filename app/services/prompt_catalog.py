@@ -119,7 +119,7 @@ _ENTRIES = (
      "agent_memory.py:AUDIT_MEMORY_*, agent_files.py:AUDIT_UNTRUSTED", _audit_blocks),
     ("agent_watch_run", "Agent: Watch run",
      "Appended to \"Agent: instructions\" in a Watch's scheduled run (since 2026-11-03), in place of the Watch "
-     "block, with report_finding and finish_watch; the run's message is the Watch's task, its app context says "
+     "block, with report_finding, finish_watch and pause_watch; the run's message is the Watch's task, its app context says "
      "what the message is.",
      "agent_watch.py:RUN_PROMPT, RUN_NOTE", _watch_run),
     ("audit_reviewer", "Agent: reviewers",

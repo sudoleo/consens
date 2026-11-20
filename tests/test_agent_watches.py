@@ -590,6 +590,46 @@ def test_the_goal_ends_the_watch_and_a_halt_nobody_decided_needs_the_user(store,
     assert ended_run(store, None, status="failed", agent_failure={"code": "provider_error"})[0] == "failed"
 
 
+def test_a_run_that_cannot_do_its_task_pauses_its_watch_and_says_why(store, monkeypatch):
+    """A Watch started from "Every week, tell me what changed around" and a
+    greeting: its run cannot know what to look at and has no page to show
+    for it. It pauses the Watch, the user is told why, and nothing runs on."""
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    reason = "Which topic should I follow every week?"
+    outcome, watch_id, turn_id = ended_run(store, {"pause": {"reason": reason}})
+    assert outcome == "needs_you"
+    saved = record(store, watch_id)
+    assert saved["status"] == "paused" and saved["next_run_at"] is None and saved["running"] is None
+    assert saved["unread"] is True and saved["last_run"]["summary"] == reason and saved["last_run"]["turn_id"] == turn_id
+    assert agent_watches.outlook(UID, saved["chat_id"], "free", db=store.db)["active_count"] == 0
+    assert agent_watches.due(now=NOW + timedelta(days=30), db=store.db) == []
+    items = outbox_items(store)
+    assert sorted(item["channel"] for item in items) == ["email", "telegram"]
+    payload = items[0]["payload"]
+    assert payload["outcome"] == "needs_you" and payload["paused"] is True
+    assert payload["summary"] == reason and payload["evidence_url"] == "" and payload["halted"] is False
+    # Once the user said what they meant in its chat, it runs again.
+    assert agent_watches.resume(UID, watch_id, tier="free", db=store.db, now=NOW)["status"] == "active"
+
+
+def test_reaching_the_goal_outranks_a_pause_and_a_watch_paused_meanwhile_sends_nothing(store, monkeypatch):
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    outcome, watch_id, _ = ended_run(store, {"done": {"reason": "It opened."}, "pause": {"reason": "Which one?"}})
+    assert outcome == "done" and record(store, watch_id)["status"] == "done"
+    assert outbox_items(store)[0]["payload"]["paused"] is False
+    original = agent_watches.turn_ended
+
+    def pause_first(uid, chat_id, turn_id, watch_run, **kwargs):
+        agent_watches.pause(uid, watch_run["watch_id"], db=store.db, now=NOW)
+        return original(uid, chat_id, turn_id, watch_run, **kwargs)
+
+    monkeypatch.setattr(agent_watches, "turn_ended", pause_first)
+    sent = len(outbox_items(store))
+    outcome, watch_id, _ = ended_run(store, {"pause": {"reason": "Which one?"}})
+    assert outcome == "needs_you" and record(store, watch_id)["status"] == "paused"
+    assert len(outbox_items(store)) == sent
+
+
 def test_each_run_is_kept_as_a_look_for_the_pulse_with_what_it_found(store, monkeypatch):
     """The page's pulse and detail (watch-dashboard.js): every run in order,
     a finding with its line, at most LOOKS_KEPT of them."""
@@ -768,6 +808,11 @@ def test_the_mail_speaks_the_readers_language_and_says_what_the_user_must_do():
     done = mail(outcome="done", summary="", goal_reason="Registration opened today.", goal_met=True, evidence_url="")
     assert done["Subject"] == "Reached: Registration is open"
     assert "The goal is met, so the Watch has ended." in text_of(done)
+    paused = mail(language="de", outcome="needs_you", summary="Welches Thema soll ich verfolgen?", evidence_url="",
+                  paused=True)
+    assert paused["Subject"] == "Deine Watch braucht dich: Welches Thema soll ich verfolgen?"
+    assert "Die Watch ist pausiert, bis du sie fortsetzt." in text_of(paused)
+    assert "Die Watch ist pausiert" not in text_of(mail(outcome="needs_you", summary="Decide.", halted=True))
 
 
 # --- the routes and a run through the Agent route ---------------------------------
@@ -1074,6 +1119,10 @@ def test_the_telegram_text_is_the_finding_in_the_readers_language():
                                              "evidence_url": "https://www.ironman.com/im-hamburg", "task": TASK}, "de")
     assert text.startswith("<b>Deine Watch hat etwas gefunden</b>\n\nDie Anmeldung ist offen.")
     assert 'Gesehen auf: <a href="https://www.ironman.com/im-hamburg">ironman.com</a>' in text
+    paused = telegram_watch._agent_watch_text({"outcome": "needs_you", "summary": "Welches Thema?", "paused": True,
+                                               "task": TASK}, "de")
+    assert paused.startswith("<b>Deine Watch braucht dich</b>\n\nWelches Thema?")
+    assert "Die Watch ist pausiert, bis du sie fortsetzt." in paused
 
 
 # --- the Consensus Watches from before: archived ---------------------------------

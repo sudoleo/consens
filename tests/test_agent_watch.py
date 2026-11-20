@@ -356,7 +356,7 @@ PAGE = "https://www.ironman.com/im-hamburg"
 def test_a_scheduled_run_reports_and_ends_and_nobody_waits_for_a_card(store):
     loop = watch_loop(store, WatchScript(), watch_run=RUN)
     names = set(loop.registry.tools)
-    assert {"report_finding", "finish_watch"} <= names and "prepare_watch" not in names
+    assert {"report_finding", "finish_watch", "pause_watch"} <= names and "prepare_watch" not in names
     system = loop.messages[0]["content"]
     assert agent_watch.RUN_PROMPT in system and agent_watch.AUDIT_PROMPT not in system
     # The user is away: a card (ask_user, a reviewer's halt) ends at once.
@@ -410,4 +410,21 @@ def test_a_search_result_counts_as_seen_with_its_title_and_finish_ends_the_watch
 def test_the_run_tools_add_no_outside_content_and_ride_along_an_answer():
     from app.services.agent_answer_mode import SIDE_TOOLS
     from app.services.agent_delegation import OWN_CONTENT_TOOLS
-    assert {"report_finding", "finish_watch"} <= SIDE_TOOLS & OWN_CONTENT_TOOLS
+    assert {"report_finding", "finish_watch", "pause_watch"} <= SIDE_TOOLS & OWN_CONTENT_TOOLS
+
+
+def test_a_run_that_cannot_do_its_task_pauses_it_without_a_page(store):
+    """report_finding wants a page this run saw; a task that names nothing
+    to look at has none, so its question goes through pause_watch."""
+    loop = watch_loop(store, WatchScript(), watch_run=RUN)
+    tools = agent_watch.WatchRunTools(loop)
+    result = tools.pause(agent_watch.PauseWatch(reason="Which  topic should I follow\n every week?"))
+    assert result["status"] == "paused" and "until the user resumes it" in result["instruction"]
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch_run"]
+    assert saved == {"pause": {"reason": "Which topic should I follow every week?"}}
+    assert "pause_watch" in agent_watch.RUN_PROMPT
+    tool = next(tool for tool in tools.tools() if tool.name == "pause_watch")
+    assert "Not for a page that is down" in tool.description
+    store.db.turns(UID, loop.chat_id)[loop.turn_id]["status"] = "completed"
+    with pytest.raises(ValueError, match="already finished"):
+        tools.pause(agent_watch.PauseWatch(reason="Again."))

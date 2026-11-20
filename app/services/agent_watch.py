@@ -12,10 +12,12 @@ Two sides:
   never start runs that act in the user's name and use their allowance; the
   browser knows the user's timezone, the server does not; the user sees the
   task before anything is scheduled.
-* ``report_finding`` and ``finish_watch`` (WatchRunTools), only in a
-  scheduled run: the run's one way to reach the user, with a page it opened
-  in this run as evidence, and the end of the Watch once its goal is met.
-  agent_watches.turn_ended reads both from the turn (``agent_watch_run``).
+* ``report_finding``, ``finish_watch`` and ``pause_watch`` (WatchRunTools),
+  only in a scheduled run: the run's way to reach the user, with a page it
+  opened in this run as evidence; the end of the Watch once its goal is met;
+  and its pause when the task cannot be done as it stands, with no page to
+  show for that. agent_watches.turn_ended reads all three from the turn
+  (``agent_watch_run``).
 
 prepare_watch is registered only on the user's own account-mode turns,
 without Google data (private mail must not become a recurring task), not in
@@ -52,11 +54,15 @@ INSTRUCTIONS = {
 # What a scheduled run is, in its system prompt (WatchRunTools).
 RUN_PROMPT = """THIS WATCH RUN
 
-This message is a scheduled run of a Watch the user started in this chat, and the user is not here. Do its task with your tools as the user would, and decide yourself how to look. Starting the Watch was the user's permission for what its task says; nobody can answer a question now, so for anything beyond the task use report_finding with needs_user. The user hears of this run only through report_finding: at most once, only when there is something new for them, with a page you opened in this run as evidence. Its summary is the email, which links to this chat; your answer to this message is what the user reads when they open it, so what the task asked for stands there itself. A run with nothing new ends with a short answer and no report. Once the Watch's goal is met, call finish_watch."""
+This message is a scheduled run of a Watch the user started in this chat, and the user is not here. Do its task with your tools as the user would, and decide yourself how to look. Starting the Watch was the user's permission for what its task says; nobody can answer a question now, so for anything beyond the task use report_finding with needs_user, and when the task cannot be done as it stands, pause_watch. Of what this run finds, the user hears only through report_finding: at most once, only when there is something new for them, with a page you opened in this run as evidence. Its summary is the email, which links to this chat; your answer to this message is what the user reads when they open it, so what the task asked for stands there itself. A run with nothing new ends with a short answer and no report. Once the Watch's goal is met, call finish_watch."""
 
 # report_finding's result.
 REPORTED = ("The user gets this summary by email once this run ends, with a link to this chat. Your answer is "
             "what they open it for: what the task asked for itself, not a note that it was sent.")
+
+# pause_watch's result.
+PAUSED = ("No further runs until the user resumes it. They get your reason by email with a link to this chat, "
+          "where your answer is what they read.")
 
 # The run's app context (agent_watches.run_context).
 RUN_NOTE = "This message is a scheduled Watch run; the user is away.{goal}"
@@ -200,6 +206,13 @@ class FinishWatch(Strict):
                         description="Why the Watch's goal is met, in one sentence in the user's language.")
 
 
+class PauseWatch(Strict):
+    reason: str = Field(
+        min_length=3, max_length=REASON_MAX_CHARS,
+        description="What the user has to say or do before it can run, in one or two sentences in their "
+                    "language: the email's text.")
+
+
 def _bare(url) -> str:
     """An address as compared: no fragment, no trailing slash."""
     return str(url or "").split("#", 1)[0].rstrip("/")
@@ -210,7 +223,7 @@ def _content_text(content) -> str:
 
 
 class WatchRunTools:
-    """``report_finding`` and ``finish_watch`` of one scheduled run."""
+    """``report_finding``, ``finish_watch`` and ``pause_watch`` of one scheduled run."""
 
     def __init__(self, loop):
         self.loop = loop
@@ -224,6 +237,15 @@ class WatchRunTools:
                          ReportFinding, self.report),
             ReadOnlyTool("finish_watch", "End this Watch: its goal is met. No further runs.",
                          FinishWatch, self.finish),
+            # A task that cannot be done as it stands has no page to show for
+            # it, which report_finding wants; the Watch would otherwise run
+            # on and on, asking nobody.
+            ReadOnlyTool("pause_watch",
+                         "Pause this Watch: its task cannot be done as it stands until the user says or does "
+                         "something, such as what it should look at. They get the reason by email; no further "
+                         "runs until they resume it. Not for a page that is down or a run with nothing new: "
+                         "the next run looks again.",
+                         PauseWatch, self.pause),
         ]
 
     def evidence(self, url: str) -> dict | None:
@@ -273,3 +295,15 @@ class WatchRunTools:
             logging.warning("agent watch end not saved category=%s", type(exc).__name__)
             raise ValueError("The Watch could not be ended right now. Say so in your answer.") from None
         return {"status": "finished", "instruction": "No further runs. The user is told by email."}
+
+    def pause(self, args, *, cancellation=None):
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
+        try:
+            _save_on_turn(self.loop, "agent_watch_run", {"pause": {"reason": _line(args.reason)}}, merge=True)
+        except ValueError:
+            raise
+        except Exception as exc:
+            logging.warning("agent watch pause not saved category=%s", type(exc).__name__)
+            raise ValueError("The Watch could not be paused right now. Say so in your answer.") from None
+        return {"status": "paused", "instruction": PAUSED}

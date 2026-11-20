@@ -4,12 +4,13 @@ A Watch is a task with a schedule in one Agent chat. At its time the server
 starts an ordinary Agent turn in that chat (routers/agent.py
 start_agent_turn, on agent_background's thread), with no browser open: the
 agent does the task with every tool it has in the chat and decides itself
-how to look. It reaches the user in two ways only (agent_watch.py
+how to look. It reaches the user in three ways only (agent_watch.py
 WatchRunTools): ``report_finding`` with a page it opened in this run as
 evidence, which mails the user once the turn has ended and its reviewers
-have looked, and ``finish_watch``, which ends the Watch once its goal is
-met. A run without either is quiet: no mail, and the chat keeps its place in
-the sidebar (routers/agent.py _final).
+have looked; ``finish_watch``, which ends the Watch once its goal is met;
+and ``pause_watch``, which pauses it with the reason the user is mailed
+when the task cannot be done as it stands. A run without any is quiet: no
+mail, and the chat keeps its place in the sidebar (routers/agent.py _final).
 
 What the task says, the agent may do in the user's name: starting the Watch
 from its card is that permission (Max). The user is away during
@@ -424,6 +425,18 @@ def _owned(tx, db, uid: str, watch_id: str) -> dict:
     return data
 
 
+def _pause(tx, db, watch_id: str, data: dict, *, now: datetime) -> dict:
+    """Frees an active Watch's slot inside ``tx`` (reads first) and returns
+    the patch that pauses it, for the caller's one update of the Watch."""
+    slots_ref = _slots_ref(db, data["uid"])
+    slots = slots_ref.get(transaction=tx)
+    active = dict((slots.to_dict() or {}).get("active") or {}) if slots.exists else {}
+    active.pop(watch_id, None)
+    tx.set(slots_ref, {"active": active, "updated_at": now})
+    # A busy run's retry (retry_of) ends here: after the resume, late counts from the new time.
+    return {"status": STATUS_PAUSED, "next_run_at": None, "retry_of": None, "updated_at": now}
+
+
 def pause(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> dict:
     """No runs until it is resumed; its slot is free meanwhile."""
     db = _db(db)
@@ -433,14 +446,8 @@ def pause(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> d
         data = _owned(tx, db, uid, watch_id)
         if data.get("status") != STATUS_ACTIVE:
             return data
-        slots_ref = _slots_ref(db, uid)
-        slots = slots_ref.get(transaction=tx)
-        active = dict((slots.to_dict() or {}).get("active") or {}) if slots.exists else {}
-        active.pop(watch_id, None)
-        # A busy run's retry (retry_of) ends here: after the resume, late counts from the new time.
-        patch = {"status": STATUS_PAUSED, "next_run_at": None, "retry_of": None, "updated_at": now}
+        patch = _pause(tx, db, watch_id, data, now=now)
         tx.update(_ref(db, watch_id), patch)
-        tx.set(slots_ref, {"active": active, "updated_at": now})
         return {**data, **patch}
 
     return serialize(watch_id, watch_service._run_transaction(db, operation))
@@ -1155,15 +1162,21 @@ def _review_line(turn: dict) -> dict:
 
 
 def _outcome(turn: dict) -> tuple[str, dict]:
-    """("finding" | "needs_you" | "done" | "quiet" | "failed", details) of a run's turn."""
+    """("finding" | "needs_you" | "done" | "quiet" | "failed", details) of a
+    run's turn. ``details["pause"]``: the run paused its Watch (pause_watch);
+    reaching the goal in the same run outranks it."""
     run = turn.get("agent_watch_run") if isinstance(turn.get("agent_watch_run"), dict) else {}
     finding = run.get("finding") if isinstance(run.get("finding"), dict) else None
     done = run.get("done") if isinstance(run.get("done"), dict) else None
+    pause = run.get("pause") if isinstance(run.get("pause"), dict) and not done else None
     failure = (turn.get("agent_failure") or {}).get("code") if isinstance(turn.get("agent_failure"), dict) else ""
     if finding:
-        return ("needs_you" if finding.get("needs_user") else "finding"), {**finding, "done": done}
+        needs = finding.get("needs_user") or pause is not None
+        return ("needs_you" if needs else "finding"), {**finding, "done": done, "pause": pause is not None}
     if done:
         return "done", {"done": done}
+    if pause is not None:
+        return "needs_you", {"summary": pause.get("reason") or "", "done": None, "pause": True}
     if failure == "hold_timeout":
         # A reviewer halted the run and nobody was there to decide.
         return "needs_you", {"summary": "", "halted": True, "done": None}
@@ -1175,10 +1188,11 @@ def _outcome(turn: dict) -> tuple[str, dict]:
 def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None,
                now: datetime | None = None) -> str:
     """After a run's turn ended (its producer's last step): the Watch notes
-    the run, ends when the goal is met, marks a finding, a question for the
-    user or the goal unread and stages its messages (mail and Telegram, as
-    the Watch has them on). A Watch without a picture looks for one in the
-    pages of the run (PICTURES). Returns the outcome."""
+    the run, ends when the goal is met, pauses when the run paused it, marks
+    a finding, a question for the user or the goal unread and stages its
+    messages (mail and Telegram, as the Watch has them on). A Watch without
+    a picture looks for one in the pages of the run (PICTURES). Returns the
+    outcome."""
     from app.services.agent_runs import AgentRunStore
     db = _db(db)
     now = now or utcnow()
@@ -1204,13 +1218,15 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
         # waits in the chat, no message follows; reaching the goal still tells.
         withdrawn = not ends and (data.get("status") == STATUS_PAUSED
                                   or (data.get("status") == STATUS_DONE and data.get("ended") == "user"))
+        pauses = bool(details.get("pause")) and data.get("status") == STATUS_ACTIVE
         if ends:
             _end(tx, db, watch_id, data, reason="goal", now=now)
-        patch = {"last_run": {"at": now, "turn_id": turn_id, "outcome": outcome,
-                              "summary": _line(details.get("summary"), FINDING_MAX_CHARS),
-                              "evidence_url": evidence_url},
-                 "looks": _with_look(data, _look(outcome, now, details.get("summary") if tells else "")),
-                 "updated_at": now}
+        patch = _pause(tx, db, watch_id, data, now=now) if pauses else {}
+        patch.update({"last_run": {"at": now, "turn_id": turn_id, "outcome": outcome,
+                                   "summary": _line(details.get("summary"), FINDING_MAX_CHARS),
+                                   "evidence_url": evidence_url},
+                      "looks": _with_look(data, _look(outcome, now, details.get("summary") if tells else "")),
+                      "updated_at": now})
         if tells:
             patch["unread"] = True
         if running.get("request_id") == watch_run.get("request_id"):
@@ -1222,7 +1238,7 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
             "outcome": outcome, "task": data.get("task") or "", "goal": data.get("goal") or "",
             "summary": _line(details.get("summary"), FINDING_MAX_CHARS), "evidence_url": evidence_url,
             "evidence_title": _line(details.get("evidence_title"), 240), "halted": bool(details.get("halted")),
-            "goal_met": bool(details.get("done")),
+            "goal_met": bool(details.get("done")), "paused": pauses,
             "goal_reason": _line((details.get("done") or {}).get("reason"), REASON_MAX_CHARS),
             "review": _review_line(turn), "bookmark_id": data.get("bookmark_id") or ""}
         channels = outbox.watch_channels(data, defaults=outbox.AGENT_WATCH_CHANNEL_DEFAULTS)

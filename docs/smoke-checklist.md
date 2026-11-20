@@ -1256,7 +1256,8 @@ Server.
       Gmail/Kalender-Daten. Unter einer abgebrochenen Antwort keine Karte.
 - [ ] Watches-Seite (neu seit 2026-11-04): leer steht nur die Frage „What
       should the Agent keep an eye on?“ mit dem Feld und vier Anfängen, kein
-      Knopf daneben. Ein Satz, „Done when“ als Token, „How often“ zeigt nur
+      Knopf daneben. Ein Anfang allein startet nichts (Start aus, Return
+      sagt „Say in a sentence …“), erst mit eigenen Worten dahinter. Ein Satz, „Done when“ als Token, „How often“ zeigt nur
       die Intervalle der Stufe (die anderen mit Schloss und Satz), Uhrzeiten
       im 24-Stunden-Takt; Return legt einen eigenen Chat an, dessen erster
       Blick gleich kommt (Zeile „Its first look is under way“, Puls „Looking
@@ -1290,7 +1291,11 @@ Server.
       zur App, Prüfer-Satz unten. Ein Lauf ohne Befund mailt nichts und rückt
       den Chat nicht nach oben; Logzeile `Agent watch run ended outcome=quiet`.
       `finish_watch` beendet die Watch (Mail „Reached: …“, Karte „Watch
-      reached its goal“).
+      reached its goal“). Ein Auftrag ohne Gegenstand (z. B. nur „Every
+      week, tell me what changed around“ und ein Gruß) pausiert die Watch
+      beim ersten Blick: Mail „Your Watch needs you: …“ mit „The Watch is
+      paused until you resume it.“, auf der Watches-Seite „Paused“ und kein
+      nächster Lauf.
 - [ ] Die Watches-Seite `/app/watches` ist erreichbar über den schwebenden
       View-Switch „Chat | Watches“ (gleitender Thumb, beide Segmente mit
       Icon) und „Watched“ im Nutzericon-Menü; Browser-Back/Forward und

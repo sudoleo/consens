@@ -371,7 +371,7 @@ async def _agent_watch_mail(item: dict, subject: Subject, recipient: str, *, db,
         summary=payload.get("summary") or "", evidence_url=payload.get("evidence_url") or "",
         evidence_title=payload.get("evidence_title") or "", halted=bool(payload.get("halted")),
         goal_met=bool(payload.get("goal_met")), goal_reason=payload.get("goal_reason") or "",
-        review=payload.get("review") or {}, app_url=_agent_chat_url(payload),
+        paused=bool(payload.get("paused")), review=payload.get("review") or {}, app_url=_agent_chat_url(payload),
         unsubscribe_url=SITE_URL + "/agent-watch/unsubscribe?token="
         + agent_watches.unsubscribe_token(item["resource_id"]),
     )

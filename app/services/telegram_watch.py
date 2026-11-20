@@ -542,6 +542,8 @@ def _agent_watch_text(payload: dict, language: str) -> str:
         lines.append(f"{say('Seen on')}: <a href=\"{html.escape(evidence)}\">{html.escape(host)}</a>")
     if payload.get("goal_met"):
         lines.append(say("The goal is met, so the Watch has ended."))
+    elif payload.get("paused"):
+        lines.append(say("The Watch is paused until you resume it."))
     if payload.get("task"):
         lines.append(f"<i>{_escape(payload['task'], limit=300)}</i>")
     return "\n\n".join(lines)

@@ -387,7 +387,7 @@
     starters.setAttribute('aria-label', App.t('Ways to begin'));
     for (const [label, words, interval] of STARTERS) {
       starters.append(button('aw-starter', App.t(label), () => {
-        composer()?.setTask(App.t(words) + ' ', { interval });
+        composer()?.setTask(App.t(words) + ' ', { interval, starter: true });
         composer()?.focus();
       }));
     }

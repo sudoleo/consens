@@ -4891,6 +4891,16 @@ Geprüft am Abend von 2026-11-03 (Review vor dem Deploy):
   Adresse in einem ihrer Werkzeugergebnisse), nie eine nur aus dem Chat oder
   dem eigenen Text. `finish_watch` beendet die Watch, wenn ihr Ziel erreicht
   ist. Beide stehen am Turn (`agent_watch_run`).
+- **Pausieren ohne Beleg:** Ist der Auftrag so nicht machbar (er nennt
+  nichts zum Beobachten, oder es fehlt etwas, das nur der Nutzer geben
+  kann), pausiert `pause_watch` (`reason`) die Watch: Platz frei, kein
+  nächster Lauf, der Grund geht als `needs_you` mit „The Watch is paused
+  until you resume it.“ per Mail und Telegram. Eine Seite braucht das nicht;
+  ohne das Werkzeug blieb nur `report_finding` mit irgendeiner Seite als
+  Beleg, und die Watch lief Woche für Woche ins Leere. Eine Watch aus dem
+  Anfang „Every week, tell me what changed around“ samt Gruß zeigte das
+  (Chat-Report 2026-11-20). Ein erreichtes Ziel im selben Lauf geht vor.
+  Die Pause steht ebenfalls am Turn (`agent_watch_run.pause`).
 - **Die Mail holt in den Chat:** Die Mail trägt nur `summary` (höchstens 600
   Zeichen) und den Link zum Chat; was der Auftrag verlangt (ein Bulletin, ein
   Bericht), steht in der Antwort des Laufs. Das sagen `RUN_PROMPT`, die

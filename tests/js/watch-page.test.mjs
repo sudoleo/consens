@@ -658,6 +658,24 @@ describe("The field that starts a Watch (watch-composer.js)", () => {
     expect(document.activeElement).toBe(document.querySelector(".wc-task"));
   });
 
+  it("starts nothing on a way to begin alone, only once the user wrote on from it", async () => {
+    const { window, document, server } = boot();
+    await window.App.watchDashboard.render();
+    document.querySelectorAll(".aw-starter")[3].click();
+    const form = field(document);
+    const task = form.querySelector(".wc-task");
+    expect(form.querySelector(".wc-send").disabled).toBe(true);
+    task.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(form.querySelector(".wc-error").textContent).toBe("Say in a sentence what the Agent should do.");
+    expect(posted(server)).toBeUndefined();
+    type(window, task, task.value + "electric bikes in Germany");
+    expect(form.querySelector(".wc-send").disabled).toBe(false);
+    expect(form.querySelector(".wc-error").hidden).toBe(true);
+    // Written on and taken back to the starter's words alone: still nothing to start.
+    type(window, task, "Every week, tell me what changed around  ");
+    expect(form.querySelector(".wc-send").disabled).toBe(true);
+  });
+
   it("starts one in a chat of its own from a sentence, a goal and a weekday", async () => {
     const { window, document, server } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();

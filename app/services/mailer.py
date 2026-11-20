@@ -706,10 +706,11 @@ def _review_sentence(review: dict) -> str:
 def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: str, summary: str,
                               evidence_url: str, evidence_title: str, halted: bool, goal_met: bool,
                               goal_reason: str, review: dict, app_url: str,
-                              unsubscribe_url: str = "") -> EmailMessage:
+                              unsubscribe_url: str = "", paused: bool = False) -> EmailMessage:
     """One Agent Watch run (agent_watches.py) worth telling: what the agent
     found with the page it saw it on, what it needs from the user (also a
-    reviewer's halt nobody was there to decide), or the goal it waited for."""
+    reviewer's halt nobody was there to decide, or a task the run paused
+    the Watch over: ``paused``), or the goal it waited for."""
     from app.services.agent_watches import TASK_MAX_CHARS
     summary = _normalized(summary)[:600]
     task = _normalized(task)[:TASK_MAX_CHARS]
@@ -725,7 +726,8 @@ def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: 
     else:
         subject = _t("Watch: {summary}", summary=_subject_clip(summary, limit=64))
         eyebrow, heading, label = _t("Watch · Found"), _t("Your Watch found something"), _t("What it found")
-    goal_line = _t("The goal is met, so the Watch has ended.") if goal_met else ""
+    goal_line = (_t("The goal is met, so the Watch has ended.") if goal_met
+                 else _t("The Watch is paused until you resume it.") if paused else "")
     review_line = _review_sentence(review)
     has_page = str(evidence_url or "").startswith(("http://", "https://"))
     plain = "\n\n".join(part for part in (
