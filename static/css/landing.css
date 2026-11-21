@@ -1,9 +1,11 @@
 /* ==========================================================================
-   consens.io — Landing page
+   consens.io — the product pages
 
-   Drives the marketing landing page; /benchmark and the Consensus Engine
-   page build on it (benchmark.css, consensus-engine.css). Other public pages
-   (public-pages.css) and the /app stay untouched.
+   Type, tokens, the bar, the footer and the product pieces shared by the
+   landing page (laid out as a chat by landing-chat.css), /benchmark,
+   /consensus-engine and /model-pulse (benchmark.css, consensus-engine.css,
+   model-pulse.css build on it). Other public pages (public-pages.css) and
+   the /app stay untouched.
 
    The page chrome (sections, type, nav) is flat and quiet; the product
    mockups are built from the SAME five surface values as /app (ground /
@@ -15,9 +17,7 @@
 
 @import url('./public-tokens.css');
 @import url('./public-nav.css');
-@import url('./skeleton.css');
 @import url('./components-consensus-visuals.css');
-@import url('./demo-action.css');
 @import url('./send-glow.css');
 @import url('./watch-card.css');
 
@@ -52,14 +52,10 @@ img { display: block; max-width: 100%; }
 
    Everywhere else depth comes from tone alone. A well, one step DARKER than
    the section it sits in, would make the thing the visitor is meant to reach
-   for the quietest surface on a page whose whole first screen is one field.
+   for the quietest surface on a page whose one call to action is that field.
    So the field is the one raised object here: near white in light, a step lighter than
    the canvas in dark, with the hairline and the soft lift that separate it
    from whichever section tone it lands in.
-
-   Chips inside it are tinted RELATIVE to the field (an alpha, not a colour),
-   so attach and the run switch keep the same one-step-down relationship on
-   both themes without a second set of overrides.
    -------------------------------------------------------------------------- */
 /* The material itself is the raised field of public-tokens.css (--field*),
    the same tokens the /app composer uses. */
@@ -122,21 +118,33 @@ img { display: block; max-width: 100%; }
 
 .lp-section { padding: var(--section-pad) 0; }
 
-/* A panel inside a section is one tonal step away from it, whichever tone
-   the section happens to be. Components ask for --surface (and --surface-2
-   for anything nested inside them) instead of naming a colour, so the same
-   rule works on both section tones without a second set of overrides. */
-.lp-section--white {
-  background: var(--bg-white);
-  --surface: var(--ground);
-  --surface-2: var(--raise);
-}
-
+/* One ground for the whole page, whichever tone a section names. Two
+   section tones 2% apart read as a seam in the rendering, not as design;
+   parts are set apart by a horizon that fades out at both ends, like
+   everywhere in the product. A panel inside a section is one tonal step
+   away from it: components ask for --surface (and --surface-2 for anything
+   nested inside them) instead of naming a colour. */
+.lp-section--white,
 .lp-section--grey {
-  background: var(--bg-grey);
+  background: var(--ground);
   --surface: var(--raise);
   --surface-2: var(--ground);
 }
+main > .lp-section + .lp-section { position: relative; }
+main > .lp-section + .lp-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--page-width);
+  height: 1px;
+  transform: translateX(-50%);
+  background: var(--line-soft);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  pointer-events: none;
+}
+
 .lp-head { max-width: 760px; }
 .lp-head .lp-lead { max-width: 52ch; }
 
@@ -223,7 +231,7 @@ img { display: block; max-width: 100%; }
   gap: 20px;
   height: 54px;
   padding: 0 clamp(16px, 3vw, 26px);
-  background: var(--bg-white);
+  background: var(--ground);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   border-bottom: 0;
@@ -284,45 +292,25 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-nav-cta { color: #141414; }
 
 /* --------------------------------------------------------------------------
-   Hero — tighter top spacing
+   Hero: the landing page's claim, and the actions under a page's lead
    -------------------------------------------------------------------------- */
-/* Hero band fills the screen height — on every device, not just on a monitor.
-   A hero that ends wherever its content stops leaves part of the next
-   section standing in the first screen: two openings at once, and neither of
-   them finished. The next section starts at the fold, where scrolling
-   reveals it.
-
-   min-height, not height: a landscape phone is shorter than the content, and
-   there the band simply grows instead of clipping. */
-.lp-section--hero {
-  padding: clamp(16px, 2.5vw, 32px) 0 0;
-  /* svh, never dvh, for anything in the page flow. dvh is
-     live: Safari's bar slides in on the first swipe, every band grew with it
-     and the text slid away under the finger, and back on the way up --
-     Safari has no scroll anchoring to hide that. svh is the screen with the
-     bar showing, which is exactly the first screen a visitor sees; when the
-     bar retracts while scrolling, the next section simply shows a little
-     earlier. vh stays as the fallback for browsers without the new units. */
-  min-height: calc(100vh - 54px);
-  min-height: calc(100svh - 54px);
-  display: flex;
-  align-items: center;
+/* The h1 is the loudest line on the page; its second sentence answers the
+   first, one step quieter. The two sentences are one thought each, so the
+   line break belongs between them and not inside one of them. Inline blocks
+   do that on their own at every width: both sentences share a line where
+   there is room, otherwise the second one takes the next line. */
+.lp-hero-claim {
+  margin: 0 auto;
+  max-width: 18ch;
+  color: var(--ink);
+  font-size: clamp(2.25rem, 4.6vw, 3.5rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.05;
+  letter-spacing: -0.034em;
+  text-wrap: balance;
 }
-
-/* A flex child does not get .lp-shell's auto margins, so it repeats them. */
-.lp-section--hero > .lp-hero { width: var(--page-width); }
-
-.lp-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.08fr);
-  align-items: center;
-  gap: clamp(28px, 4vw, 60px);
-  padding-top: clamp(8px, 1.5vw, 24px);
-  padding-bottom: clamp(40px, 6vw, 72px);
-}
-
-.lp-hero .lp-display { font-size: var(--font-size-display-lg); }
-.lp-hero .lp-lead { max-width: 34ch; }
+.lp-hero-claim span { display: inline-block; }
+.lp-hero-claim span:last-child { color: var(--ink-3); }
 
 .lp-hero-actions {
   display: flex;
@@ -333,171 +321,14 @@ img { display: block; max-width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
-   Demo-first hero: the claim (h1), then a functional-looking input field on
-   an otherwise empty first screen. The field opens the app; the Try-the-demo
-   pill inside it links into /app?demo=1 (demo.js auto-runs the scripted demo
-   there). No "Open the app" button: it would duplicate the navigation two
-   centimetres higher up.
+   The app window: the product mock on /consensus-engine
+   (partials/product_result_mockup.html)
+
+   It genuinely floats above the page, and foundation.css reserves --lift for
+   exactly that case. Inside it, as in /app, depth is carried by tone, built
+   from the same five values (ground / raise / well / ink / line) the product
+   is made of: a mockup of another material stops being a screenshot.
    -------------------------------------------------------------------------- */
-.lp-hero.lp-hero--demo {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.lp-prompt.lp-hero-prompt {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  /* The base .lp-prompt rule centres its children, which is right for the
-     one-row composer but wrong here: turned into a column, that same
-     align-items centred the question and shrink-wrapped the control row to
-     its contents, so nothing could sit at either edge of the field. */
-  align-items: stretch;
-  gap: 22px;
-  width: min(680px, 100%);
-  min-height: 160px;
-  margin: clamp(30px, 4.5vw, 46px) auto 0;
-  padding: 20px;
-  padding-bottom: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
-}
-
-.lp-prompt.lp-hero-prompt:focus-visible,
-.lp-prompt.lp-hero-prompt:has(.lp-hero-ask-link:focus-visible) {
-  transform: translateY(-2px);
-  /* Hover is the field lifting a little further off the section, plus the
-     same hairline focus gets in /app — not a coloured frame and a glow. */
-  box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
-}
-@media (hover: hover) and (pointer: fine) {
-  .lp-prompt.lp-hero-prompt:hover {
-    transform: translateY(-2px);
-    /* Hover is the field lifting a little further off the section, plus the
-       same hairline focus gets in /app — not a coloured frame and a glow. */
-    box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
-  }
-}
-
-.lp-prompt.lp-hero-prompt:focus-visible,
-.lp-prompt.lp-hero-prompt:has(.lp-hero-ask-link:focus-visible) {
-  outline: var(--focus-ring);
-  outline-offset: 3px;
-}
-
-/* The hero field opens the app; its demo button is a second, separate link.
-   The field's link stretches over the whole surface and the button sits
-   above it, so a click anywhere but the button lands in the composer. */
-.lp-hero-ask-link {
-  display: block;
-  color: inherit;
-  text-decoration: none;
-  outline: none;
-}
-.lp-hero-ask-link::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-.lp-hero-prompt-bar .lp-demo-btn {
-  position: relative;
-  z-index: 1;
-  text-decoration: none;
-}
-
-/* The field is a fixed object, not a box that grows with what is typed into
-   it. The loop types five questions of very different lengths; reserving the
-   tallest of them up front (two lines) means the field, the marks and the
-   claim below stay exactly where they are while the caret runs. One line of
-   empty space is a cheap price for a hero that never jumps. */
-.lp-hero-prompt .lp-prompt-text {
-  min-height: calc(2 * var(--line-height-ui) * 1em);
-  font-size: var(--font-size-base);
-}
-.lp-hero-prompt .lp-attach { cursor: inherit; }
-
-.lp-hero-prompt-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  /* Controls sit at the very bottom of the field, like the /app input row. */
-  margin-top: auto;
-}
-
-.lp-hero-prompt-bar { gap: 8px; }
-
-/* The h1, one voice below the display size. Quieter, it would be skipped on
-   a nearly empty screen; at full ink, one step up the scale and a medium
-   weight it is the loudest *text* on the page, while the field stays the
-   loudest *object*.
-   It opens the hero, so the gap to the field is the field's own top margin —
-   no margin of its own to double up with. */
-.lp-hero-claim {
-  margin: 0 auto;
-  max-width: 40ch;
-  color: var(--ink);
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-heading);
-  letter-spacing: var(--tracking-tight);
-  text-wrap: balance;
-}
-
-/* The two sentences are one thought each, so the line break belongs between
-   them and not inside one of them. Inline blocks do that on
-   their own at every width: both sentences share a line where there is room,
-   otherwise the second one takes the next line. */
-.lp-hero-claim span { display: inline-block; }
-
-/* The field reads better above the middle of the first screen than on it.
-   Where the hero is tall enough, reserved height under the stack lifts it:
-   half of whatever is reserved here is how far the field moves up. Only the
-   height matters, so a phone held upright gets the same treatment. */
-@media (min-height: 620px) {
-  .lp-section--hero .lp-hero.lp-hero--demo { padding-bottom: clamp(76px, 20vh, 220px); }
-}
-
-/* Tablets and short laptop windows: the claim keeps to the width of the
-   field it belongs to. */
-@media (max-width: 900px) {
-  .lp-hero-claim { max-width: 38ch; }
-}
-
-@media (max-width: 600px) {
-  .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
-
-
-  /* The controls and "Try the demo" do not fit a phone's field in one line:
-     the controls keep the first line and the demo action takes a full-width
-     second one, which is the better tap target anyway. On every wider screen
-     the row is untouched: controls left, demo button flush right. */
-  .lp-hero-prompt-bar { flex-wrap: wrap; gap: 10px; min-width: 0; }
-  .lp-hero-prompt-bar .lp-demo-btn {
-    flex: 1 1 100%;
-    margin-left: 0;
-    justify-content: center;
-  }
-}
-
-/* ==========================================================================
-   Product surfaces — the frameless shell, on a marketing page
-
-   As in /app, depth is carried by tone, and a frame is the exception rather
-   than the default. A mockup of another material stops being a screenshot,
-   so these surfaces are built from the same five values (ground / raise /
-   well / ink / line) the product is made of.
-
-   The one exception is the mock window itself: it genuinely floats above the
-   marketing page, and foundation.css reserves --lift for exactly that case.
-   ========================================================================== */
-
-/* --- The app canvas, floating on the page --------------------------------- */
-.lp-app,
 .lp-window {
   position: relative;
   isolation: isolate;
@@ -510,7 +341,7 @@ img { display: block; max-width: 100%; }
 }
 
 /* On the near-black page no shadow shows, so the hairline carries the edge. */
-.dark-mode :is(.lp-app, .lp-window) {
+.dark-mode .lp-window {
   box-shadow: var(--lift), 0 0 0 1px var(--line);
 }
 
@@ -553,38 +384,10 @@ img { display: block; max-width: 100%; }
 .lp-mocklogo .brand-mark { width: 16px; height: auto; flex: none; }
 .lp-window-bar .lp-mock-login { margin-left: auto; color: var(--ink-3); font-size: var(--font-size-sm); }
 
-/* Scene 01: the field, its toolbar and the footnote under it. */
-.lp-ask-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-}
-
 .lp-window-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px; }
-.lp-ask-stage > *,
 .lp-window-body > * { min-width: 0; }
 
-/* --- Real-run model pulse -------------------------------------------------
-   The benchmark is the controlled proof; this is the product signal beside
-   it. A tonal surface and hairline meters keep the ranking legible without
-   turning the proof section into a sports scoreboard. */
-
-.lp-model-pulse-icon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-xs);
-  background: var(--surface-2, var(--ground));
-}
-
-.lp-model-pulse-icon img {
-  width: 15px;
-  height: 15px;
-  object-fit: contain;
-}
-
-/* --- Hero window: the end result (verdict + consensus + differences) ------- */
+/* --- In the window: the end result (verdict + consensus + differences) ---- */
 .lp-hero-result { gap: 13px; }
 
 .lp-hero-result .consensus-verdict { margin-bottom: 0; }
@@ -644,16 +447,31 @@ img { display: block; max-width: 100%; }
 
 .lp-hero-result .consensus-marker-legend { margin-top: 9px; font-size: var(--font-size-micro); }
 
+/* --- /model-pulse: a family's mark on a tonal tile (model-pulse.js) ------- */
+.lp-model-pulse-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-2, var(--ground));
+}
+
+.lp-model-pulse-icon img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
 /* --------------------------------------------------------------------------
    The composer — the one raised surface on the page
 
    Same construction as shell.css otherwise: no contour drawn around content,
-   and a single row underneath holding attach, the run switch and send. The
-   filled circle is the only massive control in the whole mock. What is
-   different here is the tone: see the --lp-field block at the top of the
+   and a single row underneath holding (+), the reviewers' marks and words,
+   and Send. The filled circle is the only massive control in the field. What
+   is different here is the tone: see the --lp-field block at the top of the
    file for why the field is lit instead of sunk.
    -------------------------------------------------------------------------- */
-.lp-prompt,
 .lp-composer {
   position: relative;
   display: flex;
@@ -670,13 +488,6 @@ img { display: block; max-width: 100%; }
   transition: box-shadow var(--dur-state) var(--ease-standard);
 }
 
-/* Typing into the field is what focus looks like here: the same hairline
-   /app puts on a focused field, on top of the lift the field already has. */
-.lp-composer.is-active {
-  box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
-}
-
-.lp-prompt-text,
 .lp-composer-text {
   display: block;
   flex: 1 1 100%;
@@ -685,49 +496,6 @@ img { display: block; max-width: 100%; }
   font-size: var(--font-size-base);
   line-height: var(--line-height-ui);
 }
-
-/* The scene mock is a field and nothing else — no title bar, no greeting
-   above it — so it can be the size it is in the product instead of a small
-   picture of it. Three reserved lines, because the question typed here is
-   longer than the hero's and the mock must not grow while it is written. */
-.lp-scroll-scene .lp-composer {
-  padding: 20px 20px 15px;
-  border-radius: var(--radius-xl);
-}
-
-/* The question is typed at reading size, not at headline size: the field is
-   a field, and type large enough to read as a title turns the mock into a
-   poster of one. Same size as the body text of the page it sits on. */
-.lp-scroll-scene .lp-composer-text {
-  min-height: calc(3 * var(--line-height-ui) * 1em);
-  font-size: var(--font-size-base);
-}
-
-.lp-scroll-scene .lp-composer-row { gap: 10px; }
-.lp-scroll-scene .lp-send { width: 38px; height: 38px; }
-.lp-scroll-scene .lp-send svg { width: 15px; height: 15px; }
-
-/* The words stand in the markup (data-placeholder), where a German page
-   translates them (docs/i18n.md). */
-.lp-composer-text:empty:not(.is-typing)::before {
-  content: attr(data-placeholder);
-  color: var(--ink-3);
-}
-
-/* The question is typed in on scroll; the caret shows while there is still
-   something left to type. */
-.lp-prompt-text.is-typing::after,
-.lp-composer-text.is-typing::after {
-  content: "";
-  display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 2px;
-  vertical-align: -0.16em;
-  background: var(--ink);
-  animation: lpCaret var(--dur-spin) steps(1, end) infinite;
-}
-@keyframes lpCaret { 50% { opacity: 0; } }
 
 .lp-composer-row {
   display: flex;
@@ -739,8 +507,7 @@ img { display: block; max-width: 100%; }
 
 /* The (+) of the /app composer: no fill and no ring at rest, as in the app,
    where it carries the mode, files and options in its menu. */
-.lp-icon-btn,
-.lp-attach {
+.lp-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -756,8 +523,7 @@ img { display: block; max-width: 100%; }
   cursor: default;
 }
 
-.lp-icon-btn svg,
-.lp-attach svg { width: 15px; height: 15px; }
+.lp-icon-btn svg { width: 15px; height: 15px; }
 
 /* The reviewers' words beside their marks, as #composerModelPicker on the
    /app start screen (composer.css, agent-mode.js renderReviewers): how
@@ -769,6 +535,7 @@ img { display: block; max-width: 100%; }
   gap: 8px;
   flex: 0 0 auto;
   min-height: 34px;
+  margin-left: auto;
   padding: 7px 10px;
   border: 0;
   border-radius: var(--radius-xs);
@@ -780,8 +547,6 @@ img { display: block; max-width: 100%; }
   white-space: nowrap;
   box-shadow: none;
 }
-
-.lp-run-chip { margin-left: auto; }
 
 .lp-send {
   display: inline-flex;
@@ -803,7 +568,6 @@ img { display: block; max-width: 100%; }
 
 /* Nothing to send until there is a question. */
 .lp-send.is-ready { opacity: 1; transform: none; }
-.lp-send.is-pressed { transform: scale(0.9); }
 
 /* The light below Send (send-glow.css), as in /app (shell.css): it breathes
    while the field is empty and turns brighter once there is a question. */
@@ -830,34 +594,14 @@ img { display: block; max-width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
-   The Agent turn — a rebuild of an /app Agent answer
+   Pieces of an /app Agent turn, rebuilt for the landing page's chat
 
-   The question as the reader's bubble, then what agent-activity.js draws:
-   the clock line, the agent's own notes in reading size, the steps in a
-   quieter size with the consens mark on the live one, and finally the
-   answer with its marks and the evidence row (agent-review.js). No frame
-   around the run and no progress bars: the product shows a run as text
-   that moves, so the mockup does too. Driven by landing-scenes.js.
+   What agent-activity.js draws: the clock line with the models beside it,
+   a step in a quieter size, and the answer, which a sheen passes over while
+   the reviewers review it (agent-review.js). No frame around the run and no
+   progress bars: the product shows a run as text that moves, so the page
+   does too. landing-chat.css places them in the thread.
    -------------------------------------------------------------------------- */
-.lp-agent {
-  --lp-agent-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 279 200'%3E%3Cpath d='M77.1 115.3C69.2 109.7 45.6 91.5 37.2 84.5C31.4 79.6 30.8 79.1 28.9 77.4C13.1 63.5 4.1 53.4 1.4 46.6C1.1 45.8.6 45 .4 44.7C.1 44.3 0 43.6 0 41.3C0 33.5 11.9 30.1 31.5 32.2C32.7 32.4 34.8 32.6 36.1 32.7C46.9 33.9 68.4 38 84.8 41.9C96.4 44.7 95.6 44 92.9 48.4C81.6 67.1 76.2 92.7 79.4 112.9C79.8 115.2 79.8 115.8 79.5 116.1C79.1 116.7 79 116.6 77.1 115.3Z'/%3E%3Cpath d='M263.2 94.9C242.5 88 225.4 82.5 212.1 78.3C194.5 72.7 188 70.7 180.9 68.5C169.8 65.2 165.6 63.9 162.1 62.9C159.9 62.2 156.9 61.3 155.4 60.9C152.9 60.1 132.6 54.3 126.1 52.5C120 50.8 113.4 49.1 104.9 46.9C101.8 46.1 98.8 45.3 98 45.1C95.6 44.5 95.6 44.2 97.6 41.4C112.7 20.4 136.4 5.7 161.5 1.5C163.4 1.2 165.6.8 166.4.6C168.5 0 188.6-.2 189.7.3C190.1.5 191.1.8 191.9.9C227.3 5.1 259.4 30.7 272.2 64.9C273.5 68.5 274.1 70.3 275.3 74.8C276.1 77.4 276.9 81.9 277.5 85.8C277.8 87.9 278.2 90.7 278.4 92C279 95.4 279.1 99 278.7 99.3C278 99.7 276.8 99.4 263.2 94.9Z'/%3E%3Cpath d='M167.5 199.6C167.2 199.5 165.9 199.2 164.6 199C132.3 194.6 103.9 174.1 89 144.5C85.7 138 82.6 129.1 81 122C80 117.3 79.5 117.1 91.4 125.7C93.7 127.4 96.4 129.4 97.2 130C98.1 130.6 101 132.7 103.5 134.5C106 136.3 112.2 140.8 117.2 144.4C122.3 148 128 152.1 130 153.5C132 155 134.6 156.9 135.9 157.8C138.1 159.4 140.8 161.3 148.5 167C174.3 186.1 183.7 195.1 181.8 199.1C181.4 200.1 169.2 200.5 167.5 199.6Z'/%3E%3C/svg%3E");
-  padding: 20px 24px 22px;
-}
-
-/* The question is the reader's own message: a bubble on the right. */
-.lp-agent-ask {
-  width: fit-content;
-  max-width: min(78%, 460px);
-  margin: 0 0 20px auto;
-  padding: 10px 14px;
-  border-radius: var(--radius-lg);
-  background: var(--raise);
-  color: var(--ink);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-}
-
-.lp-agent-body { display: flex; flex-direction: column; }
 
 /* The clock line: "Working for 12s" while it runs, "Thought for 24s" after. */
 .lp-agent-clock {
@@ -872,54 +616,6 @@ img { display: block; max-width: 100%; }
   font-variant-numeric: tabular-nums;
 }
 
-.lp-agent-clock i {
-  width: 1em;
-  height: 1em;
-  color: var(--ink-3);
-  background: currentColor;
-  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
-  mask: var(--chevron-mask) center / contain no-repeat;
-}
-
-/* Once the agent writes its answer the log folds into the clock line:
-   a height transition over the one wrapper inside it (grid rows 1fr -> 0fr),
-   so the answer below rises with it instead of dropping 200 px in a frame.
-   landing-scenes.js toggles .is-folded and measures with .is-measuring. */
-.lp-agent-log {
-  display: grid;
-  grid-template-rows: 1fr;
-  margin: 8px 0 20px;
-  /* Longer than a layer: the fold carries 200-290 px, and at 320 ms its middle
-     frames moved 40-55 px each. */
-  transition: grid-template-rows calc(var(--dur-layer) * 1.6) var(--ease-standard), margin calc(var(--dur-layer) * 1.6) var(--ease-standard), opacity var(--dur-layer) var(--ease-standard);
-}
-.lp-agent-log-items { display: grid; gap: 12px; min-height: 0; overflow: hidden; }
-.lp-agent-log.is-folded { grid-template-rows: 0fr; margin-block: 0; opacity: 0; }
-.lp-agent-log [hidden] { display: none; }
-
-/* The one live row under the clock while the answer is written and reviewed
-   (the calm line of a turn in /app). It opens as the log folds and folds
-   itself when the run is over, the same way. */
-.lp-agent-writing {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin: 0;
-  opacity: 0;
-  transition: grid-template-rows calc(var(--dur-layer) * 1.6) var(--ease-standard), margin calc(var(--dur-layer) * 1.6) var(--ease-standard), opacity var(--dur-layer) var(--ease-standard);
-}
-.lp-agent-writing > div { min-height: 0; overflow: hidden; }
-.lp-agent-writing.is-open { grid-template-rows: 1fr; margin: 6px 0 16px; opacity: 1; }
-.lp-agent.is-measuring,
-.lp-agent.is-measuring * { transition: none !important; animation: none !important; }
-
-.lp-agent-note {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: var(--font-size-sm);
-  line-height: 1.7;
-  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
-}
-
 .lp-agent-step {
   display: flex;
   flex-wrap: wrap;
@@ -929,79 +625,10 @@ img { display: block; max-width: 100%; }
   color: var(--ink-2);
   font-size: var(--font-size-ui);
   line-height: 1.6;
-  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
 }
 
-/* The live row starts with the consens mark, which breathes, and carries one
-   sheen, exactly like .agent-current-status in /app. */
-.lp-agent-step.is-current { font-weight: var(--font-weight-medium); color: var(--ink); }
-.lp-agent-step.is-current > :first-child {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55em;
-}
-.lp-agent-step.is-current > :first-child::before {
-  content: "";
-  width: calc(0.86em * 1.395);
-  height: 0.86em;
-  background: currentColor;
-  -webkit-mask: var(--lp-agent-mark) center / contain no-repeat;
-  mask: var(--lp-agent-mark) center / contain no-repeat;
-  animation: lpAgentBreathe var(--dur-beat) var(--ease-standard) infinite;
-}
-.lp-agent-step.is-current > :first-child::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: linear-gradient(105deg, transparent 43%, color-mix(in srgb, var(--ground) 60%, transparent) 50%, transparent 57%);
-  background-size: 250% 100%;
-  animation: lpAgentShine var(--dur-beat) var(--ease-linear) infinite;
-}
-
-/* The finished comparison label is shorter than the running one, and the
-   model icons after it follow: they glide to it (landing-scenes.js sets the
-   width of each wording). Scrubbed back, the longer wording has its room at
-   once, so it never runs under the icons. */
-.lp-agent-step:not(.is-current) > .lp-agent-step-label {
-  transition: min-width var(--dur-layer) var(--ease-out);
-}
-
-/* A call in the workspace, as .agent-vm in /app (agent-chat.css): the words
-   and the file or the command in mono, the command after its prompt, how
-   long it took, and what it printed in the one tinted field of the trace,
-   open while it runs and folded once it is done. */
-.lp-agent-step--vm { gap: 0 .5em; }
-.lp-agent-code { font-family: var(--font-mono); font-size: var(--font-size-xs); }
-.lp-agent-command .lp-agent-code::before { content: "$ "; color: var(--ink-3); }
-.lp-agent-meta { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
-.lp-agent-meta[hidden] { display: none; }
-.lp-agent-output {
-  display: grid;
-  grid-template-rows: 1fr;
-  flex: 1 0 100%;
-  min-width: 0;
-  transition: grid-template-rows var(--dur-layer) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
-}
-.lp-agent-output > div { min-height: 0; overflow: hidden; }
-.lp-agent-output.is-folded { grid-template-rows: 0fr; opacity: 0; }
-.lp-agent-output-field {
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--ink-2) 5%, transparent);
-  color: var(--ink-2);
-  font: var(--font-weight-regular) var(--font-size-xs)/1.55 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.lp-agent-output-field p { margin: 0; }
-.lp-agent-output-field [hidden] { display: none; }
-/* Columns as the script pads them: the year, then three amounts, each
-   ending on its own right edge. */
-.lp-agent-output-row { display: grid; grid-template-columns: 4ch repeat(3, 11ch); justify-items: end; }
-
-/* The six comparison models: faint until their answer is in. */
+/* Overlapping model marks, as the run's model icons in /app
+   (agent-delegation.js): faint until a model's part is done. */
 .lp-agent-models { display: inline-flex; align-items: center; padding-left: 7px; }
 .lp-agent-model {
   display: grid;
@@ -1019,18 +646,13 @@ img { display: block; max-width: 100%; }
 }
 .lp-agent-model.is-done { opacity: 1; filter: none; transform: none; }
 .lp-agent-model img { width: 13px; height: 13px; object-fit: contain; }
-.lp-agent-count { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
 
-/* The reviewers beside the clock, as the run's model icons in /app
-   (agent-delegation.js): faint until they follow the work. */
 .lp-agent-clock .lp-agent-reviewers { padding-left: 9px; }
 
-/* The answer: reading size, as in /app. It streams in, a sheen passes over
-   it while the reviewers review it, and their marks stroke on when they are
-   back. */
+/* The answer: reading size, as in /app. A sheen passes over it while the
+   reviewers review it (landing-chat.js sets .is-reviewing). */
 .lp-agent-answer { position: relative; }
 .lp-agent-answer p { margin: 0; color: var(--ink); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
-.lp-agent-answer [data-stream]:empty { display: none; }
 .lp-agent-answer.is-reviewing {
   -webkit-mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
   mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
@@ -1038,409 +660,19 @@ img { display: block; max-width: 100%; }
   mask-size: 250% 100%;
   animation: lpAgentMask var(--dur-beat) var(--ease-linear) infinite;
 }
-/* The files the agent shared, as their rows read in /app
-   (agent-workspace.js): the chart's own picture or the sheet's mark, the
-   name, its type. No box around them, one quiet line. */
-.lp-agent-files {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 22px;
-  margin-top: 13px;
-  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
-}
-.lp-agent-files[hidden] { display: none; }
-.lp-agent-file { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
-.lp-agent-file > span:last-child { display: grid; min-width: 0; line-height: 1.3; }
-.lp-agent-file b { color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.lp-agent-file small { color: var(--ink-3); font-size: var(--font-size-xs); }
-.lp-agent-file-thumb {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 64px;
-  height: 40px;
-  border-radius: 5px;
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--line-soft);
-  object-fit: cover;
-}
-.lp-agent-file-thumb.is-sheet { background: var(--raise); color: var(--ink-3); }
-.lp-agent-file-thumb svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
-
-/* The chart of the answer, in the text as in /app. Drawn from the model of
-   the demo (scripts/demo_assets.py writes the partial, the two colours with
-   it): two lines over thirty years on a grid of the page's own ink. The
-   lines sit in a layer of their own that is cut at the right edge, and
-   --draw (landing-scenes.js, 0 to 1) moves the cut: year by year is left to
-   right, so the lines grow as the page scrolls. Without the script --draw
-   is 1 and the chart stands whole. The labels are text over the plot, in
-   the page's type at every width. */
-.lp-agent-chart {
-  --chart-plot: 150px;
-  --chart-left: 44px;
-  --chart-right: 52px;
-  margin: 14px 0 0;
-  padding-bottom: 22px;
-  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
-}
-/* "500 Tsd. €" needs more room than "€500k". */
-:lang(de) .lp-agent-chart { --chart-left: 68px; --chart-right: 74px; }
-.lp-agent-chart[hidden] { display: none; }
-.lp-agent-chart .is-buying { --chart-line: var(--chart-buying); }
-.lp-agent-chart .is-renting { --chart-line: var(--chart-renting); }
-.lp-agent-chart-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 18px;
-  margin-bottom: 12px;
-  color: var(--ink);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.3;
-}
-.lp-agent-chart-key > div { display: inline-flex; align-items: center; gap: 7px; }
-.lp-agent-chart-key > div::before { content: ""; width: 16px; height: 3px; border-radius: 2px; background: var(--chart-line); }
-.lp-agent-chart-plot { position: relative; height: var(--chart-plot); margin: 0 var(--chart-right) 0 var(--chart-left); }
-.lp-agent-chart-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.lp-agent-chart-plot svg * { fill: none; vector-effect: non-scaling-stroke; }
-.lp-agent-chart-grid { stroke: var(--line-soft); stroke-width: 1; }
-.lp-agent-chart-stay { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 4; }
-.lp-agent-chart-lines { clip-path: inset(-8px calc((1 - var(--draw, 1)) * 100%) -8px -8px); }
-.lp-agent-chart-lines polyline { stroke: var(--chart-line); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-.lp-agent-chart-plot > div {
-  position: absolute;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  white-space: nowrap;
-}
-.lp-agent-chart-y { right: calc(100% + 8px); transform: translateY(50%); }
-.lp-agent-chart-x { top: calc(100% + 8px); transform: translateX(-50%); }
-/* What the lines reach stands once they have reached it (.is-crossed,
-   .is-staying, .is-drawn from landing-scenes.js). */
-.lp-agent-chart-stay,
-.lp-agent-chart-plot > .lp-agent-chart-stay-label,
-.lp-agent-chart-plot > .lp-agent-chart-note,
-.lp-agent-chart-plot > .lp-agent-chart-end {
-  opacity: 0;
-  transition: opacity var(--dur-state) var(--ease-standard);
-}
-.lp-agent-chart.is-staying .lp-agent-chart-stay,
-.lp-agent-chart.is-staying .lp-agent-chart-stay-label,
-.lp-agent-chart.is-crossed .lp-agent-chart-note,
-.lp-agent-chart.is-drawn .lp-agent-chart-end { opacity: 1; }
-.lp-agent-chart-plot > .lp-agent-chart-stay-label { top: 2px; margin-left: 7px; }
-.lp-agent-chart-plot > .lp-agent-chart-end {
-  left: calc(100% + 8px);
-  transform: translateY(50%);
-  color: var(--ink);
-  font-weight: var(--font-weight-semibold);
-}
-.lp-agent-chart-plot > .lp-agent-chart-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--chart-buying);
-  box-shadow: 0 0 0 2px var(--ground);
-  transform: translate(-50%, 50%) scale(0);
-  transition: transform var(--dur-state) var(--ease-out);
-}
-.lp-agent-chart.is-crossed .lp-agent-chart-dot { transform: translate(-50%, 50%); }
-/* Under the crossing and to its right, where no line runs. Its ground
-   interrupts the dashed line of the years the couple stays. */
-.lp-agent-chart-plot > .lp-agent-chart-note {
-  padding: 3px 5px;
-  border-radius: 4px;
-  background: var(--ground);
-  color: var(--ink);
-  font-weight: var(--font-weight-semibold);
-  transform: translate(7px, calc(100% + 5px));
+@media (prefers-reduced-motion: reduce) {
+  .lp-agent-answer.is-reviewing { animation: none; }
 }
 
-/* The three sentences under the verdict, each wearing the reviewers' note
-   on it once the review is back. */
-.lp-run-claims {
-  display: grid;
-  gap: 10px;
-  margin: 13px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* Inline flow, not a flex row: the mark belongs to the sentence the way it
-   does in /app. */
-.lp-run-claims li {
-  min-width: 0;
-  color: var(--ink);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-}
-.lp-run-claims li:has(> .cx-claim:empty) { display: none; }
-/* A picture here, not a control: section 03 is where a mark opens. */
-.lp-run-claims .cx-claim { cursor: default; }
-
-/* The page's own sentence under the answer: it comes with the marks, after
-   the review, and keeps its room before so nothing under it moves. */
-.lp-agent-answer .lp-run-result-open {
-  margin-top: 13px;
-  color: var(--ink-3);
-  font-size: var(--font-size-sm);
-  opacity: 0;
-  transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-layer);
-}
-.lp-agent-answer.is-marked .lp-run-result-open { opacity: 1; }
-
-/* The evidence row under a reviewed answer: Notes, then the Answers of the
-   AIs the agent asked; no score. */
-.lp-agent-evidence {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 16px;
-  margin-top: 16px;
-  color: var(--ink-2);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-layer), transform var(--dur-layer) var(--ease-out) var(--dur-layer);
-}
-.lp-agent-evidence.is-visible { opacity: 1; transform: none; }
-.lp-agent-link { display: inline-flex; align-items: center; gap: 6px; }
-.lp-agent-link b { color: var(--ink-3); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
-.lp-agent-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-
-@keyframes lpAgentIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@keyframes lpAgentShine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-@keyframes lpAgentBreathe { 50% { opacity: .35; } }
 @keyframes lpAgentMask { from { -webkit-mask-position: 100% 0; mask-position: 100% 0; } to { -webkit-mask-position: -150% 0; mask-position: -150% 0; } }
 
 /* --------------------------------------------------------------------------
-   Scroll-scrubbed scenes
-
-   The stage pins while its section scrolls past, and the distance scrolled is
-   the playhead: the reader sets the pace, can hold a phase still and can
-   scrub back. Below the pinning breakpoint (short viewports, phones) the
-   scene keeps its normal height and the same progress is taken from its pass
-   through the viewport instead, so nothing is lost — it just plays itself.
+   The consensus result as /consensus-engine shows it: the markup of /app
+   (consensus-insights.js), with only its context overridden
    -------------------------------------------------------------------------- */
-.lp-scroll-scene { position: relative; }
-.lp-scene-stage { position: relative; }
-.lp-scene-rail { display: none; }
-
-/* The scrubbed scenes pin on every screen that is tall enough to hold one,
-   phones included. With the fallback playhead a phone's scene is barely
-   taller than the viewport, so its four phases would be spent in a single
-   flick of the thumb and arrive as one blurred change. Pinned, the stage
-   holds still and the scroll becomes the playhead, which is the whole point
-   of the scene — and it is also what empties the screen: one thing moving,
-   nothing queued underneath it.
-
-   The JS needs no branch for this. It already measures travel as (scene
-   height - stage height) and falls back to a pass-through playhead when
-   there is none, so pinning is a pure CSS decision. */
-@media (min-height: 620px) {
-  /* Under 900px the stage is a single column, so it needs less scroll to
-     play through than the two-column desktop version. */
-  .lp-scroll-scene { min-height: 190vh; }
-
-  /* svh like every height in the page flow (see .lp-section--hero): this
-     stage is pinned while you scroll through it, and dvh would resize it
-     mid-scrub — the browser bar slides away, the stage grows, and everything
-     on it shifts under the thumb that is moving it. svh is the smallest it
-     can ever need to be, so it holds still and the bar simply uncovers page
-     below it. */
-  .lp-scene-stage {
-    position: sticky;
-    top: 54px;
-    display: flex;
-    align-items: center;
-    min-height: calc(100vh - 54px);
-    min-height: calc(100svh - 54px);
-  }
-
-  /* One hairline that fills as the scene plays — the only chrome the scroll
-     animation gets, and it fades out at both ends like every other horizon. */
-  .lp-scene-rail {
-    display: block;
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: clamp(20px, 4vh, 48px);
-    height: 2px;
-    background: var(--line-soft);
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  }
-
-  .lp-scene-rail i {
-    display: block;
-    height: 100%;
-    width: var(--p, 0%);
-    background: var(--ink-3);
-  }
-}
-
-@media (max-width: 899px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) {
-  /* Keep the absolute progress rail below the card, even when the stacked
-     content is taller than the viewport. Include its bottom offset, height
-     and a 24px gap in the stage's measured height. */
-  .lp-scene-stage {
-    padding-bottom: calc(clamp(20px, 4vh, 48px) + 26px);
-  }
-}
-
-@media (min-width: 900px) and (min-height: 620px) {
-  .lp-scroll-scene { min-height: 250vh; }
-
-  /* Copy on the left, the product on the right, both held still while the
-     run advances between them. */
-  .lp-scroll-scene .lp-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-    align-items: center;
-    gap: clamp(32px, 4.5vw, 70px);
-  }
-
-  .lp-scroll-scene .lp-scene-visual { margin-top: 0; }
-
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lp-scroll-scene { min-height: 0; }
-
-  .lp-scene-stage {
-    position: static;
-    min-height: 0;
-  }
-
-  .lp-scene-rail { display: none; }
-
-  .lp-agent-note,
-  .lp-agent-step,
-  .lp-agent-step.is-current > :first-child::before,
-  .lp-agent-step.is-current > :first-child::after,
-  .lp-agent-answer.is-reviewing,
-  .lp-prompt-text.is-typing::after,
-  .lp-composer-text.is-typing::after { animation: none; }
-  .lp-agent-log,
-  .lp-agent-writing,
-  .lp-agent-output,
-  .lp-agent-chart,
-  .lp-agent-chart *,
-  .lp-agent-answer .lp-run-result-open,
-  .lp-agent-step-label { transition: none; animation: none; }
-}
-
-/* The finished scene in words, for screen readers: scenes 01
-   and 02 draw whatever frame the scroll position asks for, so the moving
-   picture is aria-hidden and this text speaks for it. */
-.lp-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* --------------------------------------------------------------------------
-   Scene 03 — Consensus + Differences, rebuilt to mirror the real /app
-   -------------------------------------------------------------------------- */
-.lp-scene-visual { margin-top: clamp(36px, 5vw, 56px); }
-.lp-scene-03 .lp-scene-visual { margin-top: clamp(40px, 5vw, 60px); }
-
-/* --------------------------------------------------------------------------
-   Scene 04 — Consensus Watch: one compact change story, not another text wall
-   -------------------------------------------------------------------------- */
-.lp-watch-story {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(260px, .65fr);
-  align-items: center;
-  gap: clamp(18px, 4vw, 44px);
-  margin-top: clamp(36px, 5vw, 56px);
-  padding: clamp(18px, 3vw, 30px);
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: none;
-}
-.lp-watch-card {
-  min-width: 0;
-  padding: clamp(17px, 2.5vw, 24px);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  box-shadow: none;
-}
-.lp-watch-card-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.lp-watch-card-head > span:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
-.lp-watch-card-head img { width: 18px; filter: invert(1); }
-.dark-mode .lp-watch-card-head img { filter: none; }
-/* "New" in the amber of a finding the reader has not seen yet. */
-/* The finding's green, as on the Watches page (components-watch.css .aw-badge). */
-.lp-watch-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--agree-bg); color: var(--agree); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); }
-.lp-watch-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--agree); }
-.lp-watch-card h3 { max-width: 32ch; margin: 20px 0 0; color: var(--text-primary); font-size: var(--font-size-lg); line-height: var(--line-height-ui); }
-/* The goal line is running text, so a narrow card wraps it like a
-   sentence. */
-.lp-watch-goal { margin: 10px 0 0; color: var(--text-primary); font-size: var(--font-size-sm); line-height: 1.5; }
-.lp-watch-goal-label,
-.lp-watch-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); }
-.lp-watch-goal-text { font-weight: var(--font-weight-medium); }
-.lp-watch-goal-status { font-weight: var(--font-weight-medium); white-space: nowrap; }
-.lp-watch-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
-.lp-watch-meta span { padding: 4px 8px; border-radius: 999px; background: var(--surface); color: var(--ink-3); font-size: var(--font-size-micro); font-weight: var(--font-weight-medium); }
-.lp-watch-timeline { position: relative; display: grid; gap: 0; margin-top: 22px; }
-.lp-watch-timeline::before { content: ""; position: absolute; top: 22px; bottom: 22px; left: 72px; width: 1px; background: var(--line); }
-.lp-watch-point { position: relative; display: grid; grid-template-columns: 58px 12px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 54px; }
-.lp-watch-date { color: var(--text-secondary); font-size: var(--font-size-micro); font-variant-numeric: tabular-nums; }
-.lp-watch-point > i { position: relative; z-index: 1; width: 9px; height: 9px; border: 2px solid var(--surface-2); border-radius: 50%; background: var(--ink-3); box-shadow: none; }
-/* Drift is the one thing on this timeline worth a colour, and it is the same
-   amber the answer uses for "contested" — one colour never means two things. */
-.lp-watch-point.is-change > i { background: var(--partial); box-shadow: 0 0 0 3px var(--partial-bg); }
-.lp-watch-point strong, .lp-watch-point small { display: block; }
-.lp-watch-point strong { color: var(--text-primary); font-size: var(--font-size-xs); }
-.lp-watch-point small { margin-top: 2px; color: var(--text-secondary); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
-/* A move names the page that carries it, as a source chip. */
-.lp-watch-source { padding: 3px 8px; border-radius: var(--radius-xs); background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--text-primary); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); white-space: nowrap; }
-.lp-watch-notification {
-  padding: 18px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  box-shadow: none;
-  transform: translateY(10px);
-}
-.lp-watch-notification-head { display: flex; align-items: center; gap: 10px; }
-.lp-watch-telegram { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: var(--radius-sm); background: var(--ink); color: var(--ground); }
-.lp-watch-telegram svg { width: 18px; height: 18px; }
-.lp-watch-notification-head strong, .lp-watch-notification-head small { display: block; }
-.lp-watch-notification-head strong { font-size: var(--font-size-sm); }
-.lp-watch-notification-head small { margin-top: 2px; color: var(--text-secondary); font-size: var(--font-size-micro); }
-/* The message's blocks in the order Telegram gets them: what changed, why,
-   what you're waiting for. */
-.lp-watch-message { margin: 15px 0 0; font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
-.lp-watch-message dt { margin-top: 10px; color: var(--text-primary); font-weight: var(--font-weight-semibold); }
-.lp-watch-message dt:first-child { margin-top: 0; }
-.lp-watch-message dd { margin: 2px 0 0; color: var(--text-secondary); }
-.lp-watch-notification a { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
-.lp-watch-notification a span { font-size: var(--font-size-lg); transition: transform var(--dur-state) var(--ease-standard); }
-@media (hover: hover) and (pointer: fine) {
-  .lp-watch-notification a:hover span { transform: translateX(3px); }
-}
-/* The second, quieter way: a real Watch, only while one is still checked. */
-.lp-watch-notification a.lp-watch-live { margin-left: 18px; color: var(--ink-2); }
-
-/* Public mockups share the app component and only override their context. */
 .consensus-verdict,
 .consensus-verdict.is-calm,
-.consensus-verdict.is-warn,
-.consensus-verdict.is-alert {
+.consensus-verdict.is-warn {
   margin: 0 0 14px;
   padding: 4px 2px;
   border: 0;
@@ -1450,35 +682,6 @@ img { display: block; max-width: 100%; }
 }
 .consensus-verdict.is-calm { --verdict-ring: var(--agree); }
 .consensus-verdict.is-warn { --verdict-ring: var(--partial); }
-.consensus-verdict.is-alert { --verdict-ring: var(--dispute); }
-
-/* One answer, read top to bottom — the differences live in a collapsible
-   overview UNDER it, not in a second column beside it (mirrors /app). */
-.consensus-box {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-  padding: 0;
-  border-radius: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.consensus-main {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
-  position: relative;
-  padding: 10px 16px 12px;
-  border-radius: var(--radius-md);
-  border: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.dark-mode .consensus-main { box-shadow: none; }
 
 .consensus-differences {
   flex: 0 0 auto;
@@ -1497,9 +700,6 @@ img { display: block; max-width: 100%; }
 .dark-mode .consensus-differences {
   border-top-color: color-mix(in srgb, var(--sidebar-border) 60%, transparent);
 }
-
-/* The differences PANEL itself stays neutral (no coloured edge). Severity
-   lives in the sev-dot and the type label inside each entry. */
 
 /* Collapsible summary line: a quiet text action, no card look. */
 .consensus-differences-summary {
@@ -1548,325 +748,7 @@ img { display: block; max-width: 100%; }
   line-height: var(--line-height-ui);
 }
 
-.consensus-main > h2 {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 0 0 14px;
-  padding: 0 64px;
-  color: var(--text-color);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
-}
-
-.consensus-main > h2 img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
-
-.consensus-main-text { margin: 0; color: var(--text-color); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
-.consensus-main-text p { margin: 0 0 0.8em; }
-.consensus-main-text p:last-child { margin-bottom: 0; }
-.consensus-main-text strong { color: var(--text-color); font-weight: var(--font-weight-bold); }
-.consensus-main-text ul { margin: 0 0 0.8em; padding-left: 20px; }
-.consensus-main-text li { margin: 4px 0; }
-
-/* Inline action icons (share + citation), top-right of the consensus answer —
-   dezente Ghost-Icon-Buttons, exakt wie in der /app. */
-.consensus-share-pill,
-.consensus-actions-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--sidebar-text-muted);
-}
-.share-pill-icon { width: 15px; height: 15px; }
-.quote-toggle-icon { width: 16px; height: 16px; }
-
-/* Key claims (claims-fallback) */
-.consensus-claims-fallback {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 60%, transparent);
-}
-.claims-fallback-title {
-  margin-bottom: 6px;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-.claims-fallback-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 4px 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-color);
-}
-.claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
-
-/* Landing-only illustration behavior around the shared controls. */
 .claim-badge { flex-shrink: 0; }
-.claims-fallback-row .claim-badge { margin: 0; }
-
-/* --------------------------------------------------------------------------
-   Hover preview + claim popover — the two things a mark actually does
-
-   The marks on this page are not a picture of a control: the one gesture the
-   product is built around ("who said that?") works here too. These are the
-   same two surfaces /app uses — the short version on hover
-   (components-consensus-insights.css .insight-preview), the
-   full breakdown on click (components-consensus-insights.css .claim-popover)
-   — rebuilt from the five landing values, because a mock made of different
-   material stops being a mock. Driven by static/js/landing-insights.js.
-   -------------------------------------------------------------------------- */
-.insight-preview {
-  position: absolute;
-  z-index: 1400;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 11px 13px;
-  border-radius: var(--radius-md);
-  background: var(--raise);
-  color: var(--ink);
-  box-shadow: var(--lift);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  /* Purely a reading aid: it must never swallow the click it is advertising. */
-  pointer-events: none;
-}
-
-.insight-preview[hidden] { display: none; }
-
-.insight-preview-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: var(--font-weight-semibold);
-}
-
-.insight-preview-claim { color: var(--ink-2); }
-
-.insight-preview-row {
-  display: grid;
-  grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
-  gap: 9px;
-  color: var(--ink-2);
-  font-size: var(--font-size-micro);
-}
-
-.insight-preview-key {
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.insight-preview-quote {
-  margin: 2px 0 0;
-  padding-left: 9px;
-  border-left: 1px solid var(--line-soft);
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-style: italic;
-}
-
-.insight-preview-foot {
-  margin-top: 2px;
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-}
-
-.claim-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1399;
-  /* The one scrim, as in the app (foundation.css; darker in dark mode). */
-  background: var(--scrim);
-  /* Nothing behind the dim scrolls (the lock itself is in foundation.css). */
-  touch-action: none;
-}
-
-.claim-popover {
-  position: absolute;
-  z-index: 1400;
-  max-height: 60vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: var(--raise);
-  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
-  color: var(--ink);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-  text-align: left;
-}
-
-.claim-popover[hidden] { display: none; }
-
-/* On a phone an anchored popover would land half off-screen: same content,
-   centred, with the page behind it dimmed. */
-.claim-popover.is-modal {
-  position: fixed;
-  left: 50% !important;
-  top: 50% !important;
-  transform: translate(-50%, -50%);
-  width: min(92vw, 420px) !important;
-  max-height: 72vh;
-  border-radius: var(--radius-xl);
-}
-
-.claim-popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.claim-popover-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-}
-
-/* The shared close cross (.close-button, foundation.css); here its place. */
-.claim-popover-close {
-  margin: -6px -8px -6px 0;
-}
-
-.claim-popover-claim {
-  margin-bottom: 10px;
-  color: var(--ink-2);
-  font-style: italic;
-  overflow-wrap: anywhere;
-}
-
-.claim-popover-section + .claim-popover-section { margin-top: 10px; }
-
-.claim-section-label {
-  margin-bottom: 4px;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-
-.claim-section-label.is-agree { color: color-mix(in srgb, var(--agree) 78%, var(--ink)); }
-.claim-section-label.is-dissent { color: color-mix(in srgb, var(--cx-major-line) 82%, var(--ink)); }
-
-.claim-model-row { padding: 5px 0; }
-
-.claim-model-row + .claim-model-row {
-  border-top: 1px solid var(--line-soft);
-}
-
-.claim-model-name { font-weight: var(--font-weight-semibold); }
-
-.claim-model-quote {
-  margin: 4px 0 0;
-  padding: 2px 0 2px 10px;
-  border-left: 2px solid color-mix(in srgb, var(--cx-major-line) 50%, var(--line));
-  color: var(--ink-2);
-  font-size: var(--font-size-sm);
-  overflow-wrap: anywhere;
-}
-
-/* The entry a mark just opened: a short amber wash that fades by itself. */
-.diff-card.is-focused {
-  border-radius: var(--radius-xs);
-  animation: diffCardFlash var(--dur-beat) var(--ease-standard) forwards;
-}
-
-@keyframes diffCardFlash {
-  0%, 55% { background: var(--cx-flash); }
-  100% { background: transparent; }
-}
-
-/* The marks stroke themselves on when the mockup scrolls into view: the
-   product in one gesture — a plain answer, then someone going over it with a
-   marker pen. The wash grows
-   from the left edge of the sentence to its right, so the eye reads it as a
-   stroke and not as a box switching on. */
-@keyframes cxStroke {
-  from { background-size: 0% 100%; }
-  to { background-size: 100% 100%; }
-}
-
-.lp-scene-visual.is-visible .cx-claim.is-unanimous,
-.lp-scene-visual.is-visible .cx-claim.is-major,
-.lp-step.is-visible .cx-claim.is-unanimous,
-.lp-step.is-visible .cx-claim.is-major {
-  /* Ein Verlauf statt background-color: nur er laesst sich in der Breite
-     animieren. Die Farbe bleibt dieselbe wie in der App - die Flaeche
-     darunter muss dafuer aber weichen, sonst liegt sie schon fertig da. */
-  background-color: transparent;
-  background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
-  background-repeat: no-repeat;
-  /* The app's bleed is a shadow that a stroke cannot grow with. */
-  box-shadow: none;
-  animation: cxStroke var(--dur-light) var(--ease-standard) var(--dur-light) backwards;
-}
-
-/* The quiet levels are dots, as in the app (components-consensus-visuals.css):
-   they have no surface to stroke and come in at the same moment instead. */
-.lp-scene-visual.is-visible .cx-claim:is(.is-minor, .is-split, .is-thin),
-.lp-step.is-visible .cx-claim:is(.is-minor, .is-split, .is-thin) {
-  animation: cxDots var(--dur-light) var(--ease-standard) var(--dur-light) backwards;
-}
-
-@keyframes cxDots {
-  from { text-decoration-color: transparent; }
-}
-
-/* --------------------------------------------------------------------------
-   Reading key — the three states in their real visual vocabulary.
-   Not a legend floating above an unexplained mockup: it is step 03's own
-   visual, with the sentence that explains it sitting next to it.
-   -------------------------------------------------------------------------- */
-.lp-mark-key {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.lp-mark-key li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.lp-mark-sample {
-  color: var(--text-color);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-}
-
-.lp-mark-note {
-  color: var(--text-secondary);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-
-/* The samples are illustrations, not controls: no pointer, and above all no
-   44px hit area that would swallow clicks on the neighbouring entry. */
-.lp-mark-key .cx-claim { cursor: default; }
 
 /* Differences: flat list, exactly like the /app — hairline separators instead
    of card frames; severity lives in the dot and the subtle text label. */
@@ -1905,12 +787,9 @@ img { display: block; max-width: 100%; }
 
 .sev-dot.is-crit { background: #cf5a4a; }
 .sev-dot.is-warn { background: #d99b46; }
-.sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
-.sev-dot.is-ok { background: #4d9e5f; }
 
 .dark-mode .sev-dot.is-crit { background: #e58a79; }
 .dark-mode .sev-dot.is-warn { background: #e8b968; }
-.dark-mode .sev-dot.is-ok { background: #6fcf9a; }
 
 .diff-card-tags {
   display: flex;
@@ -1970,56 +849,6 @@ img { display: block; max-width: 100%; }
   overflow-wrap: anywhere;
 }
 
-.diff-position-quote {
-  margin: 5px 0 0;
-  padding: 1px 0 1px 10px;
-  border-left: 2px solid color-mix(in srgb, var(--sidebar-text-muted) 38%, transparent);
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-xs);
-  font-style: italic;
-  line-height: var(--line-height-ui);
-  overflow-wrap: anywhere;
-}
-
-/* Compact jump buttons: neutral at rest, accent on interaction. The arrow
-   signals that the model answer lives further up the page. */
-.diff-jump-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 26px;
-  padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-  border-radius: var(--radius-2xs);
-  background: color-mix(in srgb, var(--text-color) 4%, transparent);
-  color: var(--text-color);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-family: inherit;
-  line-height: var(--line-height-heading);
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 55%, transparent);
-  transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
-}
-
-.diff-jump-link::after {
-  content: "\2191";
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-solid);
-  color: var(--sidebar-text-muted);
-  opacity: 0.75;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .diff-jump-link:hover {
-    border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-    background: var(--hover);
-    color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
-  }
-}
-
 /* Rail note instead of a filled hint box. */
 .diff-verify {
   margin-top: 9px;
@@ -2036,331 +865,11 @@ img { display: block; max-width: 100%; }
   color: var(--text-color);
 }
 
-/* Resolve round: quiet ghost button with the gold Pro chip, like the /app. */
-.diff-resolve { margin-top: 8px; }
-
-.diff-resolve-btn {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  min-height: 28px;
-  padding: 5px 8px 5px 12px;
-  border-radius: var(--radius-2xs);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
-  background: transparent;
-  color: var(--text-color);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  font-family: inherit;
-  line-height: var(--line-height-heading);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: box-shadow var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .diff-resolve-btn:hover {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
-    color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-    background: var(--hover);
-  }
-}
-
-.diff-resolve-icon { flex-shrink: 0; }
-
-/* Gold Pro badge (copied from the /app's central .pro-badge in layout.css). */
-.pro-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, #d4af37 55%, transparent);
-  border-radius: var(--radius-pill);
-  background: linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%), #c9a232;
-  color: #ffffff;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  line-height: var(--line-height-solid);
-  text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px rgba(201, 162, 50, 0.22);
-}
-
-.diff-resolve-pro-chip {
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 1px 5px;
-  border-radius: var(--radius-2xs);
-  font-size: var(--font-size-micro);
-  letter-spacing: var(--tracking-wide);
-  box-shadow: none;
-}
-
-/* Empty state: green dot + two text lines instead of a filled green box. */
-.diff-empty-state {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 2px 0 0;
-}
-
-.diff-empty-state > .sev-dot { margin-top: 6px; }
-
-.diff-empty-headline {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-ui);
-  color: var(--text-color);
-}
-
-.diff-empty-note {
-  margin-top: 2px;
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  color: var(--sidebar-text-muted);
-}
-
-/* --------------------------------------------------------------------------
-   Decide — four steps instead of one wall
-
-   One claim per step: a short piece of copy on the left, the real surface
-   slice it is talking about on the right. The slice is not a picture of the
-   product, it is the product's own markup, so the ratios and marks in here
-   work exactly as they do in /app.
-   -------------------------------------------------------------------------- */
-.lp-steps {
-  display: grid;
-  gap: clamp(38px, 5.5vw, 68px);
-  margin: clamp(40px, 5vw, 64px) 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: none;
-}
-
-.lp-step {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  align-items: center;
-  gap: clamp(22px, 3.5vw, 52px);
-}
-
-/* Even steps mirror, so the eye is not marched down one rigid column. */
-.lp-step:nth-child(even) .lp-step-copy { order: 2; }
-
-.lp-step-copy { min-width: 0; }
-
-.lp-step-num {
-  margin: 0 0 10px;
-  color: var(--ink-3);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-wide);
-}
-
-.lp-step-copy h3 {
-  margin: 0 0 12px;
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
-  letter-spacing: var(--tracking-tight);
-  color: var(--text-primary);
-}
-
-.lp-step-copy p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-ui);
-}
-
-/* An invitation, not a caption: it says the thing next to it is operable. */
-.lp-step-try {
-  margin-top: 12px !important;
-  color: var(--ink-2) !important;
-  font-size: var(--font-size-sm) !important;
-  font-weight: var(--font-weight-semibold);
-}
-
-.lp-step-try::before {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-right: 8px;
-  vertical-align: 0.18em;
-  border-radius: 50%;
-  background: var(--agree);
-}
-
-.lp-step-visual { min-width: 0; }
-
-/* The panel a slice sits on — the same canvas as the app mock above, so a
-   fragment of the product still looks like it came out of the product. */
-.lp-excerpt {
-  padding: 16px 18px;
-  border-radius: var(--radius-lg);
-  /* --surface, not a named colour: the panel stays one tonal step from
-     whichever section tone it lands in (see .lp-section--white/--grey). */
-  background: var(--surface);
-  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
-}
-
-.lp-excerpt .consensus-main-text > p:first-child { margin-top: 0; }
-.lp-excerpt .consensus-main-text > p:last-child { margin-bottom: 0; }
-
-/* The sentence that owns the mark, above the card it opens. */
-.lp-excerpt-lead {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.lp-excerpt .differences-cards { margin: 0; }
-.lp-excerpt .diff-card { border-top: 0; }
-
-/* --------------------------------------------------------------------------
-   Step 01: who reviewed it. The review's card in the activity and the row
-   under the answer (agent-review.js), in their own words: the reviewers'
-   marks and names, the tally in the colours of its kinds, no score.
-   -------------------------------------------------------------------------- */
-.lp-review { display: grid; gap: 10px; }
-.lp-review p { margin: 0; }
-.lp-review-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  color: var(--ink);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-.lp-review-marks { display: inline-flex; align-items: center; padding-left: 8px; }
-.lp-review-marks .lp-composer-model { border-color: var(--surface); background: var(--surface); }
+/* What the reviewers found, after their names (agent-review.js): the tally in
+   the colour of its kind, no score. */
 .lp-review-tally { color: var(--ink-3); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
 .lp-review-tally [data-kind] { font-weight: var(--font-weight-medium); }
 .lp-review-tally [data-kind="wrong"] { color: var(--dispute); }
-.lp-review-tally [data-kind="doubtful"] { color: var(--partial); }
-.lp-review-tally [data-kind="incomplete"] { color: var(--ink-2); }
-.lp-review-note { color: var(--ink-3); font-size: var(--font-size-xs); }
-.lp-review .lp-agent-evidence { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
-
-/* A reviewer's note behind a mark: the shared card list, its label the
-   reviewer and the kind, its text the note. */
-.lp-note-card .diff-position-label { color: var(--dispute); }
-
-/* --------------------------------------------------------------------------
-   Step 04: the answers of the AIs the agent asked, one line each, as the
-   reader lists them under Answers.
-   -------------------------------------------------------------------------- */
-.lp-answers { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.lp-answers li {
-  display: grid;
-  gap: 4px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line-soft);
-}
-.lp-answers li:first-child { padding-top: 0; border-top: 0; }
-.lp-answers li:last-child { padding-bottom: 0; }
-.lp-answers-who {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-.lp-answers-who .lp-composer-model { margin-left: 0; border-color: var(--surface); background: var(--surface); }
-.lp-answers-text { color: var(--ink-2); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-
-/* --------------------------------------------------------------------------
-   Harness: four facts as a list down a hairline, each a name and a
-   sentence (the same horizon as everywhere, fading out at its end), and
-   beside them the one thing a reader sees of the harness in /app, a
-   reviewer's pause. Phones and tablets stack them.
-   -------------------------------------------------------------------------- */
-.lp-harness {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  align-items: center;
-  gap: clamp(28px, 5vw, 72px);
-  margin-top: clamp(40px, 5vw, 64px);
-}
-.lp-harness-facts { display: grid; margin: 0; }
-.lp-harness-facts > div { position: relative; padding: 18px 0 20px; }
-.lp-harness-facts > div::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--line);
-  -webkit-mask-image: linear-gradient(90deg, #000, #000 72%, transparent);
-  mask-image: linear-gradient(90deg, #000, #000 72%, transparent);
-}
-.lp-harness-facts dt {
-  margin: 0 0 6px;
-  color: var(--text-primary);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-}
-.lp-harness-facts dd {
-  margin: 0;
-  max-width: 56ch;
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-ui);
-}
-.lp-harness-visual { min-width: 0; }
-@media (max-width: 900px) {
-  .lp-harness { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* --------------------------------------------------------------------------
-   A reviewer's pause, the card above the field in /app (agent-chat.js
-   holdCard, agent-chat.css .agent-hold-card) in its own words: a quiet
-   amber glyph, the title, the kind and the reviewer's reason, what the
-   reviewer saw, and the one button. The picture of the harness.
-   -------------------------------------------------------------------------- */
-.lp-pause-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 18px;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
-}
-.lp-pause-glyph {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--partial) 14%, transparent);
-  color: var(--partial);
-}
-.lp-pause-glyph svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
-.lp-pause-body { display: grid; gap: 6px; min-width: 0; }
-.lp-pause-body p { margin: 0; }
-.lp-pause-title { color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
-.lp-pause-reason { color: var(--ink); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-.lp-pause-by { color: var(--ink-3); white-space: nowrap; }
-.lp-pause-step { display: grid; gap: 2px; margin-top: 4px !important; color: var(--ink); font-size: var(--font-size-sm); }
-.lp-pause-step span { color: var(--ink-3); font-size: var(--font-size-xs); }
-.lp-pause-btn {
-  justify-self: start;
-  margin-top: 8px;
-  padding: 7px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--ink);
-  color: var(--ground);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
 
 /* --------------------------------------------------------------------------
    Card grid (benchmark, consensus engine): three columns of a flat list
@@ -2406,37 +915,23 @@ img { display: block; max-width: 100%; }
 .lp-card p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-base); line-height: var(--line-height-ui); }
 
 /* --------------------------------------------------------------------------
-   Model coverage — uniform monochrome logos
+   Model families: each a monochrome mark over its name. landing-chat.css
+   lines them up and sizes them.
    -------------------------------------------------------------------------- */
-.lp-logos {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: clamp(40px, 5vw, 64px);
-}
-
-/* Geht die Zahl der Familien im Viererraster nicht auf und bleibt genau eine
-   Marke uebrig, wird sie ueber die beiden mittleren Spalten zentriert, statt allein
-   an der linken Kante zu haengen. Die Kachel hat keine eigene Flaeche, das
-   Spannen aendert also nur ihre Position. */
-.lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: 2 / span 2; }
-
 .lp-logo {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 28px 12px;
   border-radius: var(--card-radius);
   text-align: center;
 }
 
-.lp-logo-mark { display: flex; align-items: center; justify-content: center; height: 40px; }
+.lp-logo-mark { display: flex; align-items: center; justify-content: center; }
 
 .lp-logo-mark img {
-  height: 34px;
   width: auto;
+  max-width: 26px;
   object-fit: contain;
   filter: grayscale(1) brightness(0) opacity(0.42);
   transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
@@ -2453,25 +948,12 @@ img { display: block; max-width: 100%; }
   .dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
 }
 
-.lp-logo span { color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-
-/* Inline-Links im Fliesstext einer Karte (z. B. die Kontaktadresse im
-   Kosten-Abschnitt) muessen als Link lesbar sein; global gilt hier
-   "a { color: inherit; text-decoration: none; }". */
-.lp-card p a {
-  color: var(--text-primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .lp-card p a:hover { color: var(--accent); }
-}
+.lp-logo > span:last-child { color: var(--ink-2); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 
 /* --------------------------------------------------------------------------
    Final CTA
    -------------------------------------------------------------------------- */
-.lp-final { display: grid; justify-items: center; text-align: center; gap: 26px; }
+.lp-final { display: grid; justify-items: center; text-align: center; gap: clamp(20px, 3vw, 30px); }
 .lp-final .lp-head { max-width: 720px; }
 .lp-final .lp-h2 { margin: 0 auto; }
 
@@ -2498,18 +980,9 @@ img { display: block; max-width: 100%; }
   .lp-footer-links a:hover { color: var(--text-primary); }
 }
 
-/* --------------------------------------------------------------------------
-   Scroll reveal (one fade-up per scene)
-   -------------------------------------------------------------------------- */
-.lp-reveal { opacity: 0; transform: translateY(12px); transition: opacity var(--dur-layer) var(--ease-out), transform var(--dur-layer) var(--ease-out); }
-.lp-reveal.is-visible { opacity: 1; transform: none; }
-
 @media (prefers-reduced-motion: reduce) {
-  .lp-reveal { opacity: 1; transform: none; transition: none; }
-  /* Marks are present from the start instead of inking themselves in; the
-     flash stays put (the JS removes the class after 2s). */
+  /* Marks are there from the start instead of inking themselves in. */
   .cx-claim, .consensus-differences-summary::before { animation: none; transition: none; }
-  .diff-card.is-focused { animation: none; background: var(--cx-flash); }
   html.is-scroll-smooth { scroll-behavior: auto; }
 }
 
@@ -2517,21 +990,7 @@ img { display: block; max-width: 100%; }
    Responsive
    -------------------------------------------------------------------------- */
 @media (max-width: 960px) {
-  .lp-hero { grid-template-columns: 1fr; gap: 36px; }
   .lp-card-grid { grid-template-columns: 1fr; gap: 14px; }
-  .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  /* Dreispaltig geht die Reihe auf; die Zentrierung der Basis wuerde
-     hier die falsche Kachel spannen. */
-  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
-  .lp-watch-story { grid-template-columns: 1fr; }
-  .lp-watch-notification { width: min(100%, 430px); justify-self: end; margin-top: -12px; transform: none; }
-
-  /* Decide: side by side needs a column wide enough for a real sentence.
-     Below that the copy sits on top of the slice it describes, and the
-     mirroring of even steps has nothing left to mirror. */
-  .lp-step { grid-template-columns: 1fr; gap: 18px; }
-  .lp-step:nth-child(even) .lp-step-copy { order: 0; }
-  .lp-mark-key { gap: 12px; }
 
   /* Verdict bar: judge footnote wraps under the headline, indented behind
      the score ring (42px ring + 14px gap), like the /app on small screens.
@@ -2551,26 +1010,11 @@ img { display: block; max-width: 100%; }
   body { font-size: var(--font-size-base); }
   .lp-nav-links a:not(.lp-nav-cta) { display: none; }
   .lp-window-body { padding: 16px 14px 14px; gap: 12px; }
-  .consensus-main { padding: 10px 16px 12px; }
-  .consensus-main > h2 { padding: 0 56px; }
-  /* Reading key: one state per row, so no sample wraps mid-underline. */
-  .lp-mark-key { flex-direction: column; align-items: flex-start; gap: 14px; }
   .lp-footer-inner { flex-direction: column; align-items: flex-start; }
-  .lp-watch-story { padding: 12px; }
-  .lp-watch-card { padding: 15px; }
-  .lp-watch-point { grid-template-columns: 46px 12px minmax(0, 1fr); gap: 7px; }
-  .lp-watch-timeline::before { left: 58px; }
-  .lp-watch-source { grid-column: 3; justify-self: start; margin: -5px 0 8px; }
-  .lp-watch-notification { width: 100%; margin-top: 0; }
 
-  /* Composer on a phone: the field keeps its height, the row below it stays
-     one line — attach, the run chip, send — as in /app. */
-  .lp-prompt, .lp-composer { padding: 12px 12px 10px; }
-  .lp-prompt-text, .lp-composer-text { min-height: 44px; font-size: var(--font-size-base); }
+  .lp-composer { padding: 12px 12px 10px; }
+  .lp-composer-text { min-height: 44px; font-size: var(--font-size-base); }
   .lp-run-chip { padding: 6px 10px; font-size: var(--font-size-micro); }
-
-  .lp-agent { padding: 16px 16px 18px; }
-  .lp-agent-ask { max-width: 88%; margin-bottom: 16px; }
 }
 
 /* ==========================================================================
@@ -2579,13 +1023,9 @@ img { display: block; max-width: 100%; }
    Everything above is written for a screen wide enough to hold a display
    headline, a lead, a product mock and its footnotes at the same time.
    Poured unchanged into a 343px column, that stops being a page and becomes
-   a wall.
-
-   Nothing here deletes an argument. The type steps down one notch, the
-   ornaments collapse to their essential shape, and sentences that are
-   elaboration rather than claim (marked .lp-wide-only in the template) drop
-   out of the layout while staying in the document. What is left is the same
-   page with less said at once.
+   a wall. Nothing here deletes an argument: the type steps down one notch
+   and the ornaments collapse to their essential shape. What is left is the
+   same page with less said at once.
    ========================================================================== */
 @media (max-width: 600px) {
   /* 76px top and bottom put 152px — nearly a fifth of the screen — between
@@ -2594,43 +1034,23 @@ img { display: block; max-width: 100%; }
 
   /* The display scale is sized for a headline that fills a wide column; at
      this width the same value simply runs down the screen. */
-  .lp-display,
-  .lp-hero .lp-display { font-size: var(--font-size-2xl); line-height: 1.14; }
+  .lp-display { font-size: var(--font-size-2xl); line-height: 1.14; }
   .lp-h2 { font-size: var(--font-size-xl); line-height: 1.16; }
   /* With a screen per section there is room to breathe. */
   .lp-eyebrow { margin-bottom: 14px; font-size: var(--font-size-xs); }
   .lp-lead { margin-top: 18px; font-size: var(--font-size-base); }
-  .lp-head .lp-lead,
-  .lp-hero .lp-lead { max-width: none; }
-
-  .lp-wide-only { display: none; }
-
-  /* --- Hero: one screen, and the field is what it is for ----------------- */
-  /* Only reached on a phone shorter than 620px; otherwise the
-     .lp-section--hero rule above reserves the space instead. */
-  .lp-hero.lp-hero--demo { padding-bottom: 32px; }
-  .lp-hero-prompt.lp-prompt { margin-top: 30px; }
-
-  /* Only the narrowest phones need the last step: at 360px the row still has
-     328px to sit in, below that it would break into a second, lopsided line. */
-  @media (max-width: 360px) {
-    /* Below this width the longest question in the loop needs a third line,
-       and two reserved lines would let the field jump again. Measured, not
-       guessed: at 360px and up all five questions fit in two. */
-    .lp-hero-prompt .lp-prompt-text { min-height: calc(3 * var(--line-height-ui) * 1em); }
-  }
-
-  /* The h1 keeps its size here: shrunk below the h2s, it would read like a
-     caption for the field rather than the sentence the page is about. Only
-     the measure narrows. */
-  .lp-hero-claim { max-width: 24ch; }
+  .lp-head .lp-lead { max-width: none; }
 
   /* Every section gets a screen of its own. Otherwise a phone shows the end
      of one topic and the beginning of the next in the same frame, and the
      page reads as crowded: nothing is ever alone on the screen. min-height,
-     not height — a section with more
-     to say than a screen holds still grows past it. */
-  main > .lp-section:not(.lp-section--hero) {
+     not height: a section with more to say than a screen holds still grows
+     past it. svh, never dvh, for anything in the page flow: dvh is live,
+     Safari's bar slides in on the first swipe, every band grew with it and
+     the text slid away under the finger (Safari has no scroll anchoring to
+     hide that). svh is the screen with the bar showing; vh stays as the
+     fallback for browsers without the new units. */
+  main > .lp-section {
     min-height: calc(100vh - 54px);
     min-height: calc(100svh - 54px);
     display: flex;
@@ -2638,31 +1058,8 @@ img { display: block; max-width: 100%; }
     justify-content: center;
   }
 
-  /* A scene wraps its stage in a full-bleed element rather than the shell, so
-     it has to claim the width a flex item would otherwise shrink away from. */
-  main > .lp-section > .lp-scroll-scene { width: 100%; }
-
-  /* --- Scenes ------------------------------------------------------------ */
-  .lp-scene-visual,
-  .lp-scene-03 .lp-scene-visual { margin-top: 34px; }
-
   /* The fine print under the composer is true, and unreadable at this size. */
   .lp-composer-foot { display: none; }
-
-  /* Reading key: three rows of sample + caption ahead of a mock that shows
-     the same three states in use. The captions carry it on their own. */
-  .lp-mark-key { gap: 10px; margin: 22px 0 26px; }
-
-  .lp-steps { gap: 30px; margin-top: 24px; }
-  .lp-step { gap: 14px; }
-  .lp-step-copy h3 { margin-bottom: 8px; font-size: var(--font-size-lg); }
-  .lp-step-num { margin-bottom: 6px; font-size: var(--font-size-xs); }
-  .lp-step-try { margin-top: 9px !important; }
-  .lp-mark-key { gap: 11px; }
-  .lp-step-copy p { font-size: var(--font-size-sm); }
-  .lp-excerpt { padding: 13px 14px; }
-
-  .lp-pause-card { padding: 13px 14px; gap: 10px; }
 
   /* --- Lists of three ---------------------------------------------------- */
   .lp-card-grid { margin-top: 26px; gap: 8px; }
@@ -2670,31 +1067,8 @@ img { display: block; max-width: 100%; }
   .lp-card .lp-eyebrow { margin-bottom: 8px; }
   .lp-card h3 { font-size: var(--font-size-base); }
   .lp-card p { font-size: var(--font-size-sm); }
-
-  /* The hero has already shown these marks; four-up keeps the providers in
-     a compact strip instead of turning them into a long card list. */
-  .lp-logos { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 26px; }
-  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: 2 / span 2; }
-  .lp-logo { gap: 9px; padding: 16px 6px; }
-  .lp-logo-mark { height: 26px; }
-  .lp-logo-mark img { height: 24px; }
-  .lp-logo span { font-size: var(--font-size-xs); }
-
-  .lp-watch-story { margin-top: 26px; }
-  .lp-final { gap: 20px; }
 }
 
-/* Shared composer preview: the start screen of /app, one field, one row. */
-.lp-composer-preview { isolation: isolate; container-type: inline-size; }
-.lp-hero-composer {
-  width: min(680px, 100%);
-  margin: clamp(30px, 4.5vw, 46px) auto 0;
-}
-.lp-hero-composer .lp-prompt.lp-hero-prompt { width: 100%; margin: 0; }
-.lp-hero-composer .lp-prompt.lp-hero-prompt:is(:focus-visible, :has(.lp-hero-ask-link:focus-visible)) { transform: none; }
-@media (hover: hover) and (pointer: fine) {
-  .lp-hero-composer .lp-prompt.lp-hero-prompt:hover { transform: none; }
-}
 /* The row of the /app start screen (composer.css): (+)
    on the left; on the right the reviewers' marks and words, then Send.
    Nothing hangs under the field. The mockups have no chat model chip, so
@@ -2709,7 +1083,6 @@ img { display: block; max-width: 100%; }
 .lp-composer-models + .lp-run-chip { margin-left: 0; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
 .lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
-.dark-mode .lp-composer-mono { filter: invert(1); }
 /* A phone leaves the count to the reviewers' words ("3 AIs cross-check"):
    no marks beside them (/app drops them to 380px, where the chat model's
    chip needs the room; the mockups have no chip and keep the words whole). */
@@ -2717,187 +1090,7 @@ img { display: block; max-width: 100%; }
   .lp-composer-models { display: none; }
 }
 @media (max-width: 480px) {
-  /* A single auto-minimum grid track let the benchmark teaser widen the page. */
+  /* A single auto-minimum grid track let the benchmark hero widen the page. */
   .lp-section .bench-hero { grid-template-columns: minmax(0, 1fr); }
   .lp-section .bench-hero > * { min-width: 0; }
-}
-/* Phones: the run chip takes its own line above [(+) … Send], so the row
-   never runs past a 320px field. */
-@media (max-width: 420px) {
-  .lp-composer-row { flex-wrap: wrap; row-gap: 4px; }
-  .lp-composer-row .lp-run-chip { order: -1; flex: 1 0 100%; justify-content: flex-end; margin-left: 0; }
-  .lp-composer-row .lp-send { margin-left: auto; }
-}
-
-/* ==========================================================================
-   Feinschliff
-   One statement, then the proof: the page's h1 is its loudest line,
-   the page stands on one ground with horizons between its parts, the scroll
-   scenes keep their rhythm without idle screens, and the mockups carry no
-   boxes and shadows the product itself does not have.
-   ========================================================================== */
-
-/* The h1 is the loudest line on the page; its second sentence answers
-   the first, one step quieter. Field and statement read as one unit. */
-.lp-hero-claim {
-  max-width: 18ch;
-  font-size: clamp(2.25rem, 4.6vw, 3.5rem);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.05;
-  letter-spacing: -0.034em;
-}
-.lp-hero-claim span:last-child { color: var(--ink-3); }
-.lp-hero-composer { margin-top: clamp(6px, 1vw, 12px); }
-
-/* One ground for the whole page. Two section tones 2% apart read as a
-   seam in the rendering, not as design; parts are set apart by a horizon
-   that fades out at both ends, like everywhere in the product. */
-.lp-nav { background: var(--ground); }
-.lp-section--white,
-.lp-section--grey {
-  background: var(--ground);
-  --surface: var(--raise);
-  --surface-2: var(--ground);
-}
-main > .lp-section + .lp-section { position: relative; }
-main > .lp-section + .lp-section::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: var(--page-width);
-  height: 1px;
-  transform: translateX(-50%);
-  background: var(--line-soft);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-          mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-  pointer-events: none;
-}
-/* The pinned scenes run into each other without a seam of their own. */
-main > .lp-scene-02::before { display: none; }
-
-/* Rhythm: the pinned scenes play through in less scroll and end where
-   the stage ends, so no idle screen follows them. The rail is a 1px horizon
-   and carries the house light at its tip: the same light that runs along
-   the agent's work in the app. */
-@media (min-height: 620px) and (prefers-reduced-motion: no-preference) {
-  /* clip, not hidden: no scroll container, so the pinned stage stays sticky.
-     Whatever light or mark reaches past the edge must not widen the page:
-     on a phone that let the whole landing pan sideways. */
-  .lp-scroll-scene { min-height: 170vh; overflow-x: clip; }
-  .lp-section.lp-scene-01,
-  .lp-section.lp-scene-02 { padding-bottom: 0; }
-  .lp-section.lp-scene-02 { padding-top: 0; }
-  /* Fade by gradient, not by mask: a mask would clip the light to 1px. */
-  .lp-scene-rail {
-    height: 1px;
-    overflow: visible;
-    background: linear-gradient(90deg, transparent, var(--line-soft) 12%, var(--line-soft) 88%, transparent);
-    -webkit-mask-image: none;
-            mask-image: none;
-  }
-  .lp-scene-rail i {
-    position: relative;
-    background: linear-gradient(90deg, transparent, var(--ink-3));
-  }
-  /* The light ends at the tip of the rail. Past it, a full rail would push
-     it over the right edge of the page. */
-  /* Drawn like the app's light path (agent-chat.css): a 1px stroke that
-     ends in the house colour, no blur, no halo. */
-  .lp-scene-rail i::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 28px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--light));
-  }
-}
-@media (min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) {
-  .lp-scroll-scene { min-height: 210vh; }
-}
-
-/* Scene 02 is pinned only where its card fits beside its heading under the
-   bar: two columns and a window of 760 px. A phone holds the heading or the
-   card, never both, and a pinned stage taller than the screen played the
-   whole run in the 150 px that were left of its travel. Unpinned, the card
-   is the clock (landing-scenes.js measure). */
-@media (max-width: 899px), (max-height: 759px) {
-  .lp-scene-02 .lp-scroll-scene { min-height: 0; }
-  .lp-scene-02 .lp-scene-stage { position: static; display: block; min-height: 0; padding-bottom: 0; }
-  .lp-scene-02 .lp-scene-rail { display: none; }
-  .lp-scene-02 .lp-shell { align-items: start; }
-  .lp-section.lp-scene-02 { padding: var(--section-pad) 0; }
-}
-/* Pinned, the run has more to show than the question of scene 01, and the
-   chart takes the height the window has left over the rest of the card. */
-@media (min-width: 900px) and (min-height: 760px) and (prefers-reduced-motion: no-preference) {
-  .lp-scene-02 .lp-scroll-scene { min-height: 250vh; }
-  .lp-agent-chart { --chart-plot: clamp(100px, calc(100svh - 654px), 220px); }
-}
-
-/* The slices of the product sit on one quiet tone without a shadow, as
-   in the app; the notes under the marks speak in sentence case (one
-   uppercase label per block at most). */
-.lp-excerpt { box-shadow: none; }
-.lp-mark-note {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-regular);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink-3);
-}
-.lp-mark-note::first-letter { text-transform: uppercase; }
-
-/* The watch story is two objects on the ground, not a card in a card. */
-.lp-watch-story { background: transparent; padding: 0; }
-.lp-watch-card { background: var(--surface); }
-
-/* A button as wide as its words: the result is the loud part here. */
-.lp-bench-aside .lp-btn { align-self: flex-start; width: auto; }
-
-/* Eleven marks, one optical size, one row; no wordmarks. */
-@media (min-width: 900px) {
-  .lp-logos { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
-  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
-}
-.lp-logo { gap: 12px; padding: 18px 4px; }
-.lp-logo-mark { height: 28px; }
-.lp-logo-mark img { height: 24px; max-width: 26px; }
-.lp-logo > span:last-child { color: var(--ink-2); font-size: var(--font-size-sm); }
-
-/* Everything is there from the first frame. A block that starts below
-   the fold rises 8px into place as it arrives; nothing waits invisible for
-   an observer (link previews and reader modes see the whole page). */
-.lp-reveal { opacity: 1; transform: none; }
-.lp-reveal.is-armed:not(.is-visible) { transform: translateY(8px); }
-.lp-reveal.is-armed { transition: transform var(--dur-light) var(--ease-out); }
-@media (prefers-reduced-motion: reduce) {
-  .lp-reveal.is-armed:not(.is-visible) { transform: none; }
-}
-
-/* The closing field: the hero's field, empty and waiting. */
-.lp-final { gap: clamp(20px, 3vw, 30px); }
-.lp-final-composer { width: min(680px, 100%); margin: 0 auto; text-align: left; }
-.lp-final-composer .lp-prompt-text.is-placeholder { color: var(--ink-3); }
-.lp-final-composer .lp-demo-btn { padding: 0 13px 0 15px; }
-.lp-final-composer .demo-action-icon,
-.lp-final-composer .demo-action-icon svg { width: 13px; height: 13px; }
-
-/* Phones: the demo action keeps its own size on its own line (right, where
-   Send stands). */
-@media (max-width: 600px) {
-  .lp-hero-prompt-bar .lp-demo-btn { flex: 0 0 auto; margin-left: auto; }
-  .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
-}
-/* Below 900px the marks stand three to a row on a six-column grid, so a
-   last row of one or two marks sits in the middle instead of hanging at the
-   left edge. */
-@media (max-width: 899px) {
-  .lp-logos { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .lp-logos > .lp-logo { grid-column: span 2; }
-  .lp-logos > .lp-logo:nth-child(3n + 1):nth-last-child(2) { grid-column: 2 / span 2; }
-  .lp-logos > .lp-logo:last-child:nth-child(3n + 1) { grid-column: 3 / span 2; }
 }

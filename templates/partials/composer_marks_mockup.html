@@ -6,7 +6,7 @@
    beside the link's words: a group or a name there would be read into the
    name of the link. #}
 <span class="lp-composer-models"{% if marks_in_link %} aria-hidden="true"{% else %} role="group" aria-label="Reviewers"{% endif %}>
-  {% for name, icon, mono in [('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
-  <span class="lp-composer-model"{% if not marks_in_link %} title="{{ name }}"{% endif %}><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{% if not marks_in_link %}{{ name }}{% endif %}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+  {% for name, icon in [('Claude', 'claude.png'), ('DeepSeek', 'deepseek.png')] %}
+  <span class="lp-composer-model"{% if not marks_in_link %} title="{{ name }}"{% endif %}><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{% if not marks_in_link %}{{ name }}{% endif %}" width="14" height="14"></span>
   {% endfor %}
 </span>

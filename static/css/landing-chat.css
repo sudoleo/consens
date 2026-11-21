@@ -28,11 +28,6 @@
   position: relative;
 }
 
-/* landing.css lets these pieces fade in on load. Here the scroll reveals
-   them, and an animation's last frame would win over the armed state. */
-.lc .lp-agent-step,
-.lc .lp-agent-files { animation: none; }
-
 /* --------------------------------------------------------------------------
    Intro: what it is, in one line. svh, never dvh (see landing.css).
    -------------------------------------------------------------------------- */
@@ -168,7 +163,6 @@
 }
 .lc table.md-timeline td { text-align: start; }
 .lc table.md-timeline strong { font-weight: var(--font-weight-semibold); }
-.lc .lp-agent-files { gap: 12px 28px; }
 
 /* Three pictures on one line: one large, two beside it, filled edge to
    edge (the app's collage, agent-workspace.css .md-picture-line). */
@@ -341,6 +335,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .lc-book-fields .is-open i { animation: lpCaret var(--dur-spin) steps(1, end) 6; }
 }
+@keyframes lpCaret { 50% { opacity: 0; } }
 .lc-book-total { display: flex; align-items: baseline; justify-content: space-between; margin: 14px 0 0; }
 .lc-book-total b { color: var(--ink); font-size: var(--font-size-title); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
 
@@ -594,7 +589,7 @@
    the page. landing.css draws a mark and its name (.lp-logo); here they
    stand in the column of the thread, centred, as many to a line as fit.
    -------------------------------------------------------------------------- */
-.lc-models .lp-logos { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; margin-top: 0; }
+.lc-models .lp-logos { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; }
 .lc-models .lp-logo { width: 104px; gap: 10px; padding: 14px 4px; }
 .lc-models .lp-logo-mark { height: 30px; }
 .lc-models .lp-logo-mark img { height: 26px; }
@@ -765,11 +760,9 @@
   .lc-book { grid-template-columns: minmax(0, 1fr); }
   .lc-book img { height: 150px; min-height: 0; }
   /* Two rows on a phone are the question and one row of tools: (+), the
-     reviewers' words, Send. landing.css gives the words a line of their
-     own, which makes three. */
-  .lc-composer .lp-composer-row { flex-wrap: nowrap; }
-  .lc-composer .lp-composer-row .lp-run-chip { order: 3; flex: 0 0 auto; margin-left: auto; padding-inline: 6px; }
-  .lc-composer .lp-composer-row .lp-send { margin-left: 0; }
+     reviewers' words, Send. The reviewers' marks give way (landing.css), so
+     their words move to the right end, beside Send. */
+  .lc-composer .lp-composer-row .lp-run-chip { margin-left: auto; padding-inline: 6px; }
   /* The one row has no room here for the reviewers' words, nor for the
      question: it shows the placeholder of the composer in /app instead. */
   .lc-dock:not(.is-end) :is(.lp-run-chip, .lc-ask) { display: none; }

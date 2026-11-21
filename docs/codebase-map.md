@@ -756,7 +756,9 @@ jedes Fotos.
 
 Stile: `static/css/landing-chat.css`, nach `landing.css` und
 `answer-shapes.css` geladen (Schrift, Tokens, Leiste, Feld und Marken kommen aus
-`landing.css`). Die Seite ist im letzten Bild gezeichnet; jeder Zustand davor
+`landing.css`). `landing.css` ist das gemeinsame Blatt von `/`, `/benchmark`,
+`/consensus-engine` und `/model-pulse` und trägt nur Regeln, die eine dieser
+Seiten zeigt. Die Seite ist im letzten Bild gezeichnet; jeder Zustand davor
 steht unter `.lc-js`, das `static/js/landing-chat.js` nur setzt, wenn der Leser
 nicht um weniger Bewegung gebeten hat. Ohne Skript, im Lesemodus und für Crawler
 ist nichts versteckt und nichts wartet. Das Skript:
@@ -829,10 +831,8 @@ Das angedockte Feld der Landing (`#landingField`) öffnet die App mit
 Konto tippen darf (`updateQuestionInputAccess`); Gäste sehen das gesperrte Feld
 mit Login-Zeile. Die Demo (`/app?demo=1`) hat auf der Landing keinen Knopf
 mehr, sie startet in der App. Dort trägt „Try the demo“ die
-`.demo-action`-Gestaltung;
-Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
-`static/css/demo-action.css` (Import in `landing.css` und `static/style.css`):
-seit 2026-10-02 schlank: 36 px hoch wie der Senden-Kreis, Pille, 13 px/500,
+`.demo-action`-Gestaltung aus `static/css/demo-action.css` (Import in
+`static/style.css`), seit 2026-10-02 schlank: 36 px hoch wie der Senden-Kreis, Pille, 13 px/500,
 Play-Zeichen als Glyph ohne eigenen Kreis; auf Touch-Geräten wächst nur die
 Trefferfläche (`::after`) auf 44 px, nicht die Zeichnung.
 Die App zeigt ebenfalls „Try the demo“, bis 640 px platzsparend „Demo“;
@@ -1166,8 +1166,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Configwerte sowie den sicheren Umami-Wrapper und stellt Agent-/Auth-/Skeleton-
   First-Paint ohne Inline-Skript her. Bereits aufgeloeste Auth-Zustaende werden
   nicht durch gecachte Token/Skeletons ueberschrieben. `css/skeleton.css` liefert
-  gemeinsame Light-/Dark-Platzhalter fuer Account, Chatliste, wartende
-  Modellantworten und den oeffentlichen Model Pulse: formgetreue Zeilen,
+  gemeinsame Light-/Dark-Platzhalter fuer Account, Chatliste und wartende
+  Modellantworten in `/app`: formgetreue Zeilen,
   verzögertes Einblenden, ruhiger Transform-Shimmer, statisch bei Reduced Motion.
   Die Chatlisten-Skeletons bleiben in `firebase.js` bis zur erfolgreichen
   Metadatenantwort erhalten und blenden dann in die echten Zeilen über
@@ -1355,8 +1355,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seite liegt (`static/css/overlays.css`, nach allen Komponenten geladen):
   - **Scrim:** ein Token `--scrim` (`foundation.css`, hell/dunkel) hinter
     jedem modalen Fenster, dem Antwortleser (`::backdrop`), dem Memory-Dialog,
-    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet (auch auf der Startseite,
-    `landing.css`), dem Agent-Aktivitäts-Sheet und der Handy-Schublade;
+    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet, dem Agent-Aktivitäts-Sheet und der Handy-Schublade;
     nirgends mehr `backdrop-filter` (`tests/js/overlays.test.mjs` verbietet
     jeden Wert außer `none`, Admin ausgenommen).
   - **Dialogfläche:** `--raise`, `--lift`, `--radius-lg`, eine Haarlinie
@@ -4080,9 +4079,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Preview und Zaehlung kennen es weiterhin; eine zurueckgetretene Passage gibt
   dabei `role`/`tabindex` ab, damit ein Satz nie zwei Fokusziele hat. Treffen mehrere Claims denselben Satz, bleibt
   ebenfalls nur eine Marke sichtbar: die konservative Satzquote des am
-  wenigsten gestuetzten Claims. Die Kopien in
-  `landing.css` **und die Mockup-Markups** (`landing.html`,
-  `consensus-engine.html`, `partials/product_result_mockup.html`) tragen
+  wenigsten gestuetzten Claims. Die Mockup-Markups
+  (`consensus-engine.html`, `partials/product_result_mockup.html`) tragen
   dieselbe Mikro-Quote.
   Hover und Claim-Popover nennen zusätzlich Modelle unter `Not addressed`;
   Schweigen wird damit erst auf Wunsch sichtbar und weder als Zustimmung noch
