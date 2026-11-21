@@ -8,7 +8,7 @@ from app.services.usage_repository import (
     FirestoreUsageRepository, TokenAdmission, RunKind, UsageLimitExceeded,
     UsageTransitionError, RunStatus,
 )
-from native_support import native_db, race, race_with_worker_retry, tree
+from native_support import native_db, race_with_worker_retry, tree
 
 
 def admission(now, *, limit=100, estimate=60):
@@ -28,13 +28,14 @@ def test_native_identical_key_and_booking_are_exactly_once(native_db):
     uid, other = db.owner(), db.owner()
     def reserve():
         return FirestoreUsageRepository(db).reserve(uid, "same", RunKind.REGULAR, admission(now), now=now)
-    results = race(reserve, reserve)
+    account = lambda: tree(db.collection("users").document(uid))
+    results = race_with_worker_retry(reserve, reserve, snapshot=account)
     assert sorted(result.idempotent for result in results) == [False, True]
     repository = FirestoreUsageRepository(db)
     repository.consume(uid, "same")
     def book():
         return FirestoreUsageRepository(db).book_operation(uid, "same", "consensus", measured=25, estimated=5, final=True, now=now)
-    race(book, book)
+    race_with_worker_retry(book, book, snapshot=account)
     ledger = agent_quota.quota_ref(db, uid, admission(now).period).get().to_dict()
     assert ledger["used"] == 25 and ledger["pipeline_estimated"] == 5 and ledger["pipeline_holds"] == {}
     assert not agent_quota.quota_ref(db, other, admission(now).period).get().exists
@@ -49,7 +50,8 @@ def test_native_last_allowance_release_and_utc_period(native_db):
             return key
         except UsageLimitExceeded:
             return None
-    winners = [key for key in race(lambda: reserve("first"), lambda: reserve("second")) if key]
+    winners = [key for key in race_with_worker_retry(lambda: reserve("first"), lambda: reserve("second"),
+        snapshot=lambda: tree(db.collection("users").document(uid))) if key]
     assert len(winners) == 1
     repository = FirestoreUsageRepository(db)
     repository.release(uid, winners[0])
@@ -90,7 +92,8 @@ def test_native_release_consume_have_one_terminal_winner(native_db):
             return getattr(FirestoreUsageRepository(db), method)(uid, "race").status
         except UsageTransitionError:
             return None
-    results = race(lambda: finish("release"), lambda: finish("consume"))
+    results = race_with_worker_retry(lambda: finish("release"), lambda: finish("consume"),
+        snapshot=lambda: tree(db.collection("users").document(uid)))
     assert sum(value is not None for value in results) == 1
     saved = FirestoreUsageRepository(db).get_run(uid, "race", now=now)
     assert saved.status in {RunStatus.RELEASED, RunStatus.CONSUMED}

@@ -70,8 +70,48 @@ ACTIVITY = [
 ]
 
 
+# The run's frames over window.fetch: those up to the answer's first review
+# frame (and its hand-over) at once, the rest once the answer stands. Its last
+# words come into view at their pace, and what the review shows waits for them
+# (agent-chat.js `arriving`). Served at once, the reviewers' result and the
+# agent's correction landed before the answer stood; in a run they take
+# seconds, the last words' pace less than one.
+STAND_FIRST = """({events, at}) => {
+  const real = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (new URL(url, location.href).pathname !== '/agent' || init.method !== 'POST') return real(input, init);
+    const encoder = new TextEncoder();
+    const stands = () => new Promise(resolve => {
+      const look = () => {
+        const answer = document.getElementById('agentAnswerBody');
+        if (answer?.textContent.trim() && !answer.classList.contains('is-stream-revealing')
+            && !App.streamReveal.pending(answer)) resolve();
+        else requestAnimationFrame(look);
+      };
+      look();
+    });
+    const body = new ReadableStream({ async start(controller) {
+      const send = ([name, data]) => controller.enqueue(encoder.encode(`event: ${name}\\ndata: ${JSON.stringify(data)}\\n\\n`));
+      events.slice(0, at).forEach(send);
+      await stands();
+      events.slice(at).forEach(send);
+      controller.close();
+    } });
+    return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+  };
+}"""
+
+
+def stand_first_at(events):
+    """Where the frames after the answer's last word begin: past its first
+    review frame and the hand-over that comes with it."""
+    at = next(index for index, (name, _) in enumerate(events) if name == "review") + 1
+    return at + 1 if at < len(events) and events[at][0] == "handover" else at
+
+
 def open_audit_page(browser, server, width, dark, events, *, hang_live=False, before_send=None, question=QUESTION,
-                    lang="en"):
+                    lang="en", stand_first=False):
     def german(page):
         if lang == "de":
             page.context.add_cookies([{"name": "consens_lang", "value": "de", "url": server}])
@@ -104,6 +144,8 @@ def open_audit_page(browser, server, width, dark, events, *, hang_live=False, be
     _choose_mode(page, "agent")
     page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); "
                   "document.body.classList.toggle('dark-mode', dark); }", dark)
+    if stand_first:
+        page.evaluate(STAND_FIRST, {"events": events, "at": stand_first_at(events)})
     if before_send:
         before_send(page)
     page.locator("#questionInput").fill(question)
@@ -130,7 +172,8 @@ def finished_events():
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
 def test_a_reviewed_answer_shows_its_marks_notes_and_reviewers(browser, phase4_server, width, dark):
-    context, page, errors = open_audit_page(browser, phase4_server, width, dark, finished_events())
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark, finished_events(),
+                                            stand_first=True)
     try:
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         body = page.locator("#agentAnswerBody")
@@ -649,7 +692,7 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
             window.__rewrites.push([...CSS.highlights.values()].reduce((sum, ranges) => sum + ranges.size, 0));
             return result; }; }"""
     context, page, errors = open_audit_page(browser, phase4_server, width, dark, events,
-                                            before_send=lambda page: page.evaluate(watch))
+                                            before_send=lambda page: page.evaluate(watch), stand_first=True)
     try:
         body = page.locator("#agentAnswerBody")
         expect(body).to_contain_text("A standard ticket costs 24 euros since 2025")
@@ -976,7 +1019,7 @@ def test_the_agent_corrects_a_table_cell_and_the_table_stands(browser, phase4_se
     and its height changes by no more than the cell's own lines."""
     context, page, errors = open_audit_page(browser, phase4_server, width, dark, table_events("checking", "done"),
                                             before_send=lambda page: page.evaluate(TABLE_WATCH),
-                                            question=TABLE_QUESTION)
+                                            question=TABLE_QUESTION, stand_first=True)
     try:
         body = page.locator("#agentAnswerBody")
         expect(body).to_contain_text(TABLE_FIXED_CELL)
@@ -1470,7 +1513,8 @@ def test_the_folded_sidebars_brand_fades_the_thread_beneath_it(browser, phase4_s
     through the floating toggle and brand (an Agent chat never hides them
     while reading). Once the page moves beneath them, the top fades out in
     the page's ground, under the side panels."""
-    context, page, errors = open_audit_page(browser, phase4_server, 1280, dark, finished_events())
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, dark, finished_events(),
+                                            stand_first=True)
     try:
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         page.locator("#sidebarToggleInner").click()
