@@ -318,6 +318,12 @@ def test_account_menu_is_keyboard_operable():
     assert '<button type="button" id="emailIcon" class="email-icon" aria-haspopup="menu"' in firebase
     for item in ("sharedLinksButton", "watchedLinksButton", "logoutButton"):
         assert f'<button type="button" id="{item}" class="top-bar-about" role="menuitem"' in firebase
+    # The one way to the landing page for someone signed in: the app shows no
+    # brand to click, and opening consens.io itself leads back into the app.
+    # "?home" asks for the page whatever the browser says about the click
+    # (tests/test_landing_entry.py).
+    assert '<a id="websiteLink" class="top-bar-about" role="menuitem" tabindex="-1" href="/?home"' in firebase
+    assert firebase.index('id="watchedLinksButton"') < firebase.index('id="websiteLink"') < firebase.index('id="logoutButton"')
     assert '${user.email}</span>' not in firebase
     assert 'querySelector(".user-email-address").textContent = user.email' in firebase
     assert 'e.key === "Escape"' in firebase

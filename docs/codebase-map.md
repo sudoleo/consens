@@ -4750,8 +4750,12 @@ Die Seite Prompts liegt im inkludierten Partial `partials/admin_prompt_config.ht
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
   `window.auth`, Bookmarks-CRUD-Calls, Voting, Tier-Sync sowie das
-  Nutzericon-Menü im Sidebar-Footer (Avatar, Name/Plan, „Shared links“ und
-  direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
+  Nutzericon-Menü im Sidebar-Footer (Avatar, Name/Plan, „Shared links“,
+  direkt darunter „Watches“, dann „Website“ und „Log out“). „Website“
+  (`#websiteLink`, `/?home`, neuer Tab) ist der Weg zur Landingpage für
+  Angemeldete: `/` selbst führt sie in die App (`routers/pages.py`
+  `_opens_the_app`), und die App zeigt keine Marke mehr, die man anklicken
+  könnte. Ein geöffnetes Bookmark beendet den Hero-
   Leerzustand sofort. Bookmark-
   Jeder vom Server bestätigte Save (`upsertBookmarkMeta`, nicht das Laden der
   Liste) fordert für ein Bookmark ohne `title_source` `"generated"`/`"user"`

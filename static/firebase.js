@@ -722,6 +722,10 @@ onIdTokenChanged(auth, async (user) => {
             </span>
             <button type="button" id="sharedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Shared links</button>
             <button type="button" id="watchedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Watches</button>
+            <!-- The landing page for someone signed in: opening consens.io
+                 itself leads into the app (routers/pages.py), and the app
+                 shows no brand to click. "?home" says the page is meant. -->
+            <a id="websiteLink" class="top-bar-about" role="menuitem" tabindex="-1" href="/?home" target="_blank" rel="noopener noreferrer">Website</a>
             <button type="button" id="logoutButton" class="top-bar-about" role="menuitem" tabindex="-1">Log out</button>
           </div>
         </div>
@@ -848,6 +852,19 @@ onIdTokenChanged(auth, async (user) => {
         window.openWatchDashboard?.();
       });
     }
+
+    // A link among buttons: the click goes on to the page, the menu closes
+    // behind it, and Space opens it as it presses a button.
+    const websiteLink = document.getElementById("websiteLink");
+    websiteLink.addEventListener("click", e => {
+      e.stopPropagation();
+      setAccountMenuOpen(false);
+    });
+    websiteLink.addEventListener("keydown", e => {
+      if (e.key !== " ") return;
+      e.preventDefault();
+      websiteLink.click();
+    });
 
     logoutButton.addEventListener("click", e => {
       // stopPropagation: Klick soll den loginContainer-Handler nicht treffen.
