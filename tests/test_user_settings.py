@@ -43,6 +43,7 @@ def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
         # Off is a choice of its own, not an unchosen value.
         "letter_animations": False,
         "stream_animation": False,
+        "raw_display": True,
         "unknown": 1,
     }
     assert user_settings.sanitize_settings(stored) == {
@@ -51,6 +52,7 @@ def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
         "claim_counts": True,
         "letter_animations": False,
         "stream_animation": False,
+        "raw_display": True,
     }
     assert user_settings.sanitize_settings(None) == {}
     assert user_settings.sanitize_settings(["run_mode"]) == {}

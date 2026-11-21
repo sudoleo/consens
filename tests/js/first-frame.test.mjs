@@ -231,3 +231,15 @@ describe("remembering the composer for the next first frame", () => {
     expect(window.localStorage.getItem("consensio.firstFrame.v1")).toBeNull();
   });
 });
+
+describe("Raw HTML from the first frame", () => {
+  it("marks <html> before anything is painted and follows the setting at once", () => {
+    expect(paint().document.documentElement.classList.contains("raw-display")).toBe(false);
+    const { window, document } = paint({ storage: { "consensio.rawDisplay.v1": "true" } });
+    expect(document.documentElement.classList.contains("raw-display")).toBe(true);
+    window.App.userSettings.set("raw_display", false);
+    expect(document.documentElement.classList.contains("raw-display")).toBe(false);
+    window.App.userSettings.set("raw_display", true);
+    expect(document.documentElement.classList.contains("raw-display")).toBe(true);
+  });
+});

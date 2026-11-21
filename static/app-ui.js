@@ -263,6 +263,7 @@ function bindAppUiControls() {
   bindLanguageSelect();
   bindSettingSwitch("letterAnimationsSwitch", "letter_animations", true);
   bindSettingSwitch("streamAnimationSwitch", "stream_animation", true);
+  bindSettingSwitch("rawDisplaySwitch", "raw_display", false);
   bindSettingSwitch("detailedProgressSwitch", "detailed_progress", false);
   bindSettingSwitch("findingsToAgentSwitch", "findings_to_agent", true);
 }

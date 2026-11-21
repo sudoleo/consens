@@ -429,8 +429,11 @@
    faellt die Flaeche weg (Canvas); dort stehen die Linien immer, die Farbe
    setzt das System. Eine benannte Stelle traegt die Linie statt ihres
    Satzes, wie sonst die Farbe. Ohne Einstellung bleibt --cx-underline
-   leer und die Regel zeichnet nichts. */
-body.marks-underlined {
+   leer und die Regel zeichnet nichts. Raw HTML (raw-display.css) nimmt
+   die Flaeche weg wie der Kontrastmodus und zeichnet die Linien deshalb
+   ebenfalls immer. */
+body.marks-underlined,
+.raw-display body {
   --cx-underline: underline;
 }
 
@@ -555,8 +558,8 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor, 
 
 /* Mit mark_lines (und im Kontrastmodus) traegt die Form das Ergebnis: Dort
    bleiben Uneinigkeit und Detail gestrichelt und in der Farbe ihrer Stufe. */
-body.marks-underlined:not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor):not(.is-marker-filtered, .has-spot),
-body.marks-underlined:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor):not(.is-marker-filtered) .cx-spot {
+:is(body.marks-underlined, .raw-display body):not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor):not(.is-marker-filtered, .has-spot),
+:is(body.marks-underlined, .raw-display body):not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor):not(.is-marker-filtered) .cx-spot {
   text-decoration-style: dashed;
   text-decoration-thickness: 1px;
   text-decoration-color: var(--cx-line);

@@ -1388,6 +1388,20 @@
                 </div>
               </div>
 
+              {#- Off unless switched on (account setting raw_display):
+                  app-bootstrap.js sets html.raw-display, raw-display.css
+                  draws it; app-ui.js binds the switch. -#}
+              <div class="settings-section"
+                data-settings-keywords="raw roh html plain schlicht einfach simple design stil style schrift font times links knöpfe buttons ohne without css minimal retro">
+                <label for="rawDisplaySwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Raw HTML</strong>
+                    <small>Shows the app without its design: the browser's own fonts, blue links and plain buttons. Everything stays where it is and works as before.</small>
+                  </span>
+                  <input type="checkbox" id="rawDisplaySwitch">
+                </label>
+              </div>
+
               {#- The language of this device (cookie consens_lang, docs/i18n.md).
                   The names of the languages stay in their own language. -#}
               {% set chosen_language = request.cookies.get('consens_lang', 'auto') %}

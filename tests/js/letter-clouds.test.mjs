@@ -164,6 +164,14 @@ describe("letter clouds", () => {
     expect(app.document.querySelector(".letter-clouds").classList.contains("is-off")).toBe(true);
   });
 
+  it("shows no clouds in Raw HTML and comes back when it is switched off", () => {
+    const app = boot({ letters: true });
+    app.window.App.userSettings.set("raw_display", true);
+    expect(app.state()).toMatchObject({ active: false, running: false });
+    app.window.App.userSettings.set("raw_display", false);
+    expect(app.state()).toMatchObject({ active: true, running: true });
+  });
+
   it("keeps drifting while only the Streaming animation is off", () => {
     const app = boot({ letters: true });
     app.window.App.userSettings.set("stream_animation", false);

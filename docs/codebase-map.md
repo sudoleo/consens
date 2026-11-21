@@ -1471,6 +1471,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   einem Template verlinkte Blatt samt aller (auch verschachtelten) Imports,
   also auch Startseite, Benchmark, Topics, Consensus Engine und die übrigen
   öffentlichen Seiten (Admin ausgenommen).
+- **Raw HTML (`static/css/raw-display.css`, seit 2026-11-21):** Kontoeinstellung
+  `raw_display` → `html.raw-display`. Die App, wie der Browser HTML ohne
+  Stylesheet zeichnet; jede Box behält Platz, Größe und Abstand. Zwei Hebel:
+  (1) Tokens auf Systemfarben (Flächen `Canvas`, Tinte `CanvasText`, Linien
+  `GrayText`, Tönungen und Markenflächen `transparent`), auf `html.raw-display`
+  und `html.raw-display .dark-mode`, damit das dunkle Theme dunkel bleibt;
+  (2) in `@layer raw-display` per `revert !important` alles, was zeichnet
+  (Schrift, Schatten, Ecken, Verläufe, `appearance`, Fokusring), dazu
+  Links blau unterstrichen, Felder nativ, jeder Knopf weiß mit 1px-Rahmen;
+  Layout-Eigenschaften bleiben die der App. Wichtige Deklarationen in einer
+  Ebene schlagen die ungeschichteten der App samt ihrer `!important`.
+  Transitionen und Animationen enden sofort (Dauer 0, `animationend` feuert
+  weiter), Spinner drehen; `App.motion.reduced()` ist wahr, Buchstabenwolken und
+  Stream-Licht sind aus, die Satzmarken zeichnen ihre Linien
+  (`components-consensus-visuals.css`). Schwebende Ebenen (alles mit
+  `box-shadow: var(--lift)` und die Popover aus `overlays.css`) bekommen statt
+  des Schattens einen 1px-Rahmen; `tests/test_raw_display.py` hält die Liste
+  vollständig. Die Begrüßung im Hero ist unsichtbar (Platz bleibt), die von
+  temporärem Chat und Projekt nicht.
 - **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
@@ -10055,7 +10074,10 @@ animations; fehlt = an, `false` = aus; `app-ui.js` bindet
 `#letterAnimationsSwitch`, nur `letter-clouds.js` liest sie), `stream_animation`
 (Display → Streaming animation, seit 2026-11-13; fehlt = an, `false` = aus;
 `app-ui.js` bindet `#streamAnimationSwitch`, `stream-reveal.js` liest sie; ein
-altes `letter_animations: false` vererbt sich nicht),
+altes `letter_animations: false` vererbt sich nicht), `raw_display` (Display →
+Raw HTML, seit 2026-11-21; fehlt = aus; `app-ui.js` bindet `#rawDisplaySwitch`,
+`app-bootstrap.js` setzt `html.raw-display` vor dem ersten Bild und bei jeder
+Änderung, Aussehen siehe „Raw HTML“ unter den Bewegungs-Regeln),
 `detailed_progress` (Display → Detailed progress, seit 2026-11-01; fehlt = aus,
 die ruhige Zeile; `app-ui.js` bindet `#detailedProgressSwitch` über
 `bindSettingSwitch`, `agent-activity.js` liest sie bei jedem Zeichnen,

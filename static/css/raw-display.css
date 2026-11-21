@@ -1,0 +1,268 @@
+/* ==========================================================================
+   Raw HTML (Settings > Display, account setting raw_display)
+
+   The app as the browser draws a page without a stylesheet: its own fonts
+   (Times, monospace in code and text areas), blue underlined links, native
+   fields, plain white buttons, no corners, shadows, gradients or motion. The layout
+   stays: every box keeps its place, size and spacing, so nothing moves
+   when the setting changes and every control works as before.
+
+   html.raw-display is set before the first paint (app-bootstrap.js) and
+   kept in step with the setting there. Two levers:
+
+   1. The tokens. Surfaces become Canvas and ink CanvasText, so a layer
+      that covered the page still covers it and the dark theme stays dark
+      (system colours follow the theme's color-scheme). Declared again on
+      .dark-mode because that block redeclares the tokens on body.
+   2. Every other look is rolled back to the browser's with `revert` in a
+      cascade layer: important declarations in a layer beat the app's
+      unlayered ones, its own !important rules included, whatever their
+      specificity. Only what draws is reverted; display, position, size,
+      spacing, opacity, transform and visibility stay the app's.
+   ========================================================================== */
+
+html.raw-display,
+html.raw-display .dark-mode {
+  --ground: Canvas;
+  --raise: Canvas;
+  --well: Canvas;
+  --side: Canvas;
+  --field: Canvas;
+  --field-start: Canvas;
+  --bg-color: Canvas;
+  --container-bg: Canvas;
+  --input-bg: Canvas;
+  --response-bg: Canvas;
+  --sidebar-bg: Canvas;
+  --code-bg: Canvas;
+  --glass-bg: Canvas;
+  --glass-bg-strong: Canvas;
+  --glass-bg-soft: Canvas;
+  --chip-bg: Canvas;
+  --raise-hover: Canvas;
+
+  --ink: CanvasText;
+  --ink-2: CanvasText;
+  --ink-3: CanvasText;
+  --text-color: CanvasText;
+  --sidebar-text-muted: CanvasText;
+  --icon-color: CanvasText;
+  --help-button-color: CanvasText;
+  --help-button-hover: CanvasText;
+  --consensus-button-text: CanvasText;
+  --accent: CanvasText;
+  --link-color: LinkText;
+  /* A sentence the agent is still checking rests in grey until it is
+     done: a state, not a look. */
+  --ink-rest: GrayText;
+
+  --line: GrayText;
+  --line-soft: GrayText;
+  --input-border: GrayText;
+  --sidebar-border: GrayText;
+  --glass-border: GrayText;
+  --glass-edge: GrayText;
+  --field-line: GrayText;
+  --chip-border: transparent;
+  --card-border: 1px solid GrayText;
+
+  --hover: transparent;
+  --hover-mix: 0%;
+  --sidebar-hover: transparent;
+  /* What is chosen (the open chat, a picked option) stays visible. */
+  --selected: color-mix(in srgb, CanvasText 12%, Canvas);
+  --raise-selected: color-mix(in srgb, CanvasText 12%, Canvas);
+
+  --button-bg: Canvas;
+  --button-text: CanvasText;
+  --button-bg-hover: Canvas;
+  --clear-button-bg: Canvas;
+  --clear-button-bg-hover: Canvas;
+  --clear-button-border: ButtonBorder;
+  --clear-button-text: ButtonText;
+
+  --agree-bg: transparent;
+  --partial-bg: transparent;
+  --dispute-bg: transparent;
+  --cred-bg: transparent;
+  --cred-border: currentColor;
+  --vote-model-bg: transparent;
+  --vote-best-bg: transparent;
+  --vote-exclude-bg: transparent;
+
+  /* The marks in an answer lose their tint and keep their line, whose
+     shape names the verdict (components-consensus-visuals.css). */
+  --cx-mark-note: transparent;
+  --cx-mark-note-strong: transparent;
+  --cx-mark-thin: transparent;
+  --cx-mark-thin-strong: transparent;
+  --cx-mark-agree: transparent;
+  --cx-mark-agree-strong: transparent;
+  --cx-mark-split: transparent;
+  --cx-mark-split-strong: transparent;
+  --cx-mark-major: transparent;
+  --cx-mark-major-strong: transparent;
+  --cx-flash: transparent;
+
+  --scrim: rgba(0, 0, 0, 0.1);
+  --overlay-dim: rgba(0, 0, 0, 0.1);
+}
+
+@layer raw-display {
+  html.raw-display,
+  html.raw-display *,
+  html.raw-display *::before,
+  html.raw-display *::after,
+  html.raw-display *::marker {
+    font-family: revert !important;
+    font-feature-settings: revert !important;
+    font-variation-settings: revert !important;
+    letter-spacing: revert !important;
+    word-spacing: revert !important;
+    text-transform: revert !important;
+    text-rendering: revert !important;
+    -webkit-font-smoothing: revert !important;
+    text-shadow: revert !important;
+    box-shadow: revert !important;
+    border-radius: revert !important;
+    background-image: revert !important;
+    appearance: revert !important;
+    accent-color: revert !important;
+    caret-color: revert !important;
+    outline: revert !important;
+    outline-offset: revert !important;
+    scrollbar-color: revert !important;
+    scroll-behavior: revert !important;
+    /* Motion ends at once instead of being removed: a fill-mode end state
+       still applies, animationend still fires, and every script that waits
+       for a transitionend has its own timer (motion.js, watch.js,
+       composer-collapse.js). */
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  /* The one sign that something is happening keeps turning (motion.css). */
+  html.raw-display :is(.spinner, .bookmark-pending-spinner),
+  html.raw-display .memory-edit-submit.is-busy::before {
+    border-radius: 50% !important;
+    animation-duration: calc(var(--dur-spin) * 2) !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  html.raw-display a:any-link,
+  html.raw-display a:any-link * {
+    color: revert !important;
+  }
+
+  html.raw-display a:any-link {
+    text-decoration: revert !important;
+  }
+
+  html.raw-display :is(input, select, textarea) {
+    color: revert !important;
+    background-color: revert !important;
+    border-color: revert !important;
+    border-style: revert !important;
+    border-width: revert !important;
+  }
+
+  /* Every button is the same plain white box with a hairline, whatever its
+     rank was: the primary black one included. The browser's own colours
+     keep a disabled button faded. */
+  html.raw-display :is(button, input:is([type="button"], [type="submit"], [type="reset"])) {
+    color: revert !important;
+    background-color: Canvas !important;
+    border-color: revert !important;
+    border-style: solid !important;
+    border-width: 1px !important;
+  }
+
+  /* Surfaces a control draws inside a larger touch target, or behind its
+     chosen half; the button's own box is the surface now, and a second one
+     inside it read as two buttons. */
+  html.raw-display :is(.app-mobile-header #authTopActions button, #loginModal .auth-tabs)::before,
+  html.raw-display .theme-toggle::after {
+    display: none !important;
+  }
+
+  /* The track of a two-way switch: its halves are buttons of their own. */
+  html.raw-display :is(#loginModal .auth-tabs, .view-switch) {
+    background: transparent !important;
+  }
+
+  /* The start screen's greeting is the design's voice. A temporary chat
+     and a project keep theirs: they say where the next message goes. */
+  html.raw-display .hero-greeting:not(.hero-greeting-temporary, .hero-greeting-project) {
+    visibility: hidden !important;
+  }
+
+  html.raw-display ::selection {
+    color: revert !important;
+    background-color: revert !important;
+  }
+
+  html.raw-display ::placeholder {
+    color: revert !important;
+    opacity: revert !important;
+  }
+
+  html.raw-display ::backdrop {
+    background: revert !important;
+  }
+
+  /* A pressed, chosen or current control had only a tone to say so. */
+  html.raw-display :is([aria-pressed="true"], [aria-selected="true"], [aria-current]:not([aria-current="false"])),
+  html.raw-display :is([aria-pressed="true"], [aria-selected="true"], [aria-current]:not([aria-current="false"])) * {
+    font-weight: bold !important;
+  }
+
+  /* Layers that float above the page lifted with a shadow (--lift); on a
+     page of one colour a hairline frame tells them from what lies under
+     them. Same list as the --lift rules and the popovers of overlays.css
+     (tests/test_raw_display.py keeps it complete). */
+  html.raw-display :is(
+    .skip-link:focus,
+    .bookmark-menu,
+    .global-tooltip,
+    .memory-selection-menu,
+    .model-picker-menu,
+    .wc-popover,
+    .modal-content,
+    .popup,
+    .attach-menu,
+    #emailPopup,
+    .email-popup,
+    .attachment-viewer,
+    .sidebar-quota,
+    .source-teaser,
+    .source-sheet,
+    .auth-modal,
+    .feedback-modal,
+    .settings-modal-content,
+    .faq-modal,
+    .pro-modal-content,
+    .memory-edit-dialog,
+    .memory-edit-toast,
+    .consensus-actions-menu,
+    .claim-popover,
+    .insight-preview,
+    .answer-reader-dialog,
+    .answer-reader-picker-menu,
+    .agent-google-sheet,
+    .agent-files-menu,
+    .file-viewer-menu,
+    .md-diagram-viewer,
+    .toast
+  ) {
+    box-shadow: 0 0 0 1px CanvasText !important;
+  }
+
+  @media (max-width: 1199px) {
+    html.raw-display .agent-sidebar {
+      box-shadow: 0 0 0 1px CanvasText !important;
+    }
+  }
+}

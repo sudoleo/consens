@@ -82,15 +82,19 @@ def test_every_masked_icon_keeps_a_colour_in_contrast_mode():
 
 
 def test_sentence_marks_speak_through_their_underline_in_contrast_mode_and_on_request():
-    """The account setting mark_lines and contrast mode switch on the same
-    lines; their shape names the verdict without any colour."""
+    """The account setting mark_lines, contrast mode and Raw HTML switch on
+    the same lines; their shape names the verdict without any colour."""
     visuals = strip_comments((CSS / "components-consensus-visuals.css").read_text(encoding="utf-8"))
     forced = media_blocks(visuals, "forced-colors: active")
     assert any(re.search(r"(?<![.\w-])body\s*\{\s*--cx-underline:\s*underline;\s*\}", block) for block in forced)
     outside = visuals
     for block in forced:
         outside = outside.replace(block, "")
-    assert re.search(r"body\.marks-underlined\s*\{\s*--cx-underline:\s*underline;\s*\}", outside)
+    # Raw HTML (raw-display.css) drops the tint as contrast mode does and
+    # draws the lines without the switch.
+    assert re.search(
+        r"body\.marks-underlined,\s*\.raw-display body\s*\{\s*--cx-underline:\s*underline;\s*\}", outside
+    )
 
     styles, lines = {}, []
     for selectors, body in rules(outside):

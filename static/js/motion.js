@@ -10,7 +10,7 @@
 //
 //   App.motion.ms("layer")          -> 320 (from --dur-layer)
 //   App.motion.ease("out")          -> "cubic-bezier(0.22, 1, 0.36, 1)"
-//   App.motion.reduced()            -> prefers-reduced-motion: reduce
+//   App.motion.reduced()            -> prefers-reduced-motion: reduce, or Raw HTML
 //   App.motion.leave(el, done, {token, className})
 //       adds `className` (default "is-leaving", which the overlay CSS turns
 //       into the closed look), waits for that transition, then calls
@@ -58,8 +58,10 @@
     return token(`--ease-${name}`) || FALLBACK[name] || FALLBACK.standard;
   }
 
+  // Raw HTML (raw-display.css) ends every transition at once, so a layer
+  // leaves without waiting for one.
   function reduced() {
-    return Boolean(reduceQuery?.matches);
+    return Boolean(reduceQuery?.matches) || document.documentElement.classList.contains("raw-display");
   }
 
   // One pending way out per element: a second leave() (or show()) while

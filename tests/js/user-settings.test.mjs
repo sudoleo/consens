@@ -152,6 +152,7 @@ describe("the local copy", () => {
     ["claim_counts", "true"],
     ["letter_animations", "off"],
     ["stream_animation", "off"],
+    ["raw_display", "on"],
     ["reviewers", "never"],
     ["reviewers", false],
     ["findings_to_agent", "yes"],

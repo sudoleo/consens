@@ -342,6 +342,8 @@
     letter_animations: booleanSetting("consensio.letterAnimations.v1"),
     // On unless false: stream-reveal.js reads it.
     stream_animation: booleanSetting("consensio.streamAnimation.v1"),
+    // Off unless true: app-bootstrap.js sets html.raw-display (raw-display.css).
+    raw_display: booleanSetting("consensio.rawDisplay.v1"),
     // Off unless true: agent-activity.js shows the Agent's live lines in
     // full (every thought, command and output) instead of its calm line.
     detailed_progress: booleanSetting("consensio.detailedProgress.v1"),

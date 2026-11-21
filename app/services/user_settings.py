@@ -98,6 +98,9 @@ class UserSettings(_Strict):
     # The light a streamed answer's letters come in with (stream-reveal.js);
     # None is on.
     stream_animation: Optional[bool] = None
+    # The app without its design, as the browser draws plain HTML
+    # (raw-display.css, html.raw-display); None is off.
+    raw_display: Optional[bool] = None
     # The Agent's live lines in full, every thought, command and output as
     # it comes (agent-activity.js); None is the calm line.
     detailed_progress: Optional[bool] = None

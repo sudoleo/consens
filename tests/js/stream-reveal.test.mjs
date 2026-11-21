@@ -63,6 +63,14 @@ describe("stream-reveal: the pace of a streamed answer", () => {
     expect(app.reveal.active()).toBe(true);
   });
 
+  it("is off in Raw HTML", () => {
+    const app = boot({ streaming: true });
+    app.window.App.userSettings.set("raw_display", true);
+    expect(app.reveal.active()).toBe(false);
+    app.window.App.userSettings.set("raw_display", false);
+    expect(app.reveal.active()).toBe(true);
+  });
+
   // Letter animations is the start screen's clouds: an account that has them
   // off still sees its answers come in with the light.
   it("stays on while only Letter animations are off", () => {

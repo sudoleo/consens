@@ -316,6 +316,14 @@
   if (theme !== "dark" && theme !== "light") {
     theme = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
   }
+  // Raw HTML (account setting raw_display, raw-display.css): on <html>, which
+  // exists before anything is painted, so the designed page never shows
+  // first. Kept in step when the switch or the account changes it.
+  const rawDisplay = () => {
+    document.documentElement.classList.toggle("raw-display", window.App.userSettings?.get?.("raw_display") === true);
+  };
+  rawDisplay();
+  window.App.userSettings?.onChange?.("raw_display", rawDisplay);
   // /app/watches opens as the Watches page from its first frame: the chat
   // column is never painted, the page and its card skeleton are, and
   // watch.js takes over once the session is known.

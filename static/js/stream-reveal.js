@@ -104,9 +104,10 @@
   let frame = 0;
 
   // Settings > Display > Streaming animation off (account setting) paints
-  // the answer as it arrives, like reduced motion.
+  // the answer as it arrives, like reduced motion, and so does Raw HTML.
   function active() {
-    return canDraw && !reducedMotion?.matches && App.userSettings?.get("stream_animation") !== false;
+    return canDraw && !reducedMotion?.matches && App.userSettings?.get("stream_animation") !== false
+      && App.userSettings?.get("raw_display") !== true;
   }
 
   function sharedLength(a, b) {

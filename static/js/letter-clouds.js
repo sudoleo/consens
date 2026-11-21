@@ -354,10 +354,11 @@
   }
 
   // Einstellungen > Anzeige > Buchstaben-Animationen aus (Kontoeinstellung):
-  // keine Wolken, auch keine ruhenden.
+  // keine Wolken, auch keine ruhenden. Raw HTML zeigt ebenfalls keine.
   function wanted() {
     if (!body.classList.contains("is-hero")) return false;
     if (window.App.userSettings?.get("letter_animations") === false) return false;
+    if (window.App.userSettings?.get("raw_display") === true) return false;
     return !document.querySelector(".watch-page:not([hidden])");
   }
   function themeCheck() {
@@ -407,6 +408,7 @@
     const watchPage = document.querySelector(".watch-page");
     if (watchPage) new MutationObserver(sync).observe(watchPage, { attributes: true, attributeFilter: ["hidden"] });
     window.App.userSettings?.onChange?.("letter_animations", sync);
+    window.App.userSettings?.onChange?.("raw_display", sync);
     darkQuery?.addEventListener?.("change", themeCheck);
     reduceQuery?.addEventListener?.("change", () => { lastCloud = -1e9; wake(); });
     document.addEventListener("visibilitychange", wake);
