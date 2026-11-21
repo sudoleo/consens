@@ -771,8 +771,9 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   0%, 10% { background-position: 100% 0; }
   70%, 100% { background-position: 0% 0; }
 }
-/* Too narrow for the score and every link in one line (an open Agent panel,
-   German): the score takes its own line above, as on a phone. */
+/* Too narrow for the score and every link in one line: the score takes its
+   own line above. The chat column is that narrow at its full width (704px,
+   layout.css; the six links and the score need about 730px in English). */
 @container agent-review (max-width: 720px) {
   .agent-review > .agent-agreement { flex: 1 0 100%; }
   .agent-review > .agent-agreement::after { content: none; }

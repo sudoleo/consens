@@ -254,8 +254,13 @@ def test_demo_never_writes_product_usage_signals():
 
 def test_mobile_brand_and_desktop_input_centering_contract():
     layout = read("static/css/layout.css")
+    shell = read("static/css/shell.css")
 
-    assert "--app-container-width: 768px" in layout
+    assert "--app-container-width: 704px" in layout
+    # The column is the answer's reading measure: its text and tables take
+    # their width from the same length, never from the font (ch).
+    assert ".consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { max-width: var(--app-container-width, 66ch); }" in shell
+    assert ".consensus-answer-body :is(.markdown-table-wrap, .stream-table-pending) { max-width: var(--app-container-width, 66ch); }" in shell
     assert "calc(100% - var(--app-sidebar-offset) - 48px)" in layout
     assert "left: calc(var(--app-sidebar-offset) / 2)" in layout
     assert "translateX(130px)" not in layout

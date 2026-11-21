@@ -12,8 +12,12 @@
   --sidebar-width: 260px;
 }
 
+/* The chat column is the answer's reading measure (shell.css): 66 characters
+   of its 17px Inter. One length for both, so text, tables, the question and
+   the field end on one edge. A wider column left every paragraph 64px short
+   of the field, which read as text pushed to the left. */
 body {
-  --app-container-width: 768px;
+  --app-container-width: 704px;
   --app-sidebar-offset: 0px;
 }
 

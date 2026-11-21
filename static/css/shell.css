@@ -2810,8 +2810,9 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
 }
 
 /* The answer reads at 17px (Apple's reading size) with a measure of about
-   66 characters: the running text and tables stop there, while code and
-   formulas keep the full column. The column itself stays the frame. */
+   66 characters. That measure is the chat column's own width (layout.css
+   --app-container-width), so text, tables, code and formulas end on the
+   edge the question and the field end on. */
 .consensus-main > .consensus-answer-body,
 .agent-answer > .consensus-answer-body,
 .thread-history-answer-body {
@@ -2826,11 +2827,14 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
 
 /* Shared reading rhythm for rendered answers, including saved turns.
    Status, source controls, code and tables retain their own typography. */
-.consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { max-width: 66ch; }
-/* A table is text and ends where the running text ends; with the full
-   column it stood out past every paragraph beside it. The rows that wait
-   for it while it streams (agent-chat.css) hold the same width. */
-.consensus-answer-body :is(.markdown-table-wrap, .stream-table-pending) { max-width: 66ch; }
+/* The measure as the column's length and not in ch: ch follows the font, and
+   with another one (the fallback before Inter arrives, the raw display) 66ch
+   ended the text up to 140px before the column did. Where the answer stands
+   in something wider than the column, it keeps the measure. */
+.consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { max-width: var(--app-container-width, 66ch); }
+/* A table is text and ends where the running text ends, and so do the rows
+   that wait for it while it streams (agent-chat.css). */
+.consensus-answer-body :is(.markdown-table-wrap, .stream-table-pending) { max-width: var(--app-container-width, 66ch); }
 .consensus-answer-body p { margin: 0 0 1em; }
 /* No text-wrap: pretty/balance and no larger lead paragraph in answers: the
    text streams in, and both re-set lines the reader already sees (pretty and

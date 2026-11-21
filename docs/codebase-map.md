@@ -1092,7 +1092,10 @@ Kontexts, heben sich aber nicht mehr an. Die gewählte Option eines Menüs
 Grau heißt „nicht wählbar“ (G6).
 `shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
 Leserhythmus: 17 px (`--font-size-read`) mit 1,7-facher Zeilenhöhe, Fließtext
-und Tabellen (`.markdown-table-wrap`) höchstens 66 Zeichen breit (Code, Formeln volle Spalte), normale
+und Tabellen (`.markdown-table-wrap`) höchstens so breit wie die Spalte
+(`--app-container-width`, 704 px = 66 Zeichen in Inter; als Länge und nicht in
+`ch`, weil `ch` der Schrift folgt und der Text mit einer anderen, etwa im
+Raw-Modus, weit vor der Spalte endete), normale
 Laufweite, eigene Absatz-, Listen- und Überschriftenabstände. Seit 2026-10-09
 gibt es dort keinen größeren Lead-Absatz und kein `text-wrap: pretty/balance`
 mehr: beides setzte im Stream schon gelesene Zeilen neu (Layout-Shift-Audit). Die Regeln für den Consensus-Labelkopf gelten
@@ -1995,8 +1998,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Help-FAQ-Rangliste lebt jetzt ausschließlich auf `/model-pulse`; die
   Landingpage verlinkt oben dezent dorthin und die App-Shell lädt keinen
   Firestore-Live-Listener mehr. Die gemeinsame Lesespalte für Fragen, Antworten
-  und Composer ist standardmäßig 768px breit (`--app-container-width` auf
-  `body`, `layout.css`) und schrumpft auf kleinen Viewports. Bei offener
+  und Composer ist standardmäßig 704px breit (`--app-container-width` auf
+  `body`, `layout.css`) und schrumpft auf kleinen Viewports. Das ist die
+  Lesebreite der Antwort (`shell.css`): Text, Tabellen, Frage und Feld enden
+  auf einer Kante. Bei offener
   Desktop-Sidebar ab 1100px zentriert `--app-sidebar-offset: var(--sidebar-width)` die Spalte
   und den Startseiten-View-Switch im verbleibenden Bereich rechts der Navigation;
   eingeklappt und im mobilen Overlay-Modus gilt die Viewport-Mitte. Der mobile
@@ -7989,8 +7994,8 @@ share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffn
 Kennung `p1…` aus `find_pictures`, `f1…` je Nachricht für VM-Bilder) und
 speichern sie als `origin.ref`. `markdown-stream.js` macht daraus einen leeren
 Platz (`marked`-Renderer `image`, `<span class="md-picture" data-picture>`;
-eine Zeile nur aus Bildern wird `div.md-picture-line` in Antwortbreite statt
-eines Absatzes mit 66ch), lädt nichts, zeigt beim Streamen kein halbes
+eine Zeile nur aus Bildern wird `div.md-picture-line` statt eines
+Absatzes), lädt nichts, zeigt beim Streamen kein halbes
 `![…](` (`holdOpenImage`) und behält einen gefüllten Platz beim Morphen samt
 Inhalt (`PICTURE_NODES`). `agent-workspace.js` `fillPictures`/`placePictures`
 setzt das Bild der Turn mit dieser `ref` hinein (je Bild eine Figur, die nur
