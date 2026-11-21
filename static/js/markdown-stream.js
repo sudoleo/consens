@@ -504,6 +504,37 @@ function markNumericTableColumns(table) {
   }
 }
 
+// A cell this short fits the narrowest column a table gives running text
+// (7rem, components-consensus.css). It stays on one line and needs no such
+// floor: with the floor on every cell, "Rang" and "93" each took the room of
+// a sentence, and six columns filled the answer before a word was set.
+const SHORT_TABLE_CELL = 12;
+
+function markShortTableCells(table) {
+  Array.from(table.rows || []).forEach(row => Array.from(row.cells).forEach(cell => {
+    const length = Array.from(cell.textContent.replace(/\s+/g, " ").trim()).length;
+    cell.classList.toggle("is-short", length <= SHORT_TABLE_CELL);
+  }));
+}
+
+// The side a table wider than the answer goes on to: there it runs out
+// softly instead of ending in half a word (as a panning diagram does,
+// diagram-render.js watchPan).
+function watchTablePan(wrapper) {
+  const mark = () => {
+    const hidden = wrapper.scrollWidth - wrapper.clientWidth;
+    wrapper.classList.toggle("is-cut-start", hidden > 1 && wrapper.scrollLeft > 1);
+    wrapper.classList.toggle("is-cut-end", hidden > 1 && wrapper.scrollLeft < hidden - 1);
+  };
+  wrapper.addEventListener("scroll", mark, { passive: true });
+  // Also the first look: the table is wrapped before it stands in the page,
+  // and it grows once its font is there.
+  if (typeof ResizeObserver !== "function") return;
+  const observer = new ResizeObserver(mark);
+  observer.observe(wrapper);
+  if (wrapper.firstElementChild) observer.observe(wrapper.firstElementChild);
+}
+
 // Shapes the answer draws (figures, two sides, a timeline, bars, steps) come
 // from answer-shapes.js, the same rules the public pages draw with.
 function enhanceMarkdownTables(root) {
@@ -516,6 +547,7 @@ function enhanceMarkdownTables(root) {
     table.classList.add("markdown-table");
     markNumericTableColumns(table);
     shapes?.decorateTable(table);
+    markShortTableCells(table);
 
     const headings = Array.from(table.querySelectorAll("thead th"))
       .map(cell => cell.textContent.trim())
@@ -535,6 +567,7 @@ function enhanceMarkdownTables(root) {
 
     table.parentNode.insertBefore(wrapper, table);
     wrapper.appendChild(table);
+    watchTablePan(wrapper);
   });
 }
 

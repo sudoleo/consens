@@ -352,15 +352,38 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   scrollbar-width: thin;
 }
 
+/* The side a table wider than the answer goes on to
+   (markdown-stream.js watchTablePan). */
+.markdown-table-wrap.is-cut-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+
+.markdown-table-wrap.is-cut-start {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px);
+  mask-image: linear-gradient(to right, transparent, #000 36px);
+}
+
+.markdown-table-wrap.is-cut-start.is-cut-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+}
+
+/* The mask would take the focus ring with it. */
 .markdown-table-wrap:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 4px;
   border-radius: var(--radius-2xs);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+@media (forced-colors: active) {
+  .markdown-table-wrap { -webkit-mask-image: none; mask-image: none; }
 }
 
 .markdown-table {
   width: 100%;
-  min-width: 32rem;
   margin: 0;
   border: 0;
   border-collapse: collapse;
@@ -371,7 +394,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .markdown-table th,
 .markdown-table td {
-  min-width: 7rem;
   padding: 10px 18px 10px 0;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
@@ -382,6 +404,18 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
      word only breaks when it is longer than its column can grow, and the
      table scrolls instead. */
   overflow-wrap: break-word;
+}
+
+/* Running text keeps a column it can be read in. A short cell
+   (markdown-stream.js markShortTableCells) fits that width anyway: it stays
+   on one line and takes only the room of its words, so the columns of
+   sentences get what "Rang" and "93" do not need. */
+.markdown-table td:not(.is-short, .is-numeric) {
+  min-width: 7rem;
+}
+
+.markdown-table .is-short {
+  white-space: nowrap;
 }
 
 .markdown-table :is(th, td):last-child {
@@ -412,6 +446,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .markdown-table .is-numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* A number never breaks; a long heading over a column of numbers may. */
+.markdown-table td.is-numeric {
   white-space: nowrap;
 }
 
@@ -438,8 +476,14 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
   .markdown-table th,
   .markdown-table td {
-    min-width: 6.5rem;
     padding: 9px 14px 9px 0;
+  }
+
+  /* A finger pans a table easily: its running text keeps lines of some
+     twenty letters and the table goes sideways, where the wider screen's
+     floor set five words under each other beside rows left empty. */
+  .markdown-table td:not(.is-short, .is-numeric) {
+    min-width: 10rem;
   }
 }
 
@@ -447,6 +491,8 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   .markdown-table-wrap {
     overflow: visible;
     break-inside: avoid;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 
   .markdown-table {

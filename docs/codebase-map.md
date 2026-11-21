@@ -1092,7 +1092,7 @@ Kontexts, heben sich aber nicht mehr an. Die gewählte Option eines Menüs
 Grau heißt „nicht wählbar“ (G6).
 `shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
 Leserhythmus: 17 px (`--font-size-read`) mit 1,7-facher Zeilenhöhe, Fließtext
-höchstens 66 Zeichen breit (Tabellen, Code, Formeln volle Spalte), normale
+und Tabellen (`.markdown-table-wrap`) höchstens 66 Zeichen breit (Code, Formeln volle Spalte), normale
 Laufweite, eigene Absatz-, Listen- und Überschriftenabstände. Seit 2026-10-09
 gibt es dort keinen größeren Lead-Absatz und kein `text-wrap: pretty/balance`
 mehr: beides setzte im Stream schon gelesene Zeilen neu (Layout-Shift-Audit). Die Regeln für den Consensus-Labelkopf gelten
@@ -2994,6 +2994,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   einen fehlenden Wert („–“, „—“, „-“) zählt dabei nicht gegen die Zahlen
   und steht als `is-numeric is-blank` dort, wo die Zahlen stehen, im
   leisen Ton.
+  Spaltenbreiten: `markShortTableCells` markiert jede Zelle bis zwölf
+  Zeichen als `is-short`. Sie bleibt einzeilig und nimmt nur den Platz ihrer
+  Wörter; die Mindestbreite für lesbaren Fließtext (7rem, am Handy 10rem,
+  `components-consensus.css`) gilt nur für längere Textzellen. Zwölf Zeichen
+  passen in diese Mindestbreite, die Regel macht also keine Spalte breiter
+  als die Mindestbreite allein. Eine feste Mindestbreite der ganzen Tabelle
+  gibt es nicht. Ist eine Tabelle trotzdem breiter als die Antwort,
+  verschiebt man sie in ihrem Platz; `watchTablePan` setzt am Rahmen
+  `is-cut-start`/`is-cut-end`, und die Seite, auf der es weitergeht, läuft
+  weich aus (wie bei Diagrammen, mit Fokusring ohne Maske).
   Tabellen erscheinen im Stream erst als Ganzes (`stream-table-pending`),
   ihre Formen also auch. Gezählt wird je geschriebener Antwort und Form
   einmal (`app_shape`, `agent-chat.js` `countShapes`, `AnswerShapes.present`).

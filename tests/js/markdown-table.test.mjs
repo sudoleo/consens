@@ -71,14 +71,63 @@ describe("Markdown tables", () => {
     win.injectMarkdown(output, "table");
     const cells = Array.from(output.querySelectorAll("tbody tr")).map(line => Array.from(line.cells));
 
+    const marks = cell => ["is-numeric", "is-blank"].filter(name => cell.classList.contains(name)).join(" ");
     // A column of numbers with gaps is a column of numbers.
     expect(output.querySelectorAll("th")[2].classList.contains("is-numeric")).toBe(true);
-    expect(cells[2][2].className).toBe("is-numeric is-blank");
-    expect(cells[3][2].className).toBe("is-numeric is-blank");
-    expect(cells[0][2].className).toBe("is-numeric");
+    expect(marks(cells[2][2])).toBe("is-numeric is-blank");
+    expect(marks(cells[3][2])).toBe("is-numeric is-blank");
+    expect(marks(cells[0][2])).toBe("is-numeric");
     // Dashes among words are words.
     expect(output.querySelectorAll("th")[3].classList.contains("is-numeric")).toBe(false);
-    expect(cells[0][3].className).toBe("");
-    expect(cells[3][3].className).toBe("");
+    expect(marks(cells[0][3])).toBe("");
+    expect(marks(cells[3][3])).toBe("");
+  });
+
+  // With a floor of a sentence's width under every cell, "Rang" and "93"
+  // took a sixth of the answer each and the last column was cut off.
+  it("marks the cells short enough to need no room of their own", () => {
+    const row = cells => `<tr>${cells.map(cell => `<td>${cell}</td>`).join("")}</tr>`;
+    const { window: win, document: doc } = boot(`<table><thead><tr><th>Rang</th><th>Versicherer</th><th>Überschuss / Ergebnis 2025</th></tr></thead><tbody>${
+      row(["1", "<strong>HUK-Coburg</strong>", "621 Mio. €, +78 %"])}${
+      row(["2", "Generali  DE", ""])}${
+      row(["3", "308 % Gruppe", "756 Mio. € adj. Nettogewinn"])}</tbody></table>`);
+    const output = doc.createElement("div");
+    win.injectMarkdown(output, "table");
+    const short = Array.from(output.querySelectorAll("tr"))
+      .map(line => Array.from(line.cells).map(cell => cell.classList.contains("is-short")));
+
+    expect(short).toEqual([
+      [true, true, false],
+      // A number, a name in bold, and a phrase of seventeen characters.
+      [true, true, false],
+      // Spaces count once, and an empty cell needs nothing.
+      [true, true, true],
+      // Twelve characters are still short.
+      [true, true, false],
+    ]);
+  });
+
+  // A table wider than the answer pans in its place; the side it goes on to
+  // fades out, and no side fades where nothing is hidden.
+  it("says on which side a panning table goes on", () => {
+    const output = document.createElement("div");
+    window.injectMarkdown(output, "table");
+    const wrapper = output.querySelector(".markdown-table-wrap");
+    const sides = () => ["is-cut-start", "is-cut-end"].filter(name => wrapper.classList.contains(name));
+    const pan = (left, width = 900) => {
+      Object.defineProperty(wrapper, "clientWidth", { configurable: true, value: 700 });
+      Object.defineProperty(wrapper, "scrollWidth", { configurable: true, value: width });
+      wrapper.scrollLeft = left;
+      wrapper.dispatchEvent(new window.Event("scroll"));
+    };
+
+    pan(0);
+    expect(sides()).toEqual(["is-cut-end"]);
+    pan(120);
+    expect(sides()).toEqual(["is-cut-start", "is-cut-end"]);
+    pan(200);
+    expect(sides()).toEqual(["is-cut-start"]);
+    pan(0, 700);
+    expect(sides()).toEqual([]);
   });
 });
