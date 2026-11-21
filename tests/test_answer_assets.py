@@ -73,6 +73,22 @@ def test_an_svg_is_a_picture_however_the_answer_wrote_it():
     assert "<pre>" not in render_public_markdown('<svg viewBox="0 0 1 1">\n<rect/>')
     # An internal subset could declare entities: no picture.
     assert "language-svg" not in render_public_markdown(_block(f'<!DOCTYPE svg [<!ENTITY a "b">]>\n{ICON}', "xml"))
+    # Its attributes may begin on the next line; in a quote it is a picture too.
+    assert picture.replace(" viewBox", "\n viewBox") in render_public_markdown(ICON.replace(" viewBox", "\n viewBox"))
+    assert contains_diagram(render_public_markdown("> " + ICON.replace("\n", "\n> ")))
+
+
+def test_unclosed_svg_tags_render_a_share_page_at_once():
+    """A share page renders its answer on every request, without a cache:
+    lines that each begin an <svg> never closed were each counted to the
+    end of the text (2,000 lines took 10 s), and a line of "<svg " was read
+    from each of them to its end."""
+    import time
+    for text in ("<svg>\n" * 2000, "<svg " * 4000, "Text.\n<svg x>\n" * 1000):
+        started = time.perf_counter()
+        html = render_public_markdown(text)
+        assert time.perf_counter() - started < 2, text[:12]
+        assert "<pre>" not in html
 
 
 def test_nested_context_values_are_scanned():

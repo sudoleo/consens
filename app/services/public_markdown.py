@@ -271,7 +271,44 @@ CODE_LANGUAGES = frozenset("""
 _CODE_CLASSES = {"code": {"class": {"language-mermaid"} | {f"language-{name}" for name in CODE_LANGUAGES}}}
 
 _SVG_ELEMENT_START = re.compile(r" {0,3}<svg[\s>]")
-_SVG_TAG = re.compile(r"""<(/?)svg\b(?:"[^"]*"|'[^']*'|[^'">])*?(/?)>""", re.IGNORECASE)
+# No "<" outside quotes: a line of "<svg <svg <svg …" was otherwise read from
+# each of them to its end.
+_SVG_TAG = re.compile(r"""<(/?)svg\b(?:"[^"]*"|'[^']*'|[^'"<>])*?(/?)>""", re.IGNORECASE)
+
+
+def _svg_closings(state):
+    """{line: the line of the tag that closes an <svg> element whose count
+    starts there}, for the whole text at once (_svg_element counts as
+    below, line by line: depth up at <svg>, down at </svg>, closed at 0).
+    Every line of a paragraph asks whether an element starts on it, and
+    counting from each to the end of the text made a share page of unclosed
+    "<svg>" lines take seconds per thousand lines."""
+    cached = state.env.get("_svg_closings")
+    if cached is not None and cached[0] is state.src:
+        return cached[1]
+    tag_lines, levels = [], [0]
+    for number, text in enumerate(state.src.split("\n")):
+        for tag in _SVG_TAG.finditer(text):
+            tag_lines.append(number)
+            levels.append(levels[-1] + (-1 if tag.group(1) else 0 if tag.group(2) else 1))
+    # closes[i]: the first tag at or after tag i where the depth counted from
+    # just before tag i is 0 or less (the next level at or below levels[i]).
+    closes, waiting = [None] * len(tag_lines), []
+    for index in range(len(levels) - 1, -1, -1):
+        while waiting and levels[waiting[-1]] > levels[index]:
+            waiting.pop()
+        if index < len(tag_lines):
+            closes[index] = waiting[-1] - 1 if waiting else None
+        waiting.append(index)
+    closings, line_count = {}, state.src.count("\n") + 1
+    first = 0
+    for line in range(line_count):
+        while first < len(tag_lines) and tag_lines[first] < line:
+            first += 1
+        if first < len(tag_lines) and closes[first] is not None:
+            closings[line] = tag_lines[closes[first]]
+    state.env["_svg_closings"] = (state.src, closings)
+    return closings
 
 
 def _svg_element(state, start_line, end_line, silent):
@@ -286,8 +323,11 @@ def _svg_element(state, start_line, end_line, silent):
     # Its line break included: "<svg" may stand alone, its attributes below.
     if not _SVG_ELEMENT_START.match(state.src, start, state.eMarks[start_line] + 1):
         return False
+    closing = _svg_closings(state).get(start_line)
+    if closing is None or closing >= end_line:
+        return False
     lines, depth = [], 0
-    for line in range(start_line, end_line):
+    for line in range(start_line, closing + 1):
         # Indented as far as the line goes beyond the element's own start.
         text = state.getLines(line, line + 1, state.sCount[start_line], False)
         for tag in _SVG_TAG.finditer(text):

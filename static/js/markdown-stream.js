@@ -270,9 +270,10 @@ function drawingClosed(token) {
 
 // An <svg> element at the start of a line, up to its matching </svg>
 // (inner <svg> elements nest), or to the end of the text while it is
-// still being written. Nothing after </svg> on its line belongs to it.
+// still being written. Nothing after </svg> on its line belongs to it. No
+// "<" outside quotes in a tag, as on the share page (public_markdown.py).
 const SVG_ELEMENT_START = /^ {0,3}<svg[\s>]/;
-const SVG_TAG = /<(\/?)svg\b(?:"[^"]*"|'[^']*'|[^'">])*?(\/?)>/gi;
+const SVG_TAG = /<(\/?)svg\b(?:"[^"]*"|'[^']*'|[^'"<>])*?(\/?)>/gi;
 
 function svgElement(src) {
   if (!SVG_ELEMENT_START.test(src)) return undefined;
