@@ -90,6 +90,25 @@ def test_every_floating_layer_keeps_a_frame():
     assert not missing, "Floating layers without a frame in raw-display.css:\n" + "\n".join(missing)
 
 
+def test_reading_widths_keep_the_designs_measure_in_the_browsers_font():
+    """A width in ch is a width in the font's 0: in Times a fifth narrower
+    than in Inter. Raw HTML gives every reading width back in Inter's ch."""
+    kept = " ".join(
+        selector for selector, body in rules(RAW.read_text(encoding="utf-8")) if "var(--inter-ch)" in body
+    )
+    missing = []
+    for sheet in app_stylesheets():
+        if sheet == RAW:
+            continue
+        for selector, body in rules(sheet.read_text(encoding="utf-8")):
+            width = re.search(r"(?<![\w-])max-width:\s*(\d+(?:\.\d+)?)ch\b", body)
+            # Short ones size digits and stay in the font that draws them.
+            if not width or float(width.group(1)) < 10:
+                continue
+            missing += [f"{sheet.name}: {part}" for part in selector_list(selector) if part not in kept]
+    assert not missing, "Reading widths in ch without an Inter width in raw-display.css:\n" + "\n".join(missing)
+
+
 def test_the_setting_reaches_the_page_before_its_first_paint():
     bootstrap = (STATIC / "js" / "app-bootstrap.js").read_text(encoding="utf-8")
     assert 'classList.toggle("raw-display"' in bootstrap

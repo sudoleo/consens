@@ -56,15 +56,20 @@ html.raw-display .dark-mode {
      done: a state, not a look. */
   --ink-rest: GrayText;
 
-  --line: GrayText;
-  --line-soft: GrayText;
-  --input-border: GrayText;
-  --sidebar-border: GrayText;
-  --glass-border: GrayText;
-  --glass-edge: GrayText;
+  /* A line token also fills tracks and blocks (a segmented control, a row
+     of the dialog): grey enough for a hairline, pale as a surface. */
+  --line: color-mix(in srgb, CanvasText 32%, Canvas);
+  --line-soft: color-mix(in srgb, CanvasText 16%, Canvas);
+  --input-border: color-mix(in srgb, CanvasText 16%, Canvas);
+  --sidebar-border: color-mix(in srgb, CanvasText 16%, Canvas);
+  --glass-border: color-mix(in srgb, CanvasText 16%, Canvas);
+  --glass-edge: color-mix(in srgb, CanvasText 16%, Canvas);
+  /* The composer's frame keeps its plain grey: it holds the field and
+     its buttons together. */
   --field-line: GrayText;
   --chip-border: transparent;
-  --card-border: 1px solid GrayText;
+  --card-border: 1px solid color-mix(in srgb, CanvasText 16%, Canvas);
+  --slider-bg: transparent;
 
   --hover: transparent;
   --hover-mix: 0%;
@@ -106,6 +111,9 @@ html.raw-display .dark-mode {
 
   --scrim: rgba(0, 0, 0, 0.1);
   --overlay-dim: rgba(0, 0, 0, 0.1);
+
+  /* The width of Inter's 0 at reading size (66ch = 704.5 px at 17 px). */
+  --inter-ch: 0.6279em;
 }
 
 @layer raw-display {
@@ -188,9 +196,123 @@ html.raw-display .dark-mode {
     display: none !important;
   }
 
+  /* A drawn on/off switch is the checkbox under it, shown as the browser
+     draws it; the box keeps the switch's size. */
+  html.raw-display .switch {
+    display: inline-grid !important;
+    place-items: center !important;
+  }
+
+  html.raw-display .switch input {
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+  }
+
+  html.raw-display .switch .slider {
+    display: none !important;
+  }
+
   /* The track of a two-way switch: its halves are buttons of their own. */
   html.raw-display :is(#loginModal .auth-tabs, .view-switch) {
     background: transparent !important;
+  }
+
+  /* A frame says "a control that acts on the page", as a submit button
+     would. A row of a list, the actions under an answer, the reviewers'
+     icons and the account's name read as text in the text's own font; the
+     transparent border keeps every box its size. */
+  html.raw-display :is(
+    .agent-inline-model,
+    .agent-sidebar-toggle,
+    .consensus-footer-tabs button,
+    .chat-project-toggle,
+    .chat-project-empty,
+    .bookmark-menu-button,
+    #loginContainer,
+    #emailIcon,
+    #accountIdentity,
+    #feedbackButton
+  ) {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    font-family: inherit !important;
+  }
+
+  /* Without a frame the line under the word says it can be clicked; links
+     keep the blue. */
+  html.raw-display .consensus-footer-tabs button {
+    text-decoration: underline !important;
+  }
+
+  /* One height per row, icon buttons square at that height. */
+  html.raw-display .sidebar-head :is(.sidebar-search-trigger, .sidebar-toggle-square) {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  html.raw-display .sidebar-footer-row :is(.quota-trigger, #editSystemPromptBtn) {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  /* Frameless, these chips stood flush with the field's edge and as wide
+     as an icon; in a frame their words need room on both sides. */
+  html.raw-display .chat-input-container .composer-agent-toggle {
+    width: auto !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    margin-left: 0 !important;
+    padding-inline: 8px !important;
+  }
+
+  /* On touch, Send's box is its 44px hit area and draws 36px in the middle
+     (composer.css); its frame is drawn there too, as high as its row. */
+  @media (pointer: coarse) {
+    html.raw-display .chat-input-container .input-action-btn-primary {
+      border-width: 0 !important;
+      box-shadow: inset 0 0 0 4px Canvas, inset 0 0 0 5px ButtonBorder !important;
+    }
+
+    html.raw-display .chat-input-container .input-action-btn-primary:is(:disabled, [aria-disabled="true"]) {
+      box-shadow: inset 0 0 0 4px Canvas, inset 0 0 0 5px GrayText !important;
+    }
+  }
+
+  /* A disabled button keeps a frame that can still be seen in the dark. */
+  html.raw-display :is(button, input):is(:disabled, [aria-disabled="true"]) {
+    color: GrayText !important;
+    border-color: GrayText !important;
+  }
+
+  /* The reading width is 66ch of Inter; in Times a ch is a fifth narrower,
+     and the column and its tables shrank with it. --inter-ch keeps the
+     design's width in the browser's font. */
+  html.raw-display :is(
+    .consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6),
+    .consensus-answer-body :is(.markdown-table-wrap, .stream-table-pending),
+    .agent-pr-card,
+    .agent-settings-card,
+    .passage-check
+  ) {
+    max-width: calc(66 * var(--inter-ch)) !important;
+  }
+
+  html.raw-display #loginModal .auth-lead {
+    max-width: calc(30 * var(--inter-ch)) !important;
+  }
+
+  /* A table as HTML draws it with border="1": a line round every cell. The
+     side padding is split, so every column keeps its width. */
+  html.raw-display .markdown-table :is(th, td) {
+    padding-inline: 9px !important;
+    border: 1px solid GrayText !important;
+  }
+
+  html.raw-display .markdown-table-wrap {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
   }
 
   /* The start screen's greeting is the design's voice. A temporary chat

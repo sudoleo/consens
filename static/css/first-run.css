@@ -489,6 +489,12 @@
   outline-offset: 2px;
 }
 
+/* "I like it raw" under Continue: a quiet word, not a second way on. */
+.first-run-dialog .first-run-raw {
+  display: flex;
+  margin: 8px auto 0;
+}
+
 /* Who answers: the logos in one row, the names behind "Show names". */
 .first-run-providers {
   margin: 0 0 16px;

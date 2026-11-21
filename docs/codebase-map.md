@@ -1489,7 +1489,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `box-shadow: var(--lift)` und die Popover aus `overlays.css`) bekommen statt
   des Schattens einen 1px-Rahmen; `tests/test_raw_display.py` hält die Liste
   vollständig. Die Begrüßung im Hero ist unsichtbar (Platz bleibt), die von
-  temporärem Chat und Projekt nicht.
+  temporärem Chat und Projekt nicht. Ein Rahmen heißt „Bedienelement“:
+  Listenzeilen (Projekt, Zeilenmenü), die Aktionen unter einer Antwort
+  (unterstrichen), die Prüfer-Icons im Antwortkopf, Monogramm, Kontoname und
+  Feedback stehen rahmenlos in der Schrift ihrer Umgebung. Eine Höhe je Reihe
+  (Kopf der Seitenleiste und Composer 36 px, Kontozeile 32 px, Icon-Knöpfe
+  quadratisch; Senden zeichnet auf Touch seinen Rahmen im 44-px-Trefferfeld
+  auf 36 px). Die
+  Lesebreiten in `ch` bekommen über `--inter-ch` ihre Breite in Inter zurück
+  (in Times ist `ch` ein Fünftel schmaler); `tests/test_raw_display.py`
+  verlangt das für jede `max-width` ab 10ch. Tabellen zeichnen wie
+  `border="1"` eine Linie um jede Zelle, ohne Auslauf-Maske.
 - **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt

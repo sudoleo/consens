@@ -109,6 +109,28 @@ describe("the dialog", () => {
     expect(dialog().querySelector(".first-run-providers").open).toBe(true);
   });
 
+  it("switches to Raw HTML at once with I like it raw, and back with a second press", () => {
+    const { App, dialog, calls } = boot();
+    let raw = false;
+    App.userSettings.get = name => (name === "raw_display" ? raw : undefined);
+    App.userSettings.set = (name, value) => {
+      calls.settings.push([name, value]);
+      if (name === "raw_display") raw = value;
+    };
+    App.firstRun.ask({ providers: PROVIDERS });
+    const button = dialog().querySelector(".first-run-raw");
+    expect(button.textContent).toBe("I like it raw");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    button.click();
+    expect(calls.settings).toEqual([["raw_display", true]]);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    // A look, not an answer: the dialog stays on its choices.
+    expect(dialog().dataset.step).toBe("setup");
+    button.click();
+    expect(raw).toBe(false);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("answers null for the X and starts over next time", async () => {
     const { App, dialog, pick } = boot();
     const first = App.firstRun.ask({ providers: PROVIDERS });

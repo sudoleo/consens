@@ -5,7 +5,7 @@
 //
 //   setup     what the reviewers do, played as a short scene on one answer,
 //             and how much of it this person wants to see; whether the app
-//             remembers them
+//             remembers them; "I like it raw" switches to Raw HTML at once
 //   consent   who answers, and the agreement to send the question there
 //
 //   const choice = await App.firstRun.ask({ providers });
@@ -172,7 +172,12 @@
 
     const next = element("button", "btn-pro first-run-next", t("Continue"));
     next.type = "button";
-    setup.append(pitch, question, views, sample, caption, memory, next);
+    // Raw HTML (Settings > Display) is a look, not a step: it switches at
+    // once, this dialog included, and a second press takes it back.
+    const raw = element("button", "text-link first-run-raw", t("I like it raw"));
+    raw.type = "button";
+    raw.setAttribute("aria-description", t("Shows the app as plain HTML, the way the browser draws it."));
+    setup.append(pitch, question, views, sample, caption, memory, next, raw);
 
     const consent = element("div", "first-run-step");
     consent.dataset.step = "consent";
@@ -204,6 +209,10 @@
 
     App.modalDialog?.bind(dialog, { onClose: () => answer(null) });
     views.addEventListener("change", showView);
+    raw.addEventListener("click", () => {
+      App.userSettings?.set?.("raw_display", !rawDisplay(), { source: "first_run" });
+      showRaw();
+    });
     next.addEventListener("click", () => {
       if (!dialog.classList.contains("has-consent")) return finish(chosen());
       showStep("consent");
@@ -236,6 +245,14 @@
     const { view } = chosen();
     dialog.dataset.view = view;
     dialog.querySelector(".first-run-caption").textContent = viewText(view)[1];
+  }
+
+  function rawDisplay() {
+    return App.userSettings?.get?.("raw_display") === true;
+  }
+
+  function showRaw() {
+    dialog.querySelector(".first-run-raw").setAttribute("aria-pressed", String(rawDisplay()));
   }
 
   function showStep(step) {
@@ -285,6 +302,7 @@
     node.classList.toggle("has-consent", consent);
     node.querySelector(".first-run-next").textContent = consent ? t("Continue") : t("Done");
     showView();
+    showRaw();
     showStep(setup ? "setup" : "consent");
     return new Promise(resolve => {
       pending = { resolve };
