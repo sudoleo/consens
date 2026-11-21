@@ -601,8 +601,27 @@ function canonicalAgentSourceUrl(value) {
 // The mark stands for one link or pill in the text of a line (U+FFFC).
 const CITATION_MARK = String.fromCharCode(0xFFFC);
 const AFTER_CITATION = new RegExp(`^(?:[\\s,;]*${CITATION_MARK})*[\\s,;]*(?:\\[[^\\]\\n]*(?:\\]\\((?:${CITATION_MARK}|[^)\\s]*))?)?$`);
-const CITATIONS_BEFORE = new RegExp(`(?:\\s*${CITATION_MARK}[\\s,;]*)*$`);
 const SENTENCE_END = /[.!?:…]["'”“’»«)\]]*\s*$/;
+
+// The line without the marks at its end, the blanks, commas and semicolons
+// between them and the blanks before the first (public_markdown.py
+// _said_before_citations). Read once from the end, not with a pattern for
+// that tail: an engine that backtracks through it tries every split of the
+// blanks between two marks wherever words follow the marks, twice the time
+// per link (Python's took 10 s for 24). V8 gets through it fast; how every
+// browser's engine does is not something a line of links should depend on.
+function saidBeforeCitations(line) {
+  const blank = char => /\s/.test(char);
+  let start = line.length, first = line.length;
+  while (start && (line[start - 1] === ',' || line[start - 1] === ';' || line[start - 1] === CITATION_MARK
+    || blank(line[start - 1]))) {
+    start -= 1;
+    if (line[start] === CITATION_MARK) first = start;
+  }
+  if (first === line.length) return line;
+  while (first > start && blank(line[first - 1])) first -= 1;
+  return line.slice(0, first);
+}
 
 function isCitationLink(node) {
   return node.matches('.src-ref') || (node.matches('a[href]') && !node.querySelector('img, svg')
@@ -642,7 +661,7 @@ function onlyCites(link) {
   const after = flowBeside(link, true);
   if (!AFTER_CITATION.test(after)) return false;
   const before = flowBeside(link, false);
-  const said = before.replace(CITATIONS_BEFORE, '');
+  const said = saidBeforeCitations(before);
   if (said.trim()) return SENTENCE_END.test(said);
   // Nothing but links in the line: with another one beside it, written or
   // being written.

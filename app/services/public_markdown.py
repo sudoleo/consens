@@ -573,7 +573,7 @@ def _flow_text(tokens):
 def _said_before_citations(line):
     """``line`` without the marks at its end, the blanks, commas and
     semicolons between them and the blanks before the first (sources.js
-    CITATIONS_BEFORE). Read once from the end: a pattern for that tail tried
+    saidBeforeCitations). Read once from the end: a pattern for that tail tried
     every split of the blanks between two marks wherever words followed the
     marks, twice the time per link (24 links held a share page 10 s)."""
     start = first = len(line)

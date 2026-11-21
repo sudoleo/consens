@@ -228,6 +228,45 @@ it('keeps the pill of such a citation while the next link of its run is half wri
   dom.window.close();
 });
 
+// The links at the end of the line before a link were taken off with a
+// pattern, which an engine that backtracks reads in twice the time per link
+// wherever words follow them (public_markdown.py: 24 links, 10 s). Read
+// from the end, every line decides as the pattern did.
+it('decides a link after any line of links, blanks and words as the pattern did', () => {
+  const {window: w, dom} = setup();
+  const mark = String.fromCharCode(0xFFFC);
+  const pattern = new RegExp(`(?:\\s*${mark}[\\s,;]*)*$`);
+  const sentenceEnd = /[.!?:…]["'”“’»«)\]]*\s*$/;
+  // The final link stands last in its line: only what comes before it counts.
+  const cites = line => {
+    const said = line.replace(pattern, '');
+    return said.trim() ? sentenceEnd.test(said) : line.includes(mark);
+  };
+  const body = w.document.getElementById('agentAnswerBody');
+  const decide = pieces => {
+    body.innerHTML = `<p>${pieces.map((piece, index) => piece === mark
+      ? `<a href="https://s${index}.example.org/p">Name ${index}</a>` : piece).join('')}`
+      + '<a href="https://final.example.org/x">Final</a></p>';
+    return w.isBareSourceLink(body.querySelector('a:last-child'));
+  };
+  let seed = 20261121;
+  const random = () => { seed = (seed * 48271) % 2147483647; return seed / 2147483647; };
+  const parts = [mark, ' ', ', ', ',', ';', '\t', '\n', 'a', 'Text.', ' '];
+  const outcomes = new Set();
+  for (let round = 0; round < 300; round += 1) {
+    const pieces = Array.from({length: Math.floor(random() * 13)}, () => parts[Math.floor(random() * parts.length)]);
+    const expected = cites(pieces.join(''));
+    expect(decide(pieces), JSON.stringify(pieces.join(''))).toBe(expected);
+    outcomes.add(expected);
+  }
+  expect(outcomes.size).toBe(2);
+  // A row of links before more words: the last link is part of a sentence.
+  const row = ['Quellen: ', ...Array.from({length: 26}, (_, index) => index ? [', ', mark] : [mark]).flat(), ' und '];
+  expect(decide(row)).toBe(false);
+  expect(decide([...row.slice(0, -1), '. '])).toBe(true);
+  dom.window.close();
+});
+
 it('keeps sentence marks out of a link that only cites, and reads the line through them', () => {
   const {window: w, dom} = setup();
   const body = w.document.getElementById('agentAnswerBody');
