@@ -9804,7 +9804,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Mail-Scanner mit JavaScript), lässt ihn damit gültig, und ein untergeschobener
   Link meldet niemanden still an. Einlösen ist `POST /auth/email-link {code}`
   (Knopf „Signing you in…“). `redeem` liest und löscht den
-  Datensatz in EINER Transaktion; vor dem Commit prüft es das Konto bei
+  Datensatz in EINER Transaktion und fasst das Konto erst nach dem Commit an,
+  also nur für die Anfrage, die den Link bekam (zwei Tabs derselben Mail: die
+  wiederholte Transaktion der anderen hätte sonst die frische Sitzung der
+  ersten beendet). Dann prüft es das Konto bei
   Firebase (existiert, nicht gesperrt, Adresse passt zu `email_hash`), setzt
   bei einem unbestätigten Konto `email_verified` (der Klick beweist das
   Postfach), ersetzt dabei ein vorhandenes Passwort durch ein zufälliges,
@@ -9815,8 +9818,8 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   `no-store`; `first` = das Konto hatte noch keinen Login. Unbekannt,
   abgelaufen, benutzt, falsches Format oder geändertes Konto: immer 400
   `{error: "This link has expired or was already used.", code: "link_invalid"}`;
-  ein Firebase-Ausfall gibt 503 mit `Retry-After: 5` und lässt den Link
-  gültig. Der Browser meldet sich mit
+  ein Firebase-Ausfall gibt 503 mit `Retry-After: 5` und legt den Link
+  zurück (`_put_back`), er bleibt gültig. Der Browser meldet sich mit
   `signInWithCustomToken` an, `onIdTokenChanged` und `/confirm-registration`
   laufen wie bei jedem Login, `continueSignedIn()` lädt neu; die Frage eines
   Gasts geht danach wie nach jedem Login von selbst raus (`composer-invite.js`,

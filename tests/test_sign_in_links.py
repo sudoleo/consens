@@ -247,18 +247,24 @@ def test_a_wrong_code_is_refused_and_leaves_other_links_alone(firebase):
     assert sign_in_links.redeem(code, db=db, now=NOW).token == "custom-token-reader"
 
 
-def test_two_requests_with_one_code_sign_in_once(firebase):
+def test_two_requests_with_one_code_sign_in_once_and_touch_the_account_once(firebase):
     """Both read the link before either commits; the second commit is retried
-    and finds the link spent."""
+    and finds the link spent. Only the request that spent it confirms the
+    address: the other one's revoke_refresh_tokens came after the first had
+    its token and ended the session it opened with it (two tabs of one mail)."""
     db = FakeDb()
+    firebase.users["reader"] = account(verified=False, signed_in=False)
     code = sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
     db.attempts = 0
     both_read = threading.Barrier(2, timeout=5)
-    real_get_user = sign_in_links.auth.get_user.side_effect
+    read = Document.get
 
-    def get_user_after_both_read(uid):
-        both_read.wait()
-        return real_get_user(uid)
+    def read_together(self, transaction=None):
+        snapshot = read(self, transaction)
+        # The first attempt of each request; the retry reads alone.
+        if transaction is not None and db.attempts <= 2:
+            both_read.wait()
+        return snapshot
 
     results = []
 
@@ -268,7 +274,7 @@ def test_two_requests_with_one_code_sign_in_once(firebase):
         except sign_in_links.LinkInvalid as exc:
             results.append(exc)
 
-    with patch.object(sign_in_links.auth, "get_user", side_effect=get_user_after_both_read):
+    with patch.object(Document, "get", read_together):
         threads = [threading.Thread(target=redeem) for _ in range(2)]
         for thread in threads:
             thread.start()
@@ -278,6 +284,8 @@ def test_two_requests_with_one_code_sign_in_once(firebase):
     assert sorted(type(item).__name__ for item in results) == ["LinkInvalid", "SignIn"]
     assert db.links() == {}
     assert db.attempts == 3
+    assert [uid for uid, _ in firebase.updates] == ["reader"]
+    assert firebase.revoked == ["reader"] and firebase.minted == ["reader"]
 
 
 def test_a_firebase_outage_keeps_the_link(firebase):
@@ -289,6 +297,30 @@ def test_a_firebase_outage_keeps_the_link(firebase):
             sign_in_links.redeem(code, db=db, now=NOW)
     assert len(db.links()) == 1
     assert sign_in_links.redeem(code, db=db, now=NOW).token == "custom-token-reader"
+
+
+def test_an_outage_while_confirming_puts_the_link_back_and_says_so_if_it_cannot(firebase, caplog):
+    db = FakeDb()
+    firebase.users["reader"] = account(verified=False)
+    code = sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
+    stored = db.links()
+
+    with patch.object(sign_in_links.auth, "update_user", side_effect=RuntimeError("upstream")):
+        with pytest.raises(RuntimeError):
+            sign_in_links.redeem(code, db=db, now=NOW)
+    assert db.links() == stored and firebase.minted == []
+
+    # Firestore gone as well: the request answers the first failure, and the
+    # log names the link's loss without a word of either message.
+    caplog.set_level(logging.WARNING)
+    with (
+        patch.object(sign_in_links.auth, "update_user", side_effect=RuntimeError("upstream")),
+        patch.object(Document, "set", side_effect=RuntimeError("firestore secret")),
+        pytest.raises(RuntimeError, match="upstream"),
+    ):
+        sign_in_links.redeem(code, db=db, now=NOW)
+    assert db.links() == {}
+    assert "Sign-in link not put back" in caplog.text and "secret" not in caplog.text
 
 
 @pytest.mark.parametrize("change", [

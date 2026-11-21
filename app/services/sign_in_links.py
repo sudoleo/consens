@@ -14,6 +14,7 @@ link spends nothing. Only the page's own POST does.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 from firebase_admin import auth, firestore
 
+from app.core.observability import safe_exception
 from app.core.site import SITE_URL
 
 
@@ -179,7 +181,7 @@ def account_address(code: str, *, db=None, now: datetime | None = None) -> str:
 def _sign_in(record: dict):
     """The custom token for the link's account, or _REFUSED.
 
-    Raises on a Firebase outage, which leaves the link unspent."""
+    Raises on a Firebase outage, which puts the link back (redeem)."""
     user = _account(record)
     if user is None:
         return _REFUSED
@@ -208,8 +210,12 @@ def redeem(code: str, *, db=None, now: datetime | None = None) -> SignIn:
     """Spend ``code`` once and sign its account in.
 
     Read and delete happen in one transaction: of two requests with the same
-    code, one gets the token and the other LinkInvalid. The account is
-    looked up before the commit, so a Firebase outage keeps the link usable.
+    code, one gets the link and the other LinkInvalid. Only the one that got
+    it touches the account, after the commit: the transaction runs again
+    for the request that lost, and a click that confirms the address there
+    as well ended the session the other had just opened
+    (revoke_refresh_tokens). A Firebase outage puts the link back, so it
+    stays usable.
     """
     if not isinstance(code, str) or not _CODE.fullmatch(code):
         raise LinkInvalid()
@@ -224,11 +230,26 @@ def redeem(code: str, *, db=None, now: datetime | None = None) -> SignIn:
         if not snapshot.exists:
             return None
         record = snapshot.to_dict() or {}
-        result = _REFUSED if _expired(record, now) else _sign_in(record)
         tx.delete(ref)
-        return result
+        return _REFUSED if _expired(record, now) else record
 
-    result = _run(db, spend)
+    record = _run(db, spend)
+    if not isinstance(record, dict):
+        raise LinkInvalid()
+    try:
+        result = _sign_in(record)
+    except Exception:
+        _put_back(ref, record)
+        raise
     if not isinstance(result, SignIn):
         raise LinkInvalid()
     return result
+
+
+def _put_back(ref, record: dict) -> None:
+    """A spent link whose sign-in did not happen, usable again; best effort,
+    the failure that brought it here is what the request answers."""
+    try:
+        ref.set(record)
+    except Exception as exc:
+        logging.warning("Sign-in link not put back category=%s", safe_exception(exc))
