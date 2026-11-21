@@ -283,10 +283,6 @@ function renderAudits(audits) {
       textContent: `disabled (${permutation.reason || "n/a"})`,
     }));
   } else {
-    ++listGeneration;
-    ++detailGeneration;
-    document.getElementById("runSelect").replaceChildren();
-    document.getElementById("runDetail").replaceChildren();
     permutationRow.appendChild(
       auditPill(permutation.consistent ?? 0, permutation.conclusive ?? permutation.total ?? 0),
     );

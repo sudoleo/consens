@@ -64,6 +64,22 @@ describe('Benchmark compact report viewer', () => {
     w.close();
   });
 
+  it('keeps the report and the run list beside the audits', async () => {
+    const payload = compact('run-a');
+    payload.run.audits = { option_permutation: { consistent: 3, conclusive: 4, total: 5 }, consensus_order: { stable: 2, total: 2 } };
+    payload.run.questions = [{ question_id: 'q1', category: 'math', ground_truth: 'A', models: {} }];
+    const fetch = vi.fn(async url => response(url.endsWith('/runs') ? { runs: [{ run_id: 'run-a' }, { run_id: 'run-b' }] } : payload));
+    const { w, doc } = boot(fetch); w.authChanged({});
+    await vi.waitFor(() => expect(doc.getElementById('runDetail').textContent).toContain('E4 audits'));
+    const detail = doc.getElementById('runDetail').textContent;
+    expect(detail).toContain('Run · run-a');
+    expect(detail).toContain('System comparison');
+    expect(detail).toContain('3/4');
+    expect(detail).toContain('Per-question matrix');
+    expect(doc.getElementById('runSelect').options.length).toBe(2);
+    w.close();
+  });
+
   it('invalidates pending detail when refresh finds no runs', async () => {
     let release, count = 0;
     const fetch = vi.fn(url => url.endsWith('/runs') ? Promise.resolve(response({ runs: ++count === 1 ? [{ run_id: 'old' }] : [] })) : new Promise(done => { release = done; }));
