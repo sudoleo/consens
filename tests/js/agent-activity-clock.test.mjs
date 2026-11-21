@@ -91,21 +91,91 @@ describe("activity head while the run reviews or waits", () => {
     expect(title()).toBe("Working for 2m 19s");
     expect(activity.PHASE_WORDS.checking).toBeUndefined();
     // A pause: the head says so, and its clock does not move while it lasts.
+    // The run's events, as its stream fills them (agent-chat.js).
+    const events = [];
     const hold = { version: 1, kind: "hold", id: "hold-a1", step_id: "hold", reviewer: "Claude", halt: "harm",
       reason: "Deletes files.", state: "waiting" };
-    activity.render(host, { running: true, elapsedMs: 150000, status: "running", events: [hold] });
+    activity.receive(events, hold);
+    activity.render(host, { running: true, elapsedMs: 150000, status: "running", events });
     expect(title()).toBe("Paused · 2m 30s");
     advance(4000);
-    activity.render(host, { running: true, elapsedMs: 154000, status: "running", events: [hold] });
+    activity.render(host, { running: true, elapsedMs: 154000, status: "running", events });
     expect(title()).toBe("Paused · 2m 30s");
     // The agent's own question waits for the user too.
     const ask = { ...hold, id: "hold-a2", ask: "browser", request: "Log in.", reviewer: "", halt: "" };
-    activity.render(host, { running: true, elapsedMs: 154000, status: "running", events: [ask] });
+    activity.receive(events, { ...hold, state: "continue" });
+    activity.receive(events, ask);
+    activity.render(host, { running: true, elapsedMs: 154000, status: "running", events });
     expect(title()).toBe("Waiting for you · 2m 30s");
     // Decided: it works on from where it stood, without the time it waited.
     advance(6000);
-    activity.render(host, { running: true, elapsedMs: 160000, status: "running", events: [{ ...ask, state: "handed_back" }] });
+    activity.receive(events, { ...ask, state: "handed_back" });
+    activity.render(host, { running: true, elapsedMs: 160000, status: "running", events });
     expect(title()).toBe("Working for 2m 30s");
+    activity.dispose(host);
+    vi.useRealTimers();
+    app.dom.window.close();
+  });
+
+  // The view goes with its chat (agent-chat.js activityHost); back in the
+  // chat its clock counted the pauses before as work.
+  it("leaves a pause out of the clock after a visit to another chat, also one that ended there", () => {
+    vi.useFakeTimers();
+    const app = loadScripts(["static/js/agent-activity.js"], { body: '<div id="host"></div>' });
+    const host = app.document.getElementById("host");
+    const activity = app.window.App.agentActivity;
+    let wall = Date.parse("2026-11-21T10:00:00Z");
+    app.window.Date.now = () => wall;
+    const advance = ms => { wall += ms; vi.advanceTimersByTime(ms); };
+    const title = () => host.querySelector(".agent-activity-title").textContent;
+    // The run's clock: the wall clock since its start, as agent-chat.js gives it.
+    const started = wall;
+    const show = events => {
+      activity.dispose(host);
+      host.replaceChildren();
+      delete host._agentActivity;
+      activity.render(host, { running: true, elapsedMs: wall - started, status: "running", events });
+    };
+    const events = [], other = [];
+    const hold = id => ({ version: 1, kind: "hold", id, step_id: "hold", reviewer: "Claude", halt: "harm",
+      reason: "Deletes files.", state: "waiting" });
+    advance(10000);
+    activity.receive(events, hold("hold-b1"));
+    show(events);
+    expect(title()).toBe("Paused · 10s");
+    // Away while it waits, back while it still does.
+    advance(30000);
+    show(other);
+    advance(20000);
+    show(events);
+    expect(title()).toBe("Paused · 10s");
+    activity.receive(events, { ...hold("hold-b1"), state: "continue" });
+    advance(5000);
+    show(events);
+    expect(title()).toBe("Working for 15s");
+    // A pause that opens and ends while its chat is not on screen.
+    show(other);
+    advance(5000);
+    activity.receive(events, hold("hold-b2"));
+    advance(40000);
+    activity.receive(events, { ...hold("hold-b2"), state: "continue" });
+    advance(3000);
+    show(events);
+    expect(title()).toBe("Working for 23s");
+    // After a reload the clock starts at the reload and the stream brings the
+    // pauses again, all over: none of them waited on this clock.
+    const reloaded = [];
+    for (const id of ["hold-b1", "hold-b2"]) {
+      activity.receive(reloaded, hold(id));
+      activity.receive(reloaded, { ...hold(id), state: "continue" });
+    }
+    const resumed = wall;
+    advance(7000);
+    activity.dispose(host);
+    host.replaceChildren();
+    delete host._agentActivity;
+    activity.render(host, { running: true, elapsedMs: wall - resumed, status: "running", events: reloaded });
+    expect(title()).toBe("Working for 7s");
     activity.dispose(host);
     vi.useRealTimers();
     app.dom.window.close();

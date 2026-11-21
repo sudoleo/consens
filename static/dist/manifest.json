@@ -1,5 +1,5 @@
 {
-  "sources": "70d10f2ec57e",
+  "sources": "0d0cc78037d0",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -611,7 +611,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.598a5cca8c28.js",
+      "src": "/static/dist/app.fc1ce180e491.js",
       "module": false,
       "defer": true
     }
@@ -706,8 +706,8 @@
   "previous_assets": [
     "app.0c2b504858af.css",
     "app.0d5e6cee567e.css",
+    "app.598a5cca8c28.js",
     "app.2da874e0dac7.js",
-    "app.446ae404ae6f.js",
     "auth.cf1dba1d8c12.js",
     "auth.c4661857697c.js",
     "demo.274397f8bb1b.js",

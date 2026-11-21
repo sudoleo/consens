@@ -14244,7 +14244,10 @@ skat.dk, virk.dk, borger.dk`). Die Kopfzeile lautet `Working for 12s` während d
 Laufs und `Thought for 3m 7s` danach (`Stopped after`/`Failed after`); seit
 2026-10-29 (UX-Audit E1) `Reviewing · 2m 19s` während die Prüfer prüfen und
 `Paused · …`/`Waiting for you · …` mit stehender Uhr, solange der Lauf auf
-den Nutzer wartet (`titleParts`, `HEAD_VERBS`, `waitedMs`); die Wartezeit
+den Nutzer wartet (`titleParts`, `HEAD_VERBS`, `waitedMs`). Wann eine Pause
+auf- und zuging, merkt `receive` je Lauf an seiner Ereignisliste
+(`notePause`), auch während sein Chat nicht offen ist: zurück im Chat zählt die
+Uhr die Pausen nicht als Arbeit. Die Wartezeit
 fehlt auch im Endwert (`savedDuration` zieht `agent_wait_seconds` ab). Ein
 Zustandswechsel gleitet den Kopf einmal auf seine neue Breite.
 `Writing answer…` erscheint nur, wenn nach dem letzten `responding`-Status kein

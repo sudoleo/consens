@@ -397,16 +397,34 @@
       });
     }
   }
-  // The time a live run waited for the user on this page, so far, on the
-  // caller's clock: the wall clock since the start (agent-chat.js).
-  function waitedMs(view, waiting) {
+  // When this page saw each pause of a live run open and end, per run: its
+  // events. They arrive (receive) whether or not the run's chat is open; the
+  // view does not stay, it goes with its chat (agent-chat.js activityHost),
+  // and back in the chat the clock counted the pauses as work.
+  const pauses = new WeakMap();
+  function notePause(events, item, at = Date.now()) {
+    let seen = pauses.get(events);
+    if (!seen) pauses.set(events, seen = new Map());
+    const pause = seen.get(item.id);
+    const waiting = (item.state || 'waiting') === 'waiting';
+    if (!pause && waiting) seen.set(item.id, { opened: at, ended: null });
+    else if (pause && !waiting && pause.ended === null) pause.ended = at;
+  }
+  // The time a live run waited for the user so far (its pauses and its own
+  // questions, `holds`), on the caller's clock: the wall clock since the
+  // start (agent-chat.js), from a reload on since the reload, as the pauses
+  // before it are not seen here. Two cards open at once wait the same time once.
+  function waitedMs(events, holds) {
     const at = Date.now();
-    if (waiting && view.waitStart == null) view.waitStart = at;
-    if (!waiting && view.waitStart != null) {
-      view.waited = (view.waited || 0) + at - view.waitStart;
-      view.waitStart = null;
+    for (const item of holds) notePause(events, item, at);
+    let waited = 0, open = Infinity;
+    for (const [id, pause] of pauses.get(events) || []) {
+      // A pause that left the events without its end ends here.
+      if (pause.ended === null && !events.some(item => item.kind === 'hold' && item.id === id)) pause.ended = at;
+      if (pause.ended === null) open = Math.min(open, pause.opened);
+      else waited += pause.ended - pause.opened;
     }
-    return (view.waited || 0) + (view.waitStart != null ? at - view.waitStart : 0);
+    return open < Infinity ? waited + at - open : waited;
   }
   const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const activeMotion = new Set();
@@ -893,6 +911,7 @@
       Object.assign(existing, event);
       touch(existing);
       if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
+      if (existing.kind === 'hold') notePause(events, existing);
     } else {
       // Keep commentary and confirmed steps together for the full timeline.
       // Pauses have room of their own: in a long run the many status
@@ -911,6 +930,7 @@
       touch(item);
       if (event.started_at) startSeen.set(item, Date.now());
       if (typeof event.output === 'string') outputSeen.set(item, Date.now());
+      if (item.kind === 'hold') notePause(events, item);
     }
   }
 
@@ -1793,9 +1813,9 @@
     const settled = status === 'failed' && !running && answerText
       && App.agentReview?.failureNote?.({error: 'failed'}, review, answerText) === '';
     const now = running ? phase({ asking, held, review }) : null;
-    // The clock leaves out the time the run waited for the user here, as the
+    // The clock leaves out the time the run waited for the user, as the
     // saved duration does (savedDuration).
-    const waited = waitedMs(view, now === 'paused' || now === 'asking');
+    const waited = running ? waitedMs(events, holds) : 0;
     // An answer whose check goes on after it stood says so in the head.
     const checkNote = running ? null : App.agentReview?.headNote?.(review, reviewEnded) || null;
     // With notes passed to the agent (`refines`) the answer is not final at
