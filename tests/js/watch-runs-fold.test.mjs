@@ -91,6 +91,19 @@ describe("A Watch's runs in its chat", () => {
     expect(days(history)).toEqual([weekday(at(2, 9)), "Yesterday", "Today"]);
   });
 
+  it("keeps a run that paused its Watch open: its answer says why", () => {
+    const { window, document } = boot();
+    const paused = turn("c", { agent_settings: { watch_run: RUN }, consensus: "There is nothing to watch yet.",
+      created_at: at(0, 10), agent_watch_run: { pause: { reason: "Say which page to watch." } } });
+    expect(window.App.followup.quietWatchRun(paused)).toBe(false);
+    window.App.followup.renderStoredTurns([quiet("a", at(0, 8)), quiet("b", at(0, 9)), paused]);
+    const history = document.getElementById("threadHistory");
+    const turns = [...history.querySelectorAll(".thread-history-turn")];
+    expect(turns.at(-1).classList.contains("is-watch-folded")).toBe(false);
+    expect([...history.querySelectorAll(".thread-watch-fold-button")].map(button => button.textContent))
+      .toEqual(["Checked once · nothing new · 09:00"]);
+  });
+
   it("names an older day by its date and leaves a chat without a Watch undated", () => {
     const { window, document } = boot();
     const history = document.getElementById("threadHistory");

@@ -536,11 +536,11 @@
       };
     },
 
-    // A Watch's run that found nothing (no finding, no end) and finished.
+    // A Watch's run that found nothing (no finding, no end, no pause) and finished.
     quietWatchRun(turnData) {
       const run = turnData?.agent_watch_run;
       return Boolean(turnData?.agent_settings?.watch_run) && turnData.status === "completed"
-        && !(run && (run.finding || run.done));
+        && !(run && (run.finding || run.done || run.pause));
     },
 
     // The quiet line above a run's message: the Watch sent it, not the user,

@@ -299,10 +299,10 @@ def _temporary(turn):
 
 def _quiet_watch_run(turn):
     """A Watch's scheduled run that found nothing for the user (agent_watches.py):
-    its chat keeps its place in the sidebar."""
+    its chat keeps its place in the sidebar. A pause is mailed like a finding."""
     settings = turn.get("agent_settings") or {}
     run = turn.get("agent_watch_run") if isinstance(turn.get("agent_watch_run"), dict) else {}
-    return bool(settings.get("watch_run")) and not run.get("finding") and not run.get("done")
+    return bool(settings.get("watch_run")) and not (run.get("finding") or run.get("done") or run.get("pause"))
 
 
 def _watch_history_chars():

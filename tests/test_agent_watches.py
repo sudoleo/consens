@@ -884,6 +884,16 @@ def test_a_scheduled_run_goes_through_the_agent_route_quietly(watch_api, monkeyp
     assert ended and ended[0][:3] == (UID, chat_id, turn["id"]) and ended[0][3] == run
 
 
+def test_a_run_that_pauses_its_watch_moves_its_chat_up():
+    """The pause is mailed as needs_you (turn_ended): the chat comes up with
+    the answer that says why, like a finding, instead of keeping its place."""
+    from app.api.routers import agent
+    scheduled = {"agent_settings": {"watch_run": {"watch_id": "w" * 32}}}
+    assert agent._quiet_watch_run(scheduled)
+    assert not agent._quiet_watch_run({**scheduled, "agent_watch_run": {"pause": {"reason": "Say what to watch."}}})
+    assert not agent._quiet_watch_run({**scheduled, "agent_watch_run": {"finding": {"summary": "Open."}}})
+
+
 # --- the Watches page: own words, a chat of its own, pause, seen, channels ----
 
 def test_the_users_own_task_starts_in_its_chat_and_a_new_chat_runs_at_once(store, monkeypatch):
