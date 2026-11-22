@@ -14157,7 +14157,12 @@ Gespeicherte Vergleichsmodus-Turns: Seit 2026-10-02 führt die Evidenzzeile
 Ampelfarbe, kein Balken; ohne bewertbare Abdeckung (`coverage_status:
 insufficient`) oder bei nicht gebundenem Check keine Zahl. Settings → Agreement
 score gilt auch hier (`agreement-score-hidden` zeigt die Wörter,
-`agreement-verdict-hidden` blendet aus).
+`agreement-verdict-hidden` blendet aus). In der vollen Spalte (704 px,
+Container-Abfrage 700–720 px in `agent-chat.css`) zeigen Copy, Watch und
+Share in dieser Zeile nur ihr Zeichen, damit Wert und Werkzeuge in einer
+Zeile stehen; das Wort bleibt für Vorleser. Schmaler, am Handy und mit
+Wörtern statt Zahl steht der Wert in einer eigenen Zeile darüber, und die
+drei behalten ihr Wort.
 
 **Streaming-Markdown.** `markdown-stream.js::renderMarkdownStream(el, md)`
 zerlegt die wachsende Antwort an Leerzeilen außerhalb von Code-/Mathe-Blöcken in

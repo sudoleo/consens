@@ -771,12 +771,27 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   0%, 10% { background-position: 100% 0; }
   70%, 100% { background-position: 0% 0; }
 }
-/* Too narrow for the score and every link in one line: the score takes its
-   own line above. The chat column is that narrow at its full width (704px,
-   layout.css; the six links and the score need about 730px in English). */
+/* The score, three links and Copy, Watch and Share with their words need
+   about 730px in English and more in German; the chat column is 704px at
+   its full width (layout.css). There the three actions show their glyph
+   alone and the row stays one line; the word stays for a screen reader.
+   Narrower than the full column (a small window, a panel beside it), or
+   with words in place of the number (Settings: "Summary only", up to 190px
+   in German), the score takes its own line above and the actions keep
+   their words. */
 @container agent-review (max-width: 720px) {
   .agent-review > .agent-agreement { flex: 1 0 100%; }
   .agent-review > .agent-agreement::after { content: none; }
+}
+@container agent-review (min-width: 700px) and (max-width: 720px) {
+  body:not(.agreement-score-hidden) .agent-review > .agent-agreement { flex: 0 0 auto; }
+  body:not(.agreement-score-hidden) .agent-review > .agent-agreement::after { content: ""; }
+  body:not(.agreement-score-hidden, .agreement-verdict-hidden) .agent-review:has(> .agent-agreement) > .consensus-share-pill {
+    position: relative; justify-content: center; min-width: 36px; padding-inline: 8px; margin-right: 0;
+  }
+  body:not(.agreement-score-hidden, .agreement-verdict-hidden) .agent-review:has(> .agent-agreement) > .consensus-share-pill > span {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
 }
 /* The agreement score, discreet: row-sized type, only the number in the
    traffic-light ink, no meter, no tinted surface. Settings → Agreement score:
