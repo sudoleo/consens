@@ -240,6 +240,8 @@ html.raw-display .dark-mode {
     .agent-inline-model,
     .agent-sidebar-toggle,
     .consensus-footer-tabs button,
+    .consensus-share-pill,
+    .agent-watch-pill,
     .chat-project-toggle,
     .chat-project-empty,
     .bookmark-menu-button,
@@ -255,7 +257,7 @@ html.raw-display .dark-mode {
 
   /* Without a frame the line under the word says it can be clicked; links
      keep the blue. */
-  html.raw-display .consensus-footer-tabs button {
+  html.raw-display :is(.consensus-footer-tabs button, .consensus-share-pill, .agent-watch-pill) {
     text-decoration: underline !important;
   }
 
