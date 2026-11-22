@@ -234,6 +234,24 @@ def test_other_pages_follow_the_choice_on_one_address(client):
     assert client.get("/api/thing", headers={"Accept-Language": "de"}).json() == {"error": "New chat"}
 
 
+def test_a_download_keeps_its_bytes_in_german(small_catalog):
+    """An HTML file the agent shared (routers/agent_files.py) is the user's
+    file, not a page of the app: a German reader got it with lang="de",
+    the dictionary script and its words translated."""
+    from fastapi import Response
+    app = FastAPI()
+    shared = b'<html lang="en"><head><title>Settings</title></head><body><p>New chat</p></body></html>'
+
+    @app.get("/agent/chats/c1/files/f1")
+    def download():
+        return Response(shared, media_type="text/html",
+                        headers={"Content-Disposition": "attachment; filename*=UTF-8''index.html"})
+
+    app.add_middleware(I18nMiddleware)
+    response = TestClient(app).get("/agent/chats/c1/files/f1", headers={"Accept-Language": "de"})
+    assert response.content == shared and "content-language" not in response.headers
+
+
 def test_an_error_on_a_german_address_names_its_route_and_request():
     """Starlette's 500 handler runs outside every middleware, on the scope
     uvicorn made; the access log keeps the address that was asked for."""

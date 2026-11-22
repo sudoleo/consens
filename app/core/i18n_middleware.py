@@ -186,7 +186,7 @@ class I18nMiddleware:
         async def wrapped(message):
             kind = message["type"]
             if kind == "http.response.start":
-                if not _is_html(message) or Headers(raw=message.get("headers", [])).get("content-encoding"):
+                if not _is_html(message) or _not_a_page(message):
                     state["start"] = False
                     await send(message)
                     return
@@ -264,6 +264,15 @@ class I18nMiddleware:
 def _is_html(message) -> bool:
     content_type = Headers(raw=message.get("headers", [])).get("content-type", "")
     return content_type.split(";", 1)[0].strip().lower() == "text/html"
+
+
+def _not_a_page(message) -> bool:
+    """HTML that goes out as it is: compressed already, or a download (an
+    HTML file the agent shared, routers/agent_files.py), which is the user's
+    file, not a page of the app."""
+    headers = Headers(raw=message.get("headers", []))
+    disposition = headers.get("content-disposition", "").split(";", 1)[0].strip().lower()
+    return bool(headers.get("content-encoding")) or disposition == "attachment"
 
 
 def _after_charset(source: str, tag: str) -> str:
