@@ -6153,8 +6153,8 @@ Suchaktivität; Startzeiten/Queries werden nicht erfunden. Vergleichsmodelle
 sehen keine anderen Vergleichsantworten. Kein eigener Suchdienst, kein
 zusätzliches Suchmodell; Provider-Routing/ZDR bleiben bestehen.
 
-Helfer (`delegate`) bleiben standardmäßig aus und laufen auf dem Chatmodell oder
-dem Standardmodell; siehe [agent-delegation.md](agent-delegation.md).
+Helfer (`delegate`) bleiben standardmäßig aus, kommen nur auf Bitte des Nutzers
+und laufen auf dem Chatmodell oder dem Standardmodell; siehe [agent-delegation.md](agent-delegation.md).
 Vergleichstools sind davon unabhängig. Der gemeinsame Tool-Loop erhält die kompletten Provider-Fortsetzungs-
 informationen intern; verschlüsselte Reasoning-Blöcke werden nie öffentlich oder
 persistiert. Gespeichertes sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt

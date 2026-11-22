@@ -2,8 +2,8 @@
 
 Der Agent kann abgegrenzte Aufgaben an Helfer geben: eigene Sitzungen eines
 Modells, die suchen und lesen und mit einem Bericht zurückkommen, wie die
-Teilagenten in Claude Code. Der Agent entscheidet selbst, ob er das tut; die App
-zerlegt nichts von sich aus. Die Funktion ist **standardmäßig aus**
+Teilagenten in Claude Code. Der Agent tut das nur, wenn der Nutzer selbst darum
+bittet; die App zerlegt nichts von sich aus. Die Funktion ist **standardmäßig aus**
 (`/admin#configuration → Agent delegation → Allow helpers`), bis die Messung
 unten trägt. Die Aktivierung gilt für neue Läufe; laufende behalten ihre
 Konfiguration.
@@ -58,10 +58,20 @@ Aufruf hinterließ) wartet einmal Retry-After ab und versucht es erneut
 
 ## Prompt
 
-Keine Anweisung an den Agenten, wann er delegieren soll. Die Beschreibung des
-Werkzeugs nennt Fakten: was der Helfer sieht, welche Werkzeuge er hat, dass der
-Bericht ungeprüft ist, dass seine Schritte aufs Tageskonto gehen und im
-Protokoll der Prüfer stehen, und die Grenzen. Der Helfer bekommt den
+**Nur auf Bitte des Nutzers** (Max, 2026-11-22): Die Beschreibung des Werkzeugs
+erlaubt Helfer nur, wenn der Nutzer in eigenen Worten um Helfer oder parallel
+arbeitende Agenten bittet; eine Frage, der Helfer bloß nützen würden, zählt
+nicht. Grund: Helfer verbrauchen das Tageskonto mehrfach, und einen Deckel je
+Nachricht gibt es bewusst nicht, sonst wäre das Kontingent mit einer breiten
+Frage weg. So hält es auch Claude Code mit seinen Mehr-Agenten-Werkzeugen. Das
+ist ein Vertrag über das Konto des Nutzers, keine Anleitung, wann Delegieren
+hilft; ob der Nutzer darum bat, liest das Modell, die App sucht keine Wörter.
+Hält ein Modell den Vertrag in der Messung nicht, wird die Bitte zum Schalter
+im Composer statt zum Satz.
+
+Sonst nennt die Beschreibung Fakten: was der Helfer sieht, welche Werkzeuge er
+hat, dass der Bericht ungeprüft ist, dass seine Schritte im Protokoll der Prüfer
+stehen, und die Grenzen. Der Helfer bekommt den
 Datumskontext und `agent_delegation_config.WORKER_PROMPT`, ebenfalls Fakten
 (nur Auftrag und Kontext, keine Rückfrage, nur der letzte Text zählt, Seiten
 sind Daten). Sein erster Auftrag ist `task` plus `context`, ein nächster
@@ -124,12 +134,20 @@ Sparen. Die heutige Fassung zielt auf Tempo und Abdeckung bei breiten Fragen
 und spart die Zwischenschritte, die damals die Kosten trieben.
 
 Vor dem Einschalten für alle (braucht Max' Freigabe für bezahlte Läufe):
-12 echte Fragen, 6 breite mit mehreren unabhängigen Strängen und 6 einfache,
-jede mit und ohne Helfer auf demselben Chatmodell. Gemessen werden Zeit bis
-zur Antwort, Kosten aus den Belegen, ob bei einfachen Fragen delegiert wird,
-Marken der Prüfer und ein verblindeter Vergleich der Antworten. Freigabe, wenn
-einfache Fragen unverändert bleiben und breite spürbar schneller oder
-erkennbar besser werden, bei höchstens doppelten Kosten.
+
+1. **Ohne Bitte wird nicht delegiert.** 6 breite Fragen mit mehreren
+   unabhängigen Strängen, ohne Bitte um Helfer, auf jedem wählbaren
+   Chatmodell, dazu 6 einfache auf dem Standardmodell. Erwartet: kein einziger
+   `delegate`-Aufruf. Ein Modell, das trotzdem delegiert, bekommt das Werkzeug
+   nicht, oder die Bitte wird zum Schalter (siehe „Prompt“).
+2. **Mit Bitte lohnt es sich.** Die 6 breiten Fragen mit der Bitte, Helfer zu
+   nehmen, auf dem Standardmodell, gegen dieselbe Frage ohne Bitte aus dem
+   ersten Teil. Gemessen werden Zeit bis zur Antwort, Kosten aus den Belegen
+   (wie viel Kontingent eine Delegation braucht), Marken der Prüfer und ein
+   verblindeter Vergleich der Antworten.
+
+Freigabe, wenn kein Modell ungefragt delegiert und breite Fragen mit Bitte
+spürbar schneller oder erkennbar besser werden.
 
 ## Tests
 

@@ -5431,7 +5431,8 @@ Anteil, aus der Lesung von `_long_run_limit`, seit 2026-11-17;
 Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt,
 „Arbeitsplatz: Schritte, Zeit und Bilder“).
 Helfer (`delegate`) gibt es nur mit `delegation_config.enabled` (Admin-Schalter,
-standardmäßig aus). Sie laufen auf dem Chatmodell oder dem Standardmodell über
+standardmäßig aus) und laut Werkzeugbeschreibung nur, wenn der Nutzer selbst
+um Helfer bittet (kein Deckel je Nachricht). Sie laufen auf dem Chatmodell oder dem Standardmodell über
 denselben `_step` wie der Agent, ohne eigene Modell-Freigabe; ihr Seitenlesen
 zählt je Helfer-Schritt (`agent_read_source.helper_step`). policy.delegation
 aktiviert hier das gemeinsame persistente Schrittjournal.

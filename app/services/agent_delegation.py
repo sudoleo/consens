@@ -1544,12 +1544,19 @@ class DelegationLoop(AgentLoop):
     def _delegate_tool(self):
         names = [tool.name for tool in self._helper_tools()]
         can = (" and ".join(names) if names else "the web search inside its own requests") + ", nothing else"
+        # Only on the user's request, like the multi-agent tools of Claude
+        # Code (Max): helpers spend the user's daily allowance several times
+        # over, and without a cap per message one broad question could use up
+        # the day. A contract about the user's allowance, not a recipe for
+        # when delegating helps; the model reads the request, no word match.
         return ReadOnlyTool("delegate", (
             "Give a task to a helper: another session of a model that sees only the task and context you write and "
-            f"the files you name, not this chat. It can use {can}: it acts nowhere and cannot delegate. The call "
-            "returns its report once the helper is done; several delegate calls of one step work side by side. "
-            "The report is the helper's own account, unchecked. Its steps count toward today's allowance and "
-            f"stand in the work log the reviewers read. At most {self.policy.max_agents} helpers per message, "
+            f"the files you name, not this chat. It can use {can}: it acts nowhere and cannot delegate. Helpers "
+            "spend the user's daily allowance on top of your own steps, so use them only when the user asked for "
+            "helpers or agents working in parallel, in their own words; a question that would merely benefit from "
+            "them is no such request. The call returns its report once the helper is done; several delegate calls "
+            "of one step work side by side. The report is the helper's own account, unchecked. Its steps stand in "
+            f"the work log the reviewers read. At most {self.policy.max_agents} helpers per message, "
             f"{self.policy.worker_calls} steps per task."), Delegate, self.delegate)
 
     def _helper_model(self, choice):

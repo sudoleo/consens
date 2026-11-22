@@ -472,6 +472,8 @@ def test_delegate_refuses_what_a_helper_cannot_do(store):
     # The description names what a helper has; in a run with its own search
     # and reading the tools themselves.
     assert "web search inside its own requests" in loop.registry.tools["delegate"].description
+    # Helpers only on the user's request: the allowance has no cap per message.
+    assert "only when the user asked for helpers" in loop.registry.tools["delegate"].description
     loop.web_search = SimpleNamespace(tool=SimpleNamespace(name="web_search"))
     assert "It can use web_search, nothing else" in loop._delegate_tool().description
 
