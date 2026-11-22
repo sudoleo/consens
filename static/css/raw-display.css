@@ -234,8 +234,9 @@ html.raw-display .dark-mode {
 
   /* A frame says "a control that acts on the page", as a submit button
      would. A row of a list, the actions under an answer, the reviewers'
-     icons and the account's name read as text in the text's own font; the
-     transparent border keeps every box its size. */
+     icons, the account's name and the quota and settings icons beside it
+     read as text in the text's own font; the transparent border keeps every
+     box its size. */
   html.raw-display :is(
     .agent-inline-model,
     .agent-sidebar-toggle,
@@ -248,6 +249,8 @@ html.raw-display .dark-mode {
     #loginContainer,
     #emailIcon,
     #accountIdentity,
+    .sidebar-footer-row .quota-trigger,
+    #editSystemPromptBtn,
     #feedbackButton
   ) {
     background-color: transparent !important;
