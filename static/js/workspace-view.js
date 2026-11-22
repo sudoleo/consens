@@ -30,6 +30,9 @@
 // pointer or focus on its button), so the view finds it running. A workspace
 // the provider did not start keeps the view waiting ("repairing", with the
 // bar) while the server brings it back, and "stuck" says when it could not.
+// From there the user may start a new computer in its place (startNew):
+// asked once (App.confirm), since the old one's files and sign-ins do not
+// come along, and never by itself. The view then waits for it ("replacing").
 // The server's "error" is tried once more by itself.
 //
 // A connection that drops without a reason from the server (the phone went
@@ -128,7 +131,10 @@
     // The provider did not start the VM: the server asks again and sets it
     // back to its last checkpoint (routers/agent_workspace.py _repairing).
     repairing: 'Your workspace did not start. Bringing it back…',
-    stuck: 'Your workspace does not start right now, not from its last restore point either. Try again in a few minutes.',
+    // What can be done about it stands in the picture's place (wayBack).
+    stuck: 'Your workspace does not start right now, not from its last restore point either.',
+    // The user started a new computer for it (routers/agent_workspace.py replace_workspace).
+    replacing: 'Your workspace is getting a new computer…',
     error: 'The workspace is not reachable right now. Try again in a moment.',
     ended: 'The view closed after an hour. Open it again to go on.',
     // One view per account, its time counts as VM time (routers/agent_workspace.py).
@@ -148,14 +154,21 @@
   // bar (start-progress.js steps; Max wanted to see what
   // happens instead of a bare bar). The real work, never made up: waking is
   // the server's _open (the VM, its tools and rules), setup install.sh and
-  // harden.sh (once per computer), starting display.sh.
+  // harden.sh (once per computer), starting display.sh, replacing the
+  // server's replace (the old VM deleted, a new one made, setup.sh,
+  // install.sh, display.sh).
   const STEPS = {
     waking: ['Waking your workspace in the cloud…', 'Checking its tools and settings…', 'Connecting to it…'],
     setup: ['Installing the browser’s screen…', 'Installing a window manager and fonts…',
       'Installing the browser’s tools…', 'Setting the browser’s safety rules…'],
     starting: ['Starting the screen…', 'Starting Chrome…', 'Opening your tabs…'],
     repairing: ['Trying to start it once more…', 'Going back to its last restore point…', 'Starting it again…'],
+    replacing: ['Removing the old computer…', 'Creating the new computer…', 'Installing its tools…',
+      'Installing the browser…', 'Starting Chrome…'],
   };
+  // A workspace nothing brought back: what a new computer costs, said before
+  // the button and once more when it is pressed (startNew).
+  const REPLACE_OFFER = 'You can try again in a few minutes or start a new computer. A new one starts empty: the files and browser sign-ins of the old one are lost.';
   // Why the server closed the view, by close code: noVNC owns the socket's
   // messages once it is ready, so these come as codes, not states.
   const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many', 4423: 'guarded',
@@ -479,7 +492,14 @@
     const reconnectButton = button('workspace-view-reconnect', 'Reconnect',
       () => reconnect({ fresh: true }));
     reconnectButton.hidden = true;
-    screen.append(skeleton('browser'), cover, pasteTarget, keys, reconnectButton);
+    // A workspace nothing brought back (wayBack): what a new computer costs,
+    // the one button that starts it, and the way to wait instead.
+    const replaceOffer = node('div', 'workspace-view-replace');
+    replaceOffer.hidden = true;
+    const replaceStart = button('workspace-view-replace-start', 'Start a new computer', startNew);
+    replaceOffer.append(node('p', 'workspace-view-replace-text', REPLACE_OFFER), replaceStart,
+      button('text-link workspace-view-replace-retry', 'Try again', () => reconnect({ fresh: true })));
+    screen.append(skeleton('browser'), cover, pasteTarget, keys, reconnectButton, replaceOffer);
     screen.addEventListener('keydown', onPasteKey, true);
     // What counts as doing something there: the idle reminder starts over.
     for (const type of ['pointerdown', 'keydown', 'wheel']) {
@@ -519,7 +539,7 @@
     });
     panel.append(resizer, head, hint, turn, screen, terminal);
     return { panel, status, time, hint, tabButtons, toggle, paster, keyboard, zoom, cover, pasteTarget, keys, screen,
-      terminal, terminalHost, reconnectButton,
+      terminal, terminalHost, reconnectButton, replaceOffer, replaceStart,
       turn, turnSays, turnNote, turnRequest, turnButton, isIdle: false, idle: null, wantControl: false,
       restart, resizer, socket: null, rfb: null, rfbGone: null, RFB: null, holder: 'agent', refresh: null, width: 0,
       tab: 'browser', said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, sayAs: {}, slow: null,
@@ -1041,7 +1061,7 @@
       view.final = null;
       view.triedAgain = false;
       view.readyAt = Date.now();
-      view.reconnectButton.hidden = true;
+      wayBack(null);
       // Synchronously, inside this event: noVNC takes over the socket's
       // handlers, so the VNC bytes that follow "ready" all reach it.
       const rfb = new view.RFB(view.screen, socket, { shared: true });
@@ -1107,15 +1127,51 @@
     clearTimeout(view.retry);
     view.retry = null;
     loading('browser', false);
-    view.reconnectButton.hidden = NO_RETRY.has(reason);
+    wayBack(reason);
     say(STATES[reason], 'browser', { wrap: true });
+  }
+  // What the user can do once the view ended for `reason`: "Reconnect" where
+  // trying again can help; for a workspace nothing brought back the offer of
+  // a new computer, with its own way to try again. Nothing while it connects
+  // (null).
+  function wayBack(reason) {
+    const stuck = reason === 'stuck';
+    view.reconnectButton.hidden = !reason || stuck || NO_RETRY.has(reason);
+    view.replaceOffer.hidden = !stuck;
+  }
+  // A new computer for a workspace nothing brought back
+  // (routers/agent_workspace.py replace_workspace). Asked once more, with the
+  // focus on Cancel: the old one's files and sign-ins cannot come back. The
+  // server answers at once; the new connection waits for the computer
+  // ("replacing"), or shows what is going on where there was nothing to
+  // replace after all.
+  let startingNew = false;
+  async function startNew() {
+    const asked = view;
+    if (!asked || startingNew) return;
+    const confirmed = await App.confirm?.({ title: 'Start a new computer?', danger: true,
+      confirmLabel: 'Start a new computer',
+      body: 'Your workspace gets a new, empty computer. The files and browser sign-ins of the old one cannot be brought back afterwards. What the agent shared in your chats stays there.' });
+    if (!confirmed || view !== asked || view.final !== 'stuck') return;
+    startingNew = true;
+    asked.replaceStart.disabled = true;
+    try {
+      await post('/agent/workspace/replace');
+    } catch (error) {
+      if (view === asked) say(error.message || 'Try again.', 'browser', { wrap: true });
+      return;
+    } finally {
+      startingNew = false;
+      asked.replaceStart.disabled = false;
+    }
+    if (view === asked) reconnect({ fresh: true });
   }
   function retryLater() {
     if (view.retries >= BACKOFF_MS.length) { stop('lost'); return; }
     view.again = true;
     view.final = null;
     loading('browser', true);
-    view.reconnectButton.hidden = true;
+    wayBack(null);
     say(STATES.reconnecting);
     clearTimeout(view.retry);
     view.retry = setTimeout(() => reconnect(), BACKOFF_MS[view.retries]);
@@ -1130,7 +1186,7 @@
     view.again = true;
     view.final = null;
     view.paused = false;
-    view.reconnectButton.hidden = true;
+    wayBack(null);
     loading('browser', true);
     say(STATES.reconnecting);
     connect();
@@ -1276,6 +1332,8 @@
         say(TERMINAL.ready, 'terminal');
         fitTerminal();
         if (view.tab === 'terminal') term.focus();
+      } else if (state === 'replacing') {
+        say(STATES.replacing, 'terminal');
       } else if (state === 'error') {
         endTerminal(TERMINAL.error);
       }

@@ -1250,22 +1250,120 @@ describe("the workspace before it is opened, and one that does not start", () =>
     }
   });
 
-  it("says when nothing brought it back, with Reconnect for later", async () => {
+  // A view the server ended with "stuck" (4503): the heal gave up.
+  async function stuck(env) {
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "stuck" }));
+    socket.closedBy(4503);
+    return socket;
+  }
+  const offer = env => env.document.querySelector(".workspace-view-replace");
+  const replaces = window => window.fetch.mock.calls.filter(([path]) => path === "/agent/workspace/replace");
+
+  it("says when nothing brought it back and offers to try again or to start a new computer", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const env = setup();
-      const socket = await opened(env);
-      socket.deliver(JSON.stringify({ state: "stuck" }));
-      socket.closedBy(4503);
+      const socket = await stuck(env);
       await vi.advanceTimersByTimeAsync(20_000);
       expect(FakeSocket.last).toBe(socket);
       expect(status(env).textContent).toBe(
-        "Your workspace does not start right now, not from its last restore point either. Try again in a few minutes.");
-      expect(env.document.querySelector(".workspace-view-reconnect").hidden).toBe(false);
+        "Your workspace does not start right now, not from its last restore point either.");
       expect(env.document.querySelector("#workspacePane-browser").classList.contains("is-loading")).toBe(false);
+      // What a new computer costs stands beside its button, before any click.
+      expect(offer(env).hidden).toBe(false);
+      expect(offer(env).querySelector(".workspace-view-replace-text").textContent).toBe(
+        "You can try again in a few minutes or start a new computer. A new one starts empty: the files and browser sign-ins of the old one are lost.");
+      expect(offer(env).querySelector(".workspace-view-replace-start").textContent).toBe("Start a new computer");
+      // One way to try again, the offer's own.
+      expect(env.document.querySelector(".workspace-view-reconnect").hidden).toBe(true);
+      offer(env).querySelector(".workspace-view-replace-retry").click();
+      expect(FakeSocket.last).not.toBe(socket);
+      expect(offer(env).hidden).toBe(true);
+      expect(status(env).textContent).toBe("Reconnecting…");
+      expect(replaces(env.window)).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // Prod 2026-11-21: the restore failed for over an hour, and only a new VM
+  // set up by hand brought the workspace back.
+  it("starts a new computer only on the user's word and waits for it with the bar", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const answers = [false, true];
+      const asked = [];
+      const env = setup({ progress: true, prepare(window) {
+        window.App.confirm = vi.fn(async (question) => { asked.push(question); return answers.shift(); });
+      } });
+      let now = Date.parse("2026-11-21T23:30:00Z");
+      env.window.Date.now = () => now;
+      const socket = await stuck(env);
+      const start = offer(env).querySelector(".workspace-view-replace-start");
+      // Asked once more, with the focus on Cancel (danger): "no" changes nothing.
+      start.click();
+      await vi.waitFor(() => expect(asked.length).toBe(1));
+      expect(asked[0].title).toBe("Start a new computer?");
+      expect(asked[0].danger).toBe(true);
+      expect(asked[0].body).toContain("The files and browser sign-ins of the old one cannot be brought back");
+      await vi.advanceTimersByTimeAsync(50);
+      expect(replaces(env.window)).toEqual([]);
+      expect(FakeSocket.last).toBe(socket);
+      expect(offer(env).hidden).toBe(false);
+      // "Yes": the server starts it, and the view connects again to wait for it.
+      start.click();
+      await vi.waitFor(() => expect(FakeSocket.last).not.toBe(socket));
+      expect(replaces(env.window).length).toBe(1);
+      expect(offer(env).hidden).toBe(true);
+      const next = FakeSocket.last;
+      await next.onopen();
+      next.deliver(JSON.stringify({ state: "connecting" }));
+      next.deliver(JSON.stringify({ state: "replacing", until: new Date(now + 110_000).toISOString() }));
+      expect(status(env).textContent).toBe("Your workspace is getting a new computer…");
+      const screen = env.document.querySelector("#workspacePane-browser");
+      const bar = screen.querySelector(".workspace-view-progress");
+      now += 2_000;
+      await vi.advanceTimersByTimeAsync(300);
+      expect(bar.querySelector(".start-progress-left").textContent).toBe("About 2 minutes left");
+      expect(bar.querySelector(".start-progress-step").textContent).toBe("Removing the old computer…");
+      expect(screen.classList.contains("is-loading")).toBe(true);
+      // The same socket goes on to the picture.
+      next.deliver(JSON.stringify({ state: "starting", until: new Date(now + 8_000).toISOString() }));
+      next.deliver(JSON.stringify({ state: "ready" }));
+      expect(FakeRFB.made.length).toBe(1);
+      expect(offer(env).hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says why when the server starts no new computer, and leaves the offer", async () => {
+    const env = setup({ prepare(window) { window.App.confirm = vi.fn(async () => true); } });
+    const socket = await stuck(env);
+    env.window.fetch.mockImplementation(async () => ({ ok: false, json: async () => ({
+      error: "The agent is working in the workspace. Try again when its response is done.", code: "running" }) }));
+    const start = offer(env).querySelector(".workspace-view-replace-start");
+    start.click();
+    await vi.waitFor(() => expect(status(env).textContent).toBe(
+      "The agent is working in the workspace. Try again when its response is done."));
+    expect(FakeSocket.last).toBe(socket);
+    expect(offer(env).hidden).toBe(false);
+    expect(start.disabled).toBe(false);
+  });
+
+  it("says in the terminal that a new computer is on its way", async () => {
+    const env = setup();
+    await opened(env);
+    env.workspace.showTab("terminal");
+    await vi.waitFor(() => expect(FakeSocket.last.url).toMatch(/\/agent\/workspace\/terminal$/));
+    const terminal = FakeSocket.last;
+    await terminal.onopen();
+    terminal.deliver(JSON.stringify({ state: "connecting" }));
+    terminal.deliver(JSON.stringify({ state: "replacing" }));
+    expect(status(env).textContent).toBe("Your workspace is getting a new computer…");
+    terminal.deliver(JSON.stringify({ state: "ready" }));
+    expect(status(env).textContent).toBe("Your terminal in the workspace, with the agent’s rights.");
   });
 
   // Prod 2026-11-15: Chrome did not answer within its limit after the VM's

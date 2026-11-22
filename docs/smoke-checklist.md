@@ -476,10 +476,35 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Ansicht sagt „Dein Arbeitsplatz ist nicht gestartet. Er wird
       zurückgeholt…“ mit Restzeit und öffnet danach von selbst; im Log
       `restore failed attempt=N` je Versuch, am Ende `went back to its newest
-      checkpoint` oder die Ansicht mit „… startet gerade nicht …“ und
-      „Reconnect“. Automatisiert: `test_agent_workspace_view.py`,
-      `test_agent_vm.py`, `test_agent_workspace.py`, `workspace-view.test.mjs`,
+      checkpoint` oder die Ansicht mit „… startet gerade nicht …“ und dem
+      Angebot eines neuen Rechners (nächster Punkt). Automatisiert:
+      `test_agent_workspace_view.py`, `test_agent_vm.py`,
+      `test_agent_workspace.py`, `workspace-view.test.mjs`,
       `start-progress.test.mjs`.
+- [ ] Neuer Rechner für einen festgefahrenen Arbeitsplatz (2026-11-22, echter
+      Provider; eine festgefahrene VM lässt sich nicht nachstellen, nur
+      beobachten; `docs/agent-mode.md` „Neuer Rechner“): Endet die Ansicht mit
+      „Dein Arbeitsplatz startet gerade nicht, auch nicht vom letzten
+      Wiederherstellungspunkt.“, stehen an der Stelle des Bildes ein Satz, der
+      gefüllte Knopf „Neuen Rechner starten“ und darunter „Noch einmal
+      versuchen“, ohne Kasten und ohne Warnfarbe. „Neuen Rechner starten“
+      fragt einmal nach (Fokus auf „Abbrechen“); „Abbrechen“ ändert nichts.
+      Nach der Bestätigung zeigt die Ansicht „Dein Arbeitsplatz bekommt einen
+      neuen Rechner…“ mit Balken und Schritten („Der alte Rechner wird
+      entfernt…“ bis „Chrome wird gestartet…“) und nach etwa zwei Minuten das
+      Bild; das Terminal öffnet mit leerem Home. Render-Log: `Agent workspace
+      was stuck and got a new VM seconds=…`, danach `Agent workspace kit
+      installed`. Die nächste Nachricht eines Chats, der vorher im
+      Arbeitsplatz gearbeitet hat, sagt von sich aus, dass der Rechner neu ist
+      und die Dateien von vorher fehlen. Ein zweiter Versuch binnen einer
+      Stunde bekommt „… hat vor weniger als einer Stunde einen neuen Rechner
+      bekommen …“. Gegenprobe von außen gelöschte VM: Eine Test-Sprite, die
+      der Server als nicht erreichbar markiert hat, beim Anbieter löschen;
+      das nächste Öffnen legt sie neu an (Log `Agent VM gone while it was
+      unresponsive`). Automatisiert: `test_agent_vm.py` (replace,
+      replace_refusal, gelöschte VM), `test_agent_vm_runtime.py` (404 der
+      Probe), `test_agent_workspace_view.py` (Endpunkt, `replacing`),
+      `workspace-view.test.mjs` (Angebot, Nachfrage, Balken).
 - [ ] Flüssige Live-Ansicht (2026-11-02, echter Provider, nach dem Deploy mit
       `--ws-per-message-deflate false` im Render-Startbefehl): Live-Ansicht eines
       Kontos öffnen, dessen Arbeitsplatz von vorher ist. Einmal „Der Browser wird

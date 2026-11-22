@@ -567,6 +567,27 @@ def test_one_probe_at_a_time_and_at_most_one_a_minute():
     assert agent_vm.probe("vm", factory=Probing) is None
 
 
+def test_a_probe_the_provider_answers_with_404_clears_the_mark_of_a_vm_that_is_gone():
+    """The stuck VM was deleted outside this process: the provider's 404 is
+    neither the VM's answer nor its gateway's 502, and the mark would stay
+    for good. Whatever is made under the name next is a new VM, neither
+    marked nor reached before; so is one this process deleted itself."""
+    def backend():
+        return agent_vm.SpritesBackend("t", transport=httpx.MockTransport(lambda request: httpx.Response(404)))
+    agent_vm._touch("vm")
+    agent_vm.mark_unresponsive("vm", 502)
+    agent_vm._probe_began["vm"] -= agent_vm.PROBE_SECONDS
+    said = []
+    agent_vm.probe("vm", factory=backend, on_unresponsive=lambda: said.append("stuck"),
+                   on_gone=lambda: said.append("gone")).join(5)
+    assert said == ["gone"] and agent_vm.unresponsive_status("vm") is None
+    assert not agent_vm.reached_within("vm", 3600)
+    agent_vm._touch("vm")
+    agent_vm.mark_unresponsive("vm", 502)
+    backend().delete("vm")
+    assert agent_vm.unresponsive_status("vm") is None and not agent_vm.reached_within("vm", 3600)
+
+
 def test_a_handshake_that_ran_out_of_time_is_not_tried_again():
     """Whether the provider starts the command before its answer is not
     known: a second try could run it twice (A4)."""

@@ -375,6 +375,143 @@ def test_a_vm_that_nothing_brings_back_ends_the_view_with_its_reason(view_api, f
     assert closed.value.code == workspace_router.CLOSE_STUCK
 
 
+def _stuck_with_a_file(store, fake_vm):
+    """The account's workspace with a file on it, which this process knows as stuck."""
+    agent_workspace.record_for_view(store, UID, provider="fake")
+    agent_workspace.open_workspace(fake_vm.backend(), UID, db=store.db)
+    fake_vm.vms[NAME]["files"]["/home/agent/notes.md"] = b"old"
+    agent_vm.mark_unresponsive(NAME, 502)
+
+
+def test_a_stuck_workspace_gets_a_new_computer_on_the_users_word(view_api, fake_vm, monkeypatch):
+    """Prod 2026-11-21: after the restore failed four times the user could
+    only wait for someone to set the workspace up anew by hand. The view's
+    "stuck" now offers that itself (workspace-view.js startNew). Only for a
+    workspace this process knows as stuck, never under a message, once an
+    hour, behind the view's own locks; the request answers at once and the
+    work runs behind it."""
+    import threading
+    from datetime import datetime, timezone
+    from app.services import workspace_guard
+    client, store, _, allowed = view_api
+    release, threads = threading.Event(), []
+    replace, replace_later = agent_workspace.replace, agent_workspace.replace_later
+
+    def held(db, uid, **kwargs):
+        release.wait(10)
+        return replace(db, uid, **kwargs)
+
+    def later(*args, **kwargs):
+        threads.append(replace_later(*args, **kwargs))
+        return threads[-1]
+    monkeypatch.setattr(agent_workspace, "replace", held)
+    monkeypatch.setattr(agent_workspace, "replace_later", later)
+
+    def ask():
+        # Each on its own: the route's pace (a few a minute) is not what this asks about.
+        limiter.reset()
+        return client.post("/agent/workspace/replace", headers=AUTH)
+    _stuck_with_a_file(store, fake_vm)
+    # Reached again meanwhile: nothing to replace, and nothing is.
+    agent_vm.forget_unresponsive(NAME)
+    assert ask().json() == {"replacing": False} and threads == []
+    agent_vm.mark_unresponsive(NAME, 502)
+    chat, _ = pending(store)
+    agent_workspace.claim(store, UID, chat, "turn", provider="fake")
+    answer = ask()
+    assert answer.status_code == 409 and answer.json()["code"] == "running" and threads == []
+    agent_workspace.release(store, UID, "turn")
+    # The view's own locks: the safety rules and the day's VM time.
+    with monkeypatch.context() as patch:
+        patch.setattr(workspace_guard, "status", lambda uid: workspace_guard.Status("locked", None, "rule"))
+        assert ask().status_code == 403
+    with monkeypatch.context() as patch:
+        patch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+        agent_vm_time.charge(store, UID, 100)
+        assert ask().status_code == 403
+    assert threads == [] and "/home/agent/notes.md" in fake_vm.vms[NAME]["files"]
+    answer = ask()
+    assert answer.status_code == 200 and answer.json()["replacing"] is True
+    left = (datetime.fromisoformat(answer.json()["until"]) - datetime.now(timezone.utc)).total_seconds()
+    assert NEW_VM_SECONDS - 10 < left <= NEW_VM_SECONDS
+    # A second click while it runs starts no second one.
+    assert ask().json()["replacing"] is True and len(threads) == 1
+    release.set()
+    threads[0].join(10)
+    assert [call for call in fake_vm.calls if call[0] == "delete"] == [("delete", NAME)]
+    files = fake_vm.vms[NAME]["files"]
+    assert "/home/agent/notes.md" not in files
+    assert files[agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+    assert fake_vm.warmed == [NAME] and fake_vm.rested == [NAME]
+    # The new one stuck too within the hour: its restore is the way, not another new one.
+    agent_vm.mark_unresponsive(NAME, 502)
+    answer = ask()
+    assert answer.status_code == 429 and answer.json()["code"] == "recent" and len(threads) == 1
+    allowed.clear()
+    assert ask().status_code == 403
+
+
+def test_the_view_and_the_terminal_wait_for_the_new_computer(view_api, fake_vm, monkeypatch):
+    """While the new computer is made, whoever opens the view hears
+    "replacing" with about how long (the bar of a first setup) and gets the
+    picture once it stands; the terminal waits the same way. Neither meets a
+    VM half deleted or half set up."""
+    import threading
+    from datetime import datetime, timezone
+    client, store, gateway, _ = view_api
+    monkeypatch.setattr(workspace_router, "REPAIR_LOOK_SECONDS", .02)
+    release, replace = threading.Event(), agent_workspace.replace
+
+    def held(db, uid, **kwargs):
+        release.wait(10)
+        return replace(db, uid, **kwargs)
+    monkeypatch.setattr(agent_workspace, "replace", held)
+    _stuck_with_a_file(store, fake_vm)
+    fake_vm.calls.clear()
+    thread = agent_workspace.replace_later(store.db, UID)
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        messages = [json.loads(ws.receive_text()) for _ in range(2)]
+        assert [message["state"] for message in messages] == ["connecting", "replacing"]
+        left = (datetime.fromisoformat(messages[1]["until"]) - datetime.now(timezone.utc)).total_seconds()
+        assert NEW_VM_SECONDS - 10 < left <= NEW_VM_SECONDS
+        # Nothing of the view reached the VM meanwhile, nor does the app's
+        # warm-up: the new computer starts its browser itself.
+        agent_workspace.warm_later(store, UID, intent=True).join(10)
+        assert [call for call in fake_vm.calls if call[0] != "close"] == [] and gateway.url is None
+        release.set()
+        states = []
+        while not states or states[-1] != "ready":
+            states.append(json.loads(ws.receive_text())["state"])
+        # A new estimate may come while the new VM is made; then the picture.
+        assert set(states[:-2]) <= {"replacing"} and states[-2:] == ["starting", "ready"]
+        assert ws.receive_bytes() == b"RFB 003.008\n"
+    thread.join(10)
+    assert "/home/agent/notes.md" not in fake_vm.vms[NAME]["files"]
+    # The terminal, opened while another one is on its way.
+    limiter.reset()
+    api_uid_limiter.reset()
+    release.clear()
+    shell = Relay([b"agent@workbench:~$ "])
+
+    async def connect(url):
+        shell.url = url
+        return shell
+    monkeypatch.setattr(workspace_router, "connect_upstream", connect)
+    thread = agent_workspace.replace_later(store.db, UID)
+    with client.websocket_connect("/agent/workspace/terminal") as ws:
+        ws.send_text(json.dumps({"id_token": "verified", "cols": 80, "rows": 24}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "replacing"]
+        assert shell.url is None
+        release.set()
+        states = []
+        while not states or states[-1] != "ready":
+            states.append(json.loads(ws.receive_text())["state"])
+        assert set(states[:-1]) <= {"replacing"}
+        assert ws.receive_bytes() == b"agent@workbench:~$ "
+    thread.join(10)
+
+
 def test_a_handshake_a_waking_vm_breaks_off_is_tried_again_the_long_way(view_api, fake_vm, monkeypatch):
     """A VM reached a moment ago is opened without a request that waits for
     its wake (agent_workspace._ready), so the exec socket's handshake meets a

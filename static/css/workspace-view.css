@@ -443,7 +443,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* noVNC's own screen element fills the area and scales the picture. */
-.workspace-view-screen:not(.workspace-view-terminal) > div:not(.workspace-view-cover):not(.workspace-view-skeleton):not(.workspace-view-progress) {
+.workspace-view-screen:not(.workspace-view-terminal) > div:not(.workspace-view-cover):not(.workspace-view-skeleton):not(.workspace-view-progress):not(.workspace-view-replace) {
   position: absolute;
   inset: 0;
 }
@@ -587,6 +587,60 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   bottom: auto;
   top: 50%;
   transform: translate(-50%, -50%);
+}
+
+/* A workspace nothing brought back (workspace-view.js wayBack), in the
+   empty picture's place: what a new computer costs in the panel's quiet
+   tone, the one filled button that starts it, and under it the way to wait
+   instead. No surface and no warning colour: the words say it. */
+.workspace-view-replace {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  width: min(84%, 360px);
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.workspace-view-replace[hidden] {
+  display: none;
+}
+
+.workspace-view-replace-text {
+  margin: 0 0 var(--space-1);
+  color: var(--ink-2);
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.workspace-view-replace-start {
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--ground);
+  font: inherit;
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.workspace-view-replace-start:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.workspace-view-replace-start:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.workspace-view-replace-retry {
+  font-size: var(--font-size-ui);
 }
 
 /* While the agent has the browser: one click anywhere takes it over. */

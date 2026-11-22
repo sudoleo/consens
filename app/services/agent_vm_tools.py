@@ -1043,7 +1043,9 @@ class VMSession:
             from app.services import agent_secrets
             extra["workspace_keys"] = {"names": list(self.claim.secrets), "folder": agent_secrets.DIR,
                                        "note": agent_secrets.KEYS_NOTE}
-        if self.claim is not None and self.claim.restored:
+        if self.claim is not None and getattr(self.claim, "replaced", False):
+            extra["workspace_note"] = agent_workspace.REPLACED_NOTE
+        elif self.claim is not None and self.claim.restored:
             extra["workspace_note"] = (agent_workspace.HEALED_NOTE if getattr(self.claim, "healed", False)
                                        else agent_workspace.RESTORED_NOTE)
         left = self.left()

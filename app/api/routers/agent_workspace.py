@@ -22,9 +22,10 @@ the VM, "waking" carries about when the browser's start ends
 (``until``), as setup and starting do after it. A VM the provider does not
 start keeps the view waiting with "repairing" while the server asks it again
 and restores it (_repairing), and ends it with "stuck" (CLOSE_STUCK) when
-that did not bring it back. Before any of it the app may ask for the
-workspace (warm_workspace), so the view finds it awake with its Chrome
-running.
+that did not bring it back. From there the user may start a new computer in
+its place (replace_workspace), and the view waits for that with "replacing"
+(_replaced). Before any of it the app may ask for the workspace
+(warm_workspace), so the view finds it awake with its Chrome running.
 
 How a view or terminal ended goes to the log with its close code, who ended
 it (the browser, the relay, the provider's socket) and the numbers they gave,
@@ -156,6 +157,40 @@ def warm_workspace(request: Request, payload: Warm):
 # How many live views each account has open in this process (one server
 # instance): none of them is warmed under (warm_workspace).
 _viewing: dict[str, int] = {}
+
+# Why a workspace gets no new computer (agent_workspace.replace_refusal), as
+# the view says it.
+REPLACE_REFUSALS = {
+    "running": (409, "The agent is working in the workspace. Try again when its response is done."),
+    "recent": (429, "Your workspace got a new computer less than an hour ago. Try again later."),
+}
+
+
+@router.post("/agent/workspace/replace")
+@limiter.limit("5/minute")
+def replace_workspace(request: Request):
+    """A new computer for a workspace that does not start and that no
+    restore brought back (agent_workspace.replace; the view offers it with
+    "stuck"). Its files and sign-ins go with the old one, so only on the
+    user's word, behind what the view itself asks for: the sign-in, the
+    safety rules, today's VM time. Answers at once; the view then connects
+    again and waits ("replacing"). ``replacing`` is False where this
+    process knows nothing to replace (the VM answers, or its repair still
+    runs): the view's new connection shows which."""
+    uid = owner(request)
+    guard = workspace_guard.status(uid)
+    if guard.closed:
+        raise HTTPException(status_code=403, detail=workspace_guard.user_text(guard))
+    if _time_left(uid)[0] < 1:
+        raise HTTPException(status_code=403, detail="The workspace’s time for today is used up. It is back tomorrow.")
+    if not agent_workspace.replacing(uid):
+        reason = agent_workspace.replace_refusal(_store(), uid)
+        if reason in REPLACE_REFUSALS:
+            status, text = REPLACE_REFUSALS[reason]
+            return JSONResponse({"error": text, "code": reason}, status_code=status, headers=NO_STORE)
+        if reason is None:
+            agent_workspace.replace_later(db_firestore, uid)
+    return JSONResponse({"replacing": agent_workspace.replacing(uid), **_until(uid)}, headers=NO_STORE)
 
 
 @router.post("/agent/workspace/control")
@@ -420,11 +455,35 @@ def _no_answer(exc):
     return isinstance(exc, (OSError, EOFError, InvalidHandshake)) and not isinstance(exc, InvalidStatus)
 
 
+# The user started a new computer for a stuck workspace (replace_workspace):
+# whoever opens the view or the terminal meanwhile waits for it instead of
+# meeting a VM half deleted or half set up, at most REPLACE_WAIT_SECONDS (its
+# own steps end by their limits well before).
+REPLACE_WAIT_SECONDS = 600
+
+
+async def _replaced(websocket, uid):
+    """Waits while the account's workspace gets its new computer, telling
+    the view "replacing" with about when it ends: each new estimate, and
+    again every REPAIR_TELL_SECONDS. Whether it waited."""
+    deadline, told, last = time.monotonic() + REPLACE_WAIT_SECONDS, None, 0.0
+    while agent_workspace.replacing(uid) and time.monotonic() < deadline:
+        until, now = _until(uid), time.monotonic()
+        if until != told or now - last >= REPAIR_TELL_SECONDS:
+            told, last = until, now
+            if not await _state(websocket, "replacing", **until):
+                raise WebSocketDisconnect()
+        await asyncio.sleep(REPAIR_LOOK_SECONDS)
+    return told is not None
+
+
 async def _opened(websocket, uid, seconds, start):
-    """``(url, repaired)``: the VM open for the view (_waking), after its
-    repair where the provider did not start it (_repairing)."""
+    """``(url, waited)``: the VM open for the view (_waking), after its new
+    computer where one is on its way (_replaced) and after its repair where
+    the provider did not start it (_repairing)."""
+    waited = await _replaced(websocket, uid)
     try:
-        return await _waking(websocket, uid, seconds, start), False
+        return await _waking(websocket, uid, seconds, start), waited
     except agent_vm.VMUnavailable as exc:
         if not agent_vm.unresponsive(exc):
             raise
@@ -687,7 +746,7 @@ async def workspace_view(websocket: WebSocket):
             repaired = repaired or again
             view_id, upstream = await _connect(uid, seconds, url)
         if repaired:
-            # The wait for the repair is not the view's time.
+            # The wait for the repair or the new computer is not the view's time.
             started = time.monotonic()
     except WebSocketDisconnect:
         start.end()
@@ -820,6 +879,10 @@ async def workspace_terminal(websocket: WebSocket):
     uid, seconds, hello, _ = admitted
     size = _size(hello.get("cols"), hello.get("rows")) or (80, 24)
     if not await _state(websocket, "connecting"):
+        return
+    try:
+        await _replaced(websocket, uid)
+    except WebSocketDisconnect:
         return
     started = time.monotonic()
     try:

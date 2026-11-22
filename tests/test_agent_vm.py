@@ -912,7 +912,7 @@ def test_the_watch_asks_a_marked_vm_again_right_away(monkeypatch):
 
 def test_a_first_unresponsive_answer_is_checked_again_and_a_stuck_vm_heals(store, fake_vm, monkeypatch):
     watched, healed = [], []
-    monkeypatch.setattr(agent_vm, "watch", lambda name, stuck, factory=None: watched.append((name, stuck)))
+    monkeypatch.setattr(agent_vm, "watch", lambda name, stuck, **kwargs: watched.append((name, stuck)))
     monkeypatch.setattr(agent_workspace, "heal_later", lambda db, uid, **kwargs: healed.append(uid))
 
     def unresponsive(self, name, rules=None):
@@ -933,6 +933,164 @@ def test_a_first_unresponsive_answer_is_checked_again_and_a_stuck_vm_heals(store
     probe = agent_vm.probe(NAME, on_unresponsive=watched[0][1])
     probe.join(5)
     assert healed == [UID]
+
+
+def test_a_stuck_vm_deleted_outside_this_process_is_made_anew_by_the_next_start(store, fake_vm, monkeypatch):
+    """Prod 2026-11-21: a stuck workspace was deleted and set up anew by
+    hand, and this process went on meeting its own mark. The probe of a VM
+    that is gone gets 404, neither the VM's answer nor the gateway's 502, so
+    nothing cleared the mark and no start got as far as making the VM
+    again. The 404 clears it, with what this process knew of the old VM:
+    that its tools were up to date, that it had its kit."""
+    agent_workspace.open_workspace(fake_vm.backend(), UID, db=store.db)
+    agent_vm._touch(NAME)
+    agent_workspace._kits[UID] = "done"
+    agent_vm.mark_unresponsive(NAME, 502)
+    agent_vm._probe_began[NAME] -= agent_vm.PROBE_SECONDS
+    healed = []
+    monkeypatch.setattr(agent_workspace, "heal_later", lambda db, uid, **kwargs: healed.append(uid))
+    del fake_vm.vms[NAME]
+
+    def reach(self, name):
+        self.vm.calls.append(("reach", name))
+        if name not in self.vm.vms:
+            raise VMUnavailable("wake: HTTP 404", 404)
+        agent_vm._touch(name)
+    monkeypatch.setattr(_FakeBackend, "reach", reach, raising=False)
+    fake_vm.calls.clear()
+    del fake_vm.server[:]
+    assert agent_workspace.open_workspace(fake_vm.backend(), UID, db=store.db) == NAME
+    asked = [call[0] for call in fake_vm.calls if call[0] in {"reach", "ensure"}]
+    assert asked == ["reach", "ensure"] and fake_vm.server == [SETUP]
+    assert fake_vm.vms[NAME]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+    assert agent_vm.unresponsive_status(NAME) is None and UID not in agent_workspace._kits
+    # Gone is not stuck: nothing is restored under a name with no VM.
+    assert healed == []
+
+
+def stuck_after_a_message(store, fake_vm):
+    """A workspace one message worked in (a file, a checkpoint), with a
+    sign-in and a key the record lists and its kit, then stuck. The loop
+    and its turn's ``agent_vm``."""
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    # The message's end runs on a thread of its own: over before the VM is looked at.
+    if loop.vm_tools.session.closer is not None:
+        loop.vm_tools.session.closer.join(5)
+    fake_vm.vms[NAME]["files"]["/home/agent/chats/report.md"] = b"a day's work"
+    agent_workspace.note_sign_in(store.db, UID, "shop.example", "Shop", True)
+    agent_workspace.remember_values(store.db, UID, "secret_names", ["SHOP_KEY"], keep=20)
+    agent_workspace._kits[UID] = "done"
+    agent_vm.mark_unresponsive(NAME, 502)
+    return loop, store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]
+
+
+def test_a_stuck_workspace_no_restore_brings_back_gets_a_new_computer(store, fake_vm):
+    """Prod 2026-11-20 and 11-21: the stuck VM's restore met the same 502 on
+    every try, and only a new VM set up by hand brought the workspace back.
+    replace does those steps: the old VM deleted and waited out, a new one
+    made and set up, its browser started and told to rest. Nothing of the
+    old one counts for the new: no checkpoint may come back, the record
+    lists no sign-in and no key, and every chat that worked there is told
+    that its files are gone."""
+    loop, turn_vm = stuck_after_a_message(store, fake_vm)
+    assert agent_workspace.restorable(agent_workspace.record(store.db, UID), turn_vm)
+    fake_vm.calls.clear()
+    del fake_vm.server[:], fake_vm.warmed[:], fake_vm.rested[:]
+    assert agent_workspace.replace(store.db, UID, factory=fake_vm.backend) is True
+    steps = [call[0] for call in fake_vm.calls]
+    assert steps[:3] == ["delete", "exists", "ensure"]
+    assert fake_vm.server == [SETUP] and fake_vm.warmed == [NAME] and fake_vm.rested == [NAME]
+    assert steps.index("exec") < steps.index("run")
+    files = fake_vm.vms[NAME]["files"]
+    assert "/home/agent/chats/report.md" not in files
+    assert files[agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+    record = agent_workspace.record(store.db, UID)
+    assert record["restored_by"] == "replace" and isinstance(record["replaced_at"], datetime)
+    assert record["sign_ins"] == [] and record["secret_names"] == []
+    assert not agent_workspace.restorable(record, turn_vm)
+    # This process starts over with it: not marked, its kit looked at again, no start left counting.
+    assert agent_vm.unresponsive_status(NAME) is None and UID not in agent_workspace._kits
+    assert agent_workspace.start_until(UID) is None
+    # A restore by the user after it does not turn "gone" into "check the files".
+    agent_workspace.mark_restored(store, UID)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=loop.chat_id, request_id="two")
+    list(loop.run())
+    assert results(loop)[0]["workspace_note"] == agent_workspace.REPLACED_NOTE
+    assert "workspace_keys" not in results(loop)[0]
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=loop.chat_id, request_id="three")
+    list(loop.run())
+    assert "workspace_note" not in results(loop)[0]
+
+
+def test_a_new_computer_never_comes_under_a_message_nor_before_the_old_one_is_gone(store, fake_vm, monkeypatch):
+    loop, _ = stuck_after_a_message(store, fake_vm)
+    agent_workspace.claim(store, UID, loop.chat_id, "running", provider="fake")
+    fake_vm.calls.clear()
+    assert agent_workspace.replace(store.db, UID, factory=fake_vm.backend) is False
+    assert fake_vm.calls == [] and "/home/agent/chats/report.md" in fake_vm.vms[NAME]["files"]
+    agent_workspace.release(store, UID, "running")
+    # The provider still lists the deleted VM: none is made under its name
+    # meanwhile, and no chat is told of a new computer.
+    monkeypatch.setattr(_FakeBackend, "exists", lambda self, name: True)
+    clock, waits = Clock(), []
+
+    def sleep(seconds):
+        waits.append(seconds)
+        clock.now += seconds
+    assert agent_workspace.replace(store.db, UID, factory=fake_vm.backend, sleep=sleep, clock=clock) is False
+    assert sum(waits) == agent_workspace.REPLACE_GONE_SECONDS
+    assert [call[0] for call in fake_vm.calls if call[0] != "close"] == ["delete"]
+    assert "replaced_at" not in agent_workspace.record(store.db, UID)
+    assert agent_workspace.start_until(UID) is None
+
+
+def test_a_new_computer_only_for_a_stuck_workspace_and_once_an_hour(store, fake_vm, monkeypatch):
+    """What the user's word alone may do (replace_refusal): nothing while
+    this process does not know the VM as stuck or its repair still runs
+    (the view waits for that), nothing under a message, and after one new
+    computer none for REPLACE_SECONDS, by the record, so a restart of the
+    server forgets nothing."""
+    from datetime import timedelta, timezone
+    loop, _ = stuck_after_a_message(store, fake_vm)
+    assert agent_workspace.replace_refusal(store, UID) is None
+    agent_vm.forget_unresponsive(NAME)
+    assert agent_workspace.replace_refusal(store, UID) == "unneeded"
+    agent_vm.mark_unresponsive(NAME, 502)
+    for running in ((agent_workspace, "healing"), (agent_vm, "checking")):
+        with monkeypatch.context() as patch:
+            patch.setattr(*running, lambda key: True)
+            assert agent_workspace.replace_refusal(store, UID) == "unneeded"
+    agent_workspace.claim(store, UID, loop.chat_id, "running", provider="fake")
+    assert agent_workspace.replace_refusal(store, UID) == "running"
+    agent_workspace.release(store, UID, "running")
+    assert agent_workspace.replace(store.db, UID, factory=fake_vm.backend) is True
+    # The new one stuck as well within the hour.
+    agent_vm.mark_unresponsive(NAME, 502)
+    assert agent_workspace.replace_refusal(store, UID) == "recent"
+    later = datetime.now(timezone.utc) + timedelta(seconds=agent_workspace.REPLACE_SECONDS + 1)
+    assert agent_workspace.replace_refusal(store, UID, now=later) is None
+
+
+def test_one_replacement_at_a_time_and_whoever_waits_hears_about_how_long(store, monkeypatch):
+    from datetime import timezone
+    entered, release = threading.Event(), threading.Event()
+
+    def replace(db, uid, factory=None, start=None):
+        entered.set()
+        release.wait(5)
+        start.end()
+    monkeypatch.setattr(agent_workspace, "replace", replace)
+    thread = agent_workspace.replace_later(store.db, UID)
+    assert entered.wait(5) and agent_workspace.replacing(UID)
+    assert agent_workspace.replace_later(store.db, UID) is None
+    # A new VM's setup and its browser's installation, as for a new account.
+    whole = agent_workspace.START_SECONDS["setup"] + agent_workspace.START_SECONDS["install"]
+    left = (agent_workspace.start_until(UID) - datetime.now(timezone.utc)).total_seconds()
+    assert whole - 10 < left <= whole
+    release.set()
+    thread.join(5)
+    assert not agent_workspace.replacing(UID) and agent_workspace.start_until(UID) is None
 
 
 def test_a_command_the_gateway_refuses_turns_the_workspace_off(store, fake_vm):

@@ -167,7 +167,11 @@ The account's workspace live (27.10.2026; since its security audit two VMs per
 account, the workbench and the browser): `routers/agent_workspace.py` exposes
 `GET /agent/workspace`, since 2026-11-20 `POST /agent/workspace/warm`
 (`{"intent": bool}`: wakes the workspace and starts its Chrome before the user
-opens it, `agent_workspace.warm_later`), `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`;
+opens it, `agent_workspace.warm_later`), since 2026-11-22
+`POST /agent/workspace/replace` (a new VM for a stuck workspace no restore
+brought back, on the user's click in the view's `stuck` state only;
+`agent_workspace.replace_refusal`/`replace_later`/`replace`, answers
+`{"replacing": bool, "until"}`, 409 `running`, 429 `recent`), `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`;
 while the user holds the browser the agent waits: its calls wait and the
 browser VM's `control.json` stops `browser.py`; what runs on the workbench goes
 on since 2026-10-29, when `pause.py` went),
@@ -7870,7 +7874,25 @@ wieder. Seit 2026-11-20 versucht `heal` einen Restore, den das Gateway
 ablehnt, dreimal (`HEAL_TRIES`), und eine Heilung ohne Restore darf nach
 `HEAL_AGAIN_SECONDS` neu beginnen (bis dahin sperrte der eine Fehlversuch
 für die Stunde). Die nächste
-Nachricht liest `HEALED_NOTE` (`restored_by`, `Claim.healed`). **Vorwärmen und
+Nachricht liest `HEALED_NOTE` (`restored_by`, `Claim.healed`). Eine Probe, die
+404 bekommt (die VM wurde außerhalb des Prozesses gelöscht), räumt die
+Markierung ebenfalls (`agent_vm.gone`, `forget_vm`, `agent_workspace._gone`
+vergisst `_ready` und die Grundausstattung), sodass der Start die VM neu
+anlegt. **Neuer Rechner (seit 2026-11-22):** Scheitert auch der Restore,
+bietet die Ansicht im Zustand `stuck` einen neuen Rechner an
+(`workspace-view.js` `wayBack`/`startNew`, Nachfrage über `App.confirm`).
+`POST /agent/workspace/replace` prüft Anmeldung, Sicherheitsregeln, Tageszeit
+und `agent_workspace.replace_refusal` (`unneeded`, `running`, `recent`:
+höchstens einmal je `REPLACE_SECONDS` und Konto, Feld `replaced_at` im
+Datensatz) und startet `replace_later`. `replace` hebt die Restore-Grenze an,
+löscht die VM, wartet auf ihr Verschwinden, meldet `mark_restored(by="replace")`,
+leert `sign_ins` und `secret_names`, legt über `open_workspace` neu an,
+startet den Browser (`warm`, `rest`) und holt die Grundausstattung nach
+(`kit_later`); nie von selbst, nie unter einer Nachricht. Ansicht und
+Terminal warten währenddessen mit dem Zustand `replacing`
+(`routers/agent_workspace.py::_replaced`, `agent_workspace.replacing`), die
+nächste Nachricht jedes Chats liest `REPLACED_NOTE` (`Claim.replaced`:
+`replaced_at` gegen `used_at` des Chats). **Vorwärmen und
 kurzer Weg (seit 2026-11-20):** `POST /agent/workspace/warm`
 (`agent_workspace.warm_later`/`_warm`, von `workspace-view.js` `warm` beim
 Kontostatus, bei Aktivität in der App und mit `intent` am Arbeitsplatz-Knopf)
@@ -7887,7 +7909,8 @@ den letzten `WAKE_AFTER_SECONDS` erreicht hat (`_ready`,
 das auf). Die Live-Ansicht wartet auf eine festgefahrene VM mit dem Zustand
 `repairing` (`routers/agent_workspace.py::_repairing`, solange
 `agent_vm.checking` oder `agent_workspace.healing`) und endet sonst mit
-`stuck` und Close-Code 4503; Details `docs/agent-mode.md`, „Sofort da“. Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+`stuck` und Close-Code 4503, von wo der Nutzer einen neuen Rechner starten
+kann; Details `docs/agent-mode.md`, „Sofort da“ und „Neuer Rechner“. Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
 Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
 Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
 Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder
@@ -7931,7 +7954,8 @@ Zwischenablage als Tasten ein, nie über die Zwischenablage der VM. Details in
 `docs/agent-mode.md`, „Arbeitsplatz“. Live-Ansicht: `routers/agent_workspace.py`
 (WebSocket `/agent/workspace/view` über die Exec-API zum Relay auf der VM,
 `POST /agent/workspace/control` für Übernehmen/Zurückgeben,
-`POST /agent/workspace/reset-browser`, `GET /agent/workspace`, seit 2026-11-02
+`POST /agent/workspace/reset-browser`, `GET /agent/workspace`, seit 2026-11-22
+`POST /agent/workspace/replace` für einen neuen Rechner, seit 2026-11-02
 `GET /agent/workspace/sign-ins` und `POST /agent/workspace/sign-ins/remove`:
 wo der Browser angemeldet ist, vom Agenten mit `note_sign_in` geführt, mit
 jeder Nachricht im Kontext der Frage, `docs/agent-mode.md` „Wo der Browser

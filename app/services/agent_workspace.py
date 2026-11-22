@@ -66,6 +66,8 @@ count down.
 The warm-up (warm_later): the app asks for the workspace before the user
 opens it, so the live view finds the VM awake with its Chrome running, and a
 VM the provider does not start is restored (heal) before anyone waits for it.
+One that no restore brings back gets a new VM in its place, on the user's
+word only (replace): its files and sign-ins do not come along.
 
 The kit (KIT_APT, KIT_PYTHON): what the agent kept installing before it
 could work is on every workspace, installed in the background where it is
@@ -137,6 +139,11 @@ RESTORED_NOTE = ("The user restored the workspace to how it was before an earlie
 HEALED_NOTE = ("The workspace's provider could not start it, so consens.io restored it to how it was before an "
                "earlier message since this chat last used it: whatever later commands changed there is gone, in "
                "every chat's folder. Check the files before you rely on them.")
+REPLACED_NOTE = ("The workspace's provider could not start its computer any more, so the user started a new one since "
+                 "this chat last used it. It is empty: every file from before is gone, in every chat's folder, with "
+                 "the notes, the keys the user gave you, installed packages, background processes and the browser's "
+                 "sign-ins. Files you shared in a chat are still in that chat. Say so where the user counts on "
+                 "something from before, and make again what this message needs.")
 
 
 class WorkspaceBusy(Exception):
@@ -156,6 +163,8 @@ class Claim:
     secrets: tuple = ()
     # The newest of those restores was the workspace's own (heal).
     healed: bool = False
+    # The workspace got a new computer since this chat last used it (replace).
+    replaced: bool = False
 
 
 def tool_files():
@@ -320,6 +329,12 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         restores = int(record.get("restores") or 0)
         outcome["restored"] = bool(used.get("workspace")) and restores > int(used.get("restores_seen") or 0)
         outcome["healed"] = outcome["restored"] and record.get("restored_by") == "heal"
+        # By the times, not by the newest restore's kind: a restore after
+        # the new computer must not turn "every file is gone" into "check
+        # the files" for a chat that has not been there since.
+        replaced_at, last = record.get("replaced_at"), used.get("used_at")
+        outcome["replaced"] = (bool(used.get("workspace")) and isinstance(replaced_at, datetime)
+                               and not (isinstance(last, datetime) and last >= replaced_at))
         started = chat_data.get("created_at")
         outcome["title"] = str(chat_data.get("title") or "")
         outcome["started"] = started.date().isoformat() if isinstance(started, datetime) else ""
@@ -339,7 +354,8 @@ def claim(store, uid, chat_id, turn_id, *, provider):
     store._transaction(operation)
     return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
                  started=outcome.get("started", ""), folder=outcome.get("folder", ""),
-                 secrets=outcome.get("secrets", ()), healed=outcome.get("healed", False))
+                 secrets=outcome.get("secrets", ()), healed=outcome.get("healed", False),
+                 replaced=outcome.get("replaced", False))
 
 
 def listed(record, field, kind):
@@ -509,8 +525,9 @@ def in_use(store, uid, now=None):
 
 def mark_restored(store, uid, by="user"):
     """The workspace went back to a checkpoint: every chat's next message
-    that uses it is told (claim), who did it too (``by``: "user", or "heal"
-    when it was stuck)."""
+    that uses it is told (claim), who did it too (``by``: "user", "heal"
+    when it was stuck, or "replace" when it got a new computer instead,
+    whose time ``replaced_at`` keeps)."""
     # The checkpoint may be from before the kit, or from the middle of its
     # installation, and from before this version's tools; also when the note
     # below cannot be written.
@@ -521,8 +538,10 @@ def mark_restored(store, uid, by="user"):
     def operation(tx):
         snapshot = workspace.get(transaction=tx)
         if snapshot.exists:
+            now = _now()
             tx.update(workspace, {"restores": int((snapshot.to_dict() or {}).get("restores") or 0) + 1,
-                                  "restored_at": _now(), "restored_by": by})
+                                  "restored_at": now, "restored_by": by,
+                                  **({"replaced_at": now} if by == "replace" else {})})
     store._transaction(operation)
 
 
@@ -586,19 +605,23 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     most this long for a setup (prepare). A VM the gateway called
     unresponsive before raises at once, or once its probe did not reach it
     (reachable); one that does so now is asked again right after, and
-    restores itself when it is stuck (heal_later, with ``db``). A VM this
-    process brought up to date and reached a moment ago is asked nothing
-    (_ready): its next request wakes it."""
+    restores itself when it is stuck (heal_later, with ``db``). One whose
+    probe finds it deleted is made anew like any that is not there (_gone).
+    A VM this process brought up to date and reached a moment ago is asked
+    nothing (_ready): its next request wakes it."""
     name = agent_vm.workspace_name(uid)
     if name in _ready and agent_vm.reached_within(name, agent_vm.WAKE_AFTER_SECONDS):
         return name
     stuck = None if db is None else (lambda: heal_later(db, uid))
+
+    def gone():
+        _gone(uid)
     lock = setup_lock(name)
     while not lock.acquire(timeout=.2):
         if cancellation is not None:
             cancellation.raise_if_cancelled()
     try:
-        reachable(name, cancellation, timeout, on_unresponsive=stuck)
+        reachable(name, cancellation, timeout, on_unresponsive=stuck, on_gone=gone)
         try:
             # A VM made just now has no version yet: prepare sets its rules.
             created = vm.ensure(name)
@@ -622,7 +645,7 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
         except agent_vm.VMUnavailable as exc:
             _ready.discard(name)
             if stuck is not None and agent_vm.unresponsive(exc):
-                agent_vm.watch(name, stuck)
+                agent_vm.watch(name, stuck, on_gone=gone)
             raise
     finally:
         lock.release()
@@ -641,17 +664,27 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
 _ready: set[str] = set()
 
 
-def reachable(name, cancellation=None, timeout=None, on_unresponsive=None):
+def _gone(uid):
+    """The account's VM is gone (deleted, here or outside this process):
+    what this process knew of it holds for none made after it, neither that
+    its tools are up to date nor that it has its kit."""
+    _ready.discard(agent_vm.workspace_name(uid))
+    forget_kit(uid)
+
+
+def reachable(name, cancellation=None, timeout=None, on_unresponsive=None, on_gone=None):
     """Raises VMUnavailable with the gateway's status while ``name`` is
     marked unresponsive (agent_vm.mark_unresponsive): the browser's warm-up
     and the workbench of one message, and every message after, would each
     wait about 48 s for the same 502 (prod 2026-11-06). Waits
     only for the VM's probe, at most PROBE_WAIT_SECONDS (and ``timeout``),
-    so a VM that woke again is used again by the start that asked.
-    ``on_unresponsive``: what the probe calls when the VM answers so again."""
+    so a VM that woke again is used again by the start that asked, and one
+    that was deleted meanwhile is made anew by it.
+    ``on_unresponsive``: what the probe calls when the VM answers so again;
+    ``on_gone``: when the provider has none under the name any more."""
     if agent_vm.unresponsive_status(name) is None:
         return
-    probe = agent_vm.probe(name, on_unresponsive=on_unresponsive)
+    probe = agent_vm.probe(name, on_unresponsive=on_unresponsive, on_gone=on_gone)
     if probe is not None:
         limit = agent_vm.PROBE_WAIT_SECONDS if timeout is None else min(agent_vm.PROBE_WAIT_SECONDS, timeout)
         deadline = time.monotonic() + max(0.0, limit)
@@ -859,7 +892,8 @@ def _warm(store, uid, intent, factory):
     from app.services.llm.provider_runtime import ProviderCancellation
     vm, began, passed = None, time.monotonic(), False
     try:
-        if workspace_guard.status(uid).closed:
+        # A new computer on its way (replace) starts its browser itself.
+        if replacing(uid) or workspace_guard.status(uid).closed:
             return
         current = record(store.db, uid)
         if current.get("name") != agent_vm.workspace_name(uid):
@@ -1638,3 +1672,131 @@ def raise_restore_floor(store, uid):
         if workspace.get(transaction=tx).exists:
             tx.update(workspace, {"restore_floor": _now()})
     store._transaction(operation)
+
+
+# A stuck workspace whose restore the provider refuses as well has one way
+# left: a new VM under its name (prod 2026-11-20 and 11-21: "restore: HTTP
+# 502" on every try of four heals, then set up anew by hand). That costs
+# every file on it, the keys the user gave the agent and the browser's
+# sign-ins, so it never happens by itself: only on the user's word
+# (routers/agent_workspace.py replace_workspace, which the live view offers
+# once it says "stuck"), only for a VM this process knows as stuck with
+# nothing left working on it (replace_refusal), never under a message, and
+# once per REPLACE_SECONDS and account by the record's ``replaced_at``, which
+# a restart of the server does not forget.
+REPLACE_SECONDS = 3600
+# How long the provider may still list the deleted VM before the new one is
+# made under its name.
+REPLACE_GONE_SECONDS = 60
+REPLACE_GONE_POLL_SECONDS = 2
+# Per account: the replacement running.
+_replacing: dict[str, threading.Thread] = {}
+_replacing_lock = threading.Lock()
+
+
+def replace_refusal(store, uid, now=None):
+    """Why the account's workspace gets no new computer now, or None:
+    "unneeded" while this process does not know its VM as stuck or
+    something still works on it (a probe, its watch, a heal: the view waits
+    for those, routers/agent_workspace.py _repairing), "recent" within
+    REPLACE_SECONDS of the last one, "running" under a chat's message."""
+    name = agent_vm.workspace_name(uid)
+    if agent_vm.unresponsive_status(name) is None or agent_vm.checking(name) or healing(uid):
+        return "unneeded"
+    now = now or _now()
+    current = record(store.db, uid)
+    if current.get("name") != name:
+        return "unneeded"
+    replaced = current.get("replaced_at")
+    if isinstance(replaced, datetime) and replaced > now - timedelta(seconds=REPLACE_SECONDS):
+        return "recent"
+    return "running" if in_use(store, uid, now) else None
+
+
+def replace_later(db, uid, *, factory=None):
+    """replace on a thread of its own, unless one runs. Its Start begins
+    here, so whoever asks right after is told about how long it takes
+    (start_until). Returns the thread, or None."""
+    def run():
+        try:
+            replace(db, uid, factory=factory, start=start)
+        finally:
+            with _replacing_lock:
+                _replacing.pop(uid, None)
+    with _replacing_lock:
+        if uid in _replacing:
+            return None
+        start = Start(uid, "browser").phase("setup", then="install")
+        thread = _replacing[uid] = threading.Thread(target=run, name="agent-workspace-replace", daemon=True)
+    thread.start()
+    return thread
+
+
+def replacing(uid):
+    """Whether the account's workspace gets its new computer right now (the
+    live view and the terminal wait for it, routers/agent_workspace.py)."""
+    with _replacing_lock:
+        return uid in _replacing
+
+
+def replace(db, uid, *, factory=None, start=None, sleep=time.sleep, clock=time.monotonic):
+    """A new VM for the account's workspace in place of its stuck one, once
+    nothing else works on it: the old one deleted with everything on it,
+    the new one set up and its browser started and told to rest, its kit
+    after that in the background, as for a new account (_provision). Every
+    chat's next message that uses the workspace is told (REPLACED_NOTE).
+    ``start``: the Start that counts it down for whoever waits, ended here.
+    Returns whether the new one stands with its browser."""
+    from app.services import agent_browser
+    from app.services.agent_runs import AgentRunStore
+    from app.services.llm.provider_runtime import ProviderCancellation
+    store, name, vm, began = AgentRunStore(db), agent_vm.workspace_name(uid), None, clock()
+    start = start or Start(uid, "browser").phase("setup", then="install")
+    try:
+        if healing(uid) or in_use(store, uid):
+            logging.warning("Agent workspace not replaced, in use")
+            return False
+        vm = (factory or agent_vm.backend)()
+        if vm is None:
+            return False
+        # Before the VM goes, so nothing below can fail and leave one of its
+        # checkpoints in reach: the new VM numbers its own from the start
+        # again, and an old id would name another disk's state there.
+        raise_restore_floor(store, uid)
+        vm.delete(name)
+        deadline = clock() + REPLACE_GONE_SECONDS
+        while vm.exists(name):
+            if clock() >= deadline:
+                logging.warning("Agent workspace not replaced, its VM is still there")
+                return False
+            sleep(REPLACE_GONE_POLL_SECONDS)
+        agent_vm.forget_vm(name)
+        # The old files are gone whatever happens below: the chats are told
+        # from here on, not only once the new VM stands.
+        mark_restored(store, uid, by="replace")
+        _forget_old_vm(db, uid)
+        name = open_workspace(vm, uid, db=db, start=start)
+        start.next()
+        agent_browser.helper(vm, name, {"action": "warm"}, agent_browser.CALL_SECONDS, ProviderCancellation())
+        # As in _provision: a message that began meanwhile keeps its hold,
+        # and the kit comes at its end.
+        if not in_use(store, uid):
+            agent_browser.helper(vm, name, {"action": "rest", "for": "view"}, agent_browser.REST_SECONDS,
+                                 ProviderCancellation())
+            kit_later(uid, factory=factory)
+    except Exception as exc:
+        logging.warning("Agent workspace replace failed category=%s", safe_exception(exc))
+        return False
+    finally:
+        start.end()
+        if vm is not None:
+            vm.close()
+    logging.warning("Agent workspace was stuck and got a new VM seconds=%.1f", clock() - began)
+    return True
+
+
+def _forget_old_vm(db, uid):
+    """What the record lists of a VM that is gone: the sites its browser was
+    logged in to and the names of the keys the user gave the agent, whose
+    files lay there. A record without either stays as it is."""
+    _merge(db, uid, lambda record: {field: [] for field in ("sign_ins", "secret_names") if record.get(field)} or None)

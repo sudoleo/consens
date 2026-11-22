@@ -220,10 +220,26 @@ def mark_unresponsive(name, status):
 
 
 def forget_unresponsive(name):
-    """``name`` restored or deleted: whatever runs under it next is asked anew."""
+    """``name`` restored: whatever runs under it next is asked anew."""
     with _contact_lock:
         _unresponsive.pop(name, None)
         _probe_began.pop(name, None)
+
+
+def forget_vm(name):
+    """No VM under ``name`` any more (deleted, here or outside this
+    process): one made later under the name is a new one, neither marked
+    nor reached before."""
+    with _contact_lock:
+        _unresponsive.pop(name, None)
+        _probe_began.pop(name, None)
+        _contact.pop(name, None)
+        _lost.discard(name)
+
+
+def gone(exc):
+    """Whether ``exc`` is the provider saying it has no VM under that name."""
+    return isinstance(exc, VMUnavailable) and getattr(exc, "status", None) == 404
 
 
 def unresponsive_status(name):
@@ -232,7 +248,7 @@ def unresponsive_status(name):
         return _unresponsive.get(name)
 
 
-def probe(name, factory=None, on_unresponsive=None, *, soon=False):
+def probe(name, factory=None, on_unresponsive=None, *, soon=False, on_gone=None):
     """The probe of ``name`` while it is marked unresponsive: the one that
     runs, or a new one on a thread of its own when the last began
     PROBE_SECONDS ago or more (``soon``: whenever none runs, the watch's),
@@ -240,7 +256,10 @@ def probe(name, factory=None, on_unresponsive=None, *, soon=False):
     (SpritesBackend.reach) on a backend of its own (``factory``, the
     configured provider by default); an answer clears the mark, a gateway's
     502/503/504 renews it and calls ``on_unresponsive``: the VM answered so
-    twice and is stuck (agent_workspace.heal_later)."""
+    twice and is stuck (agent_workspace.heal_later). A 404 clears the mark
+    too and calls ``on_gone``: the stuck VM was deleted outside this
+    process, and with the mark left no start would ever get as far as
+    making a new one."""
     now = time.monotonic()
     with _contact_lock:
         if name not in _unresponsive:
@@ -263,7 +282,15 @@ def probe(name, factory=None, on_unresponsive=None, *, soon=False):
             except VMUnavailable as exc:
                 # The operation and its status are in _request's own line.
                 logging.info("Agent VM probe failed category=%s", safe_exception(exc))
-                if unresponsive(exc) and on_unresponsive is not None:
+                if gone(exc):
+                    forget_vm(name)
+                    logging.warning("Agent VM gone while it was unresponsive")
+                    if on_gone is not None:
+                        try:
+                            on_gone()
+                        except Exception as error:
+                            logging.warning("Agent VM gone, not handled category=%s", safe_exception(error))
+                elif unresponsive(exc) and on_unresponsive is not None:
                     try:
                         on_unresponsive()
                     except Exception as error:
@@ -284,7 +311,7 @@ def probe(name, factory=None, on_unresponsive=None, *, soon=False):
     return thread
 
 
-def watch(name, on_unresponsive, factory=None):
+def watch(name, on_unresponsive, factory=None, on_gone=None):
     """Probes ``name`` once WATCH_SECONDS after it was marked, whether or not
     a start asks for it then: a stuck VM is known to be stuck (and its
     ``on_unresponsive`` runs) without the user's next message. One pending
@@ -292,7 +319,7 @@ def watch(name, on_unresponsive, factory=None):
     def run():
         # The probe first: whoever waits for the outcome (checking) never
         # finds neither of them between the two.
-        probe(name, factory=factory, on_unresponsive=on_unresponsive, soon=True)
+        probe(name, factory=factory, on_unresponsive=on_unresponsive, soon=True, on_gone=on_gone)
         with _contact_lock:
             _watches.pop(name, None)
     with _contact_lock:
@@ -803,8 +830,7 @@ class SpritesBackend(VMBackend):
 
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
-        # A VM made later under this name is a new one.
-        forget_unresponsive(name)
+        forget_vm(name)
 
     def delete_path(self, name, path, *, agent=True):
         if agent:

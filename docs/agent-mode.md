@@ -1502,6 +1502,14 @@ Jetzt gilt:
   so lange wie das Aufwachen einer kalten VM.
 - Jede Anfrage, die die VM erreicht, löscht die Markierung (`_touch`), ebenso
   ein Restore oder das Löschen der VM.
+- Eine Probe, die 404 bekommt, löscht sie auch (`agent_vm.gone`,
+  `forget_vm`): Die VM wurde außerhalb dieses Prozesses gelöscht. Bis
+  2026-11-21 blieb die Markierung dann für immer stehen, weil 404 weder eine
+  Antwort der VM noch die 502 des Gateways ist; `open_workspace` scheiterte
+  sofort und kam nie bis `vm.ensure`, das die VM neu angelegt hätte. Mit der
+  Markierung vergisst der Prozess, was er über die alte VM wusste
+  (`agent_workspace._gone`: Werkzeuge auf Stand, Grundausstattung
+  installiert), und der Start, der gefragt hat, legt sie neu an.
 - Ein Aufwecken (`_wake`), das 502 bekommt, beendet den Befehl sofort, statt
   danach noch den Handshake abzuwarten.
 
@@ -1543,10 +1551,89 @@ Anfrage). Der Ablauf:
 - Die nächste Nachricht jedes Chats, der den Arbeitsplatz benutzt hat, liest
   `HEALED_NOTE` (`restored_by: "heal"` im Datensatz).
 
-Hilft auch der Restore nicht, bleibt nur der Anbieter: Die öffentliche API
+Hilft auch der Restore nicht, bleibt nur eine neue VM: Die öffentliche API
 (OpenAPI 0.1.12, gelesen am 2026-11-20) hat keinen Endpunkt, der eine Sprite
-neu startet. Eine neue VM (löschen, neu öffnen) kostet Dateien und
-Anmeldungen und bleibt Handarbeit.
+neu startet. Die neue VM kostet Dateien und Anmeldungen und kommt deshalb nur
+auf das Wort des Nutzers, siehe „Neuer Rechner“ unten.
+
+#### Neuer Rechner, wenn kein Restore hilft (seit 2026-11-22)
+
+Am 2026-11-20 und 2026-11-21 bekam auch der Restore die 502, am 21.11. in
+Prod viermal je drei Versuche zwischen 22:13 und 23:26 UTC. Max konnte seinen
+Arbeitsplatz nicht öffnen, bis eine Session ihn von Hand neu aufsetzte, zum
+dritten Mal in drei Wochen. Seither bietet die Live-Ansicht das selbst an:
+
+- **Angebot** (`workspace-view.js` `wayBack`, `startNew`): Endet die Ansicht
+  mit `stuck` (4503), steht an der Stelle des Bildes ein ruhiger Satz, was
+  ein neuer Rechner kostet („A new one starts empty: the files and browser
+  sign-ins of the old one are lost.“), der gefüllte Knopf „Start a new
+  computer“ und darunter „Try again“. Der Klick fragt einmal nach
+  (`App.confirm`, Fokus auf „Cancel“). Kein Warnkasten, keine Warnfarbe.
+- **Endpunkt** `POST /agent/workspace/replace`: dieselbe Anmeldung wie die
+  Ansicht (`owner`), abgelehnt bei geschlossenen Sicherheitsregeln und
+  verbrauchter Tageszeit (403). `agent_workspace.replace_refusal` entscheidet
+  den Rest: `unneeded`, solange der Prozess die VM nicht als festgefahren
+  kennt oder noch eine Probe, ihre Nachprüfung oder eine Heilung läuft (die
+  Antwort ist dann `{"replacing": false}`, und die neue Verbindung der
+  Ansicht zeigt, was los ist); `running` unter einer Nachricht (409);
+  `recent` bis `REPLACE_SECONDS` = 1 h nach dem letzten Ersetzen (429,
+  gemessen am Feld `replaced_at` im Datensatz, das einen Neustart des
+  Servers übersteht). Sonst startet `replace_later` das Ersetzen auf einem
+  eigenen Thread und antwortet sofort mit `{"replacing": true, "until"}`.
+- **Ablauf** (`agent_workspace.replace`, die Schritte der Handarbeit vom
+  21.11.): nur wenn `in_use` und `healing` falsch sind; `raise_restore_floor`
+  zuerst, denn die neue VM zählt ihre Checkpoints wieder ab v1, und eine alte
+  Nummer hieße dort ein anderer Stand; `vm.delete` und warten, bis der
+  Anbieter die VM nicht mehr führt (`REPLACE_GONE_SECONDS` = 60 s);
+  `mark_restored(by="replace")` schon hier, weil die alten Dateien von da an
+  weg sind, was immer danach scheitert; die Listen der Anmeldungen und der
+  Schlüsselnamen im Datensatz leeren (`_forget_old_vm`); `open_workspace`
+  legt neu an und richtet ein; der Browser wird einmal gestartet (`warm`)
+  und, wenn keine Nachricht den Arbeitsplatz inzwischen benutzt, zur Ruhe
+  geschickt (`rest` mit `"for": "view"`); die Grundausstattung kommt danach
+  im Hintergrund (`kit_later`). Fehlschläge stehen im Log ohne Ausnahmetext
+  (`safe_exception`).
+- **Fortschritt**: Das Ersetzen führt denselben `Start` wie ein neues Konto
+  (`setup`, dann `install`). Wer die Ansicht oder das Terminal währenddessen
+  öffnet, wartet darauf (`routers/agent_workspace.py::_replaced`, Zustand
+  `replacing` mit `until`, höchstens `REPLACE_WAIT_SECONDS` = 10 min) und
+  bekommt danach das Bild; die Ansicht zeigt den Balken mit den Schritten
+  des Ersetzens (`STEPS.replacing`). Das Vorwärmen setzt solange aus.
+- **Die Chats** erfahren es mit ihrer nächsten Nachricht im Arbeitsplatz:
+  `REPLACED_NOTE` statt `HEALED_NOTE` sagt, dass der Rechner neu und leer
+  ist (Dateien, Notizen, Schlüssel, Pakete, Hintergrundprozesse und
+  Anmeldungen fehlen, geteilte Dateien bleiben im Chat). `Claim.replaced`
+  vergleicht `replaced_at` mit dem `used_at` des Chats, nicht die Art des
+  letzten Restores: Ein Restore des Nutzers danach macht aus „alles weg“
+  kein „prüf die Dateien“.
+- **Nie von selbst**: Kein Hintergrundlauf ersetzt eine VM. Der einzige
+  Aufrufer von `replace_later` ist der Endpunkt.
+
+Geprobt am 2026-11-22 an einer eigenen Test-Sprite (echter Anbieter,
+Firestore als Attrappe im Speicher, erfundenes Konto; danach gelöscht, die
+Liste des Anbieters zählte vorher und nachher 20 Sprites). Das Token legt nur
+Sprites an, deren Name mit `consens-` beginnt.
+
+| Schritt | Zeit |
+| --- | --- |
+| `replace` insgesamt | 122 s |
+| davon Löschen (`DELETE`, beim ersten Nachfragen schon nicht mehr geführt) | 0,9 s |
+| davon neu anlegen und `setup.sh` (`open_workspace`) | 86 s |
+| davon Browser installieren und starten (`warm`) | 34 s |
+| Grundausstattung danach im Hintergrund | 52 s |
+| Anfrage an die neue VM | 0,16 s |
+| Relay der Ansicht bis zu den ersten VNC-Bytes (`ready` sofort) | 0,16 s |
+| Terminal bis zur ersten Antwort der Shell | 0,11 s |
+| markierte, von außen gelöschte VM: Probe bekommt 404, `open_workspace` legt neu an | 71 s |
+
+Die Datei der alten VM fehlte auf der neuen, der Datensatz trug
+`restored_by: "replace"`, `replaced_at` und eine leere Anmeldeliste. Das
+Einrichten dauerte hier 86 s statt der geschätzten 65 s
+(`START_SECONDS["setup"]`); der Balken sagt in den letzten Sekunden „Taking
+longer than usual…“. Nicht geprobt: eine wirklich festgefahrene VM (sie lässt
+sich nicht herbeiführen; dass der Anbieter ihr `DELETE` annimmt, zeigte die
+Handarbeit vom 21.11.) und der Weg über Endpunkt und Ansicht im Browser
+gegen den echten Anbieter (Punkt in `docs/smoke-checklist.md`).
 
 #### Sofort da: Vorwärmen und der kurze Weg (seit 2026-11-20)
 
@@ -1598,7 +1685,8 @@ geändert hat:
   `repairing` mit einer Schätzung (`REPAIR_SECONDS` = 150 s) und wartet, bis
   die VM wieder erreicht wird. Läuft keine Probe und keine Heilung mehr oder
   sind `REPAIR_WAIT_SECONDS` = 7 min um, sagt sie `stuck` und schließt mit
-  4503; „Reconnect“ bleibt.
+  4503. Von dort kann der Nutzer es später noch einmal versuchen oder einen
+  neuen Rechner starten (seit 2026-11-22, „Neuer Rechner“ oben).
 - **Chrome nach dem Kaltstart** (`display.sh`, `relay.py`): Am 2026-11-15
   antwortete Chrome nach einem Kaltstart nicht in 15 s, die Ansicht meldete
   einen Fehler, der zweite Versuch fand ihn laufend. Ein Chrome, der jünger
