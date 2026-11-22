@@ -314,9 +314,10 @@ def _svg_closings(state):
 def _svg_element(state, start_line, end_line, silent):
     """An <svg> element standing in the text is the code block of a picture,
     as in the app (markdown-stream.js svgElement): from its line to the one
-    with its matching </svg>, inner <svg> elements nested. Raw HTML stays
-    text here (html=False), so without this the reader saw its markup. One
-    the answer never closed stays that text."""
+    with its matching </svg>, inner <svg> elements nested; words after
+    </svg> on that line are the paragraph below it. Raw HTML stays text here
+    (html=False), so without this the reader saw its markup. One the answer
+    never closed stays that text."""
     if state.sCount[start_line] - state.blkIndent >= 4:
         return False
     start = state.bMarks[start_line] + state.tShift[start_line]
@@ -338,6 +339,12 @@ def _svg_element(state, start_line, end_line, silent):
                     token.info, token.markup, token.map = "svg", "```", [start_line, line + 1]
                     token.content = "\n".join([*lines, text[:tag.end()]]) + "\n"
                     token.meta = {"svg_element": True}
+                    after = text[tag.end():].strip()
+                    if after:
+                        state.push("paragraph_open", "p", 1).map = [line, line + 1]
+                        inline = state.push("inline", "", 0)
+                        inline.content, inline.map, inline.children = after, [line, line + 1], []
+                        state.push("paragraph_close", "p", -1)
                     state.line = line + 1
                 return True
         lines.append(text)

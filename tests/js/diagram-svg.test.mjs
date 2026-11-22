@@ -102,6 +102,26 @@ describe("an SVG picture", () => {
     expect(window.pwned).toBeUndefined();
   });
 
+  it("downloads as a file that neither runs nor fetches when opened on its own", async () => {
+    const { window } = boot();
+    const source = '<svg xmlns:h="http://www.w3.org/1999/xhtml" xmlns:s="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+      + "<h:script>window.pwned=1</h:script><s:set attributeName=\"href\" to=\"javascript:alert(1)\"/>"
+      + '<desc>Logo<img src="https://leak.test/desc.png"></desc>'
+      + "<style>@import url(https://leak.test/a.css);</style><style>.b{fill:u\\72l(https://leak.test/b)}</style>"
+      + '<style>.c{fill:url(#g)}</style><linearGradient id="g"/>'
+      + '<rect class="c" width="10" height="10" fill="url(https://leak.test/c#g)" stroke="url(#g)" '
+      + 'style="fill:url(&quot;https://leak.test/d&quot;)"/><circle r="1" style="fill:#0a0"/></svg>';
+    const entry = window.ConsensusDiagram.request(source, "light");
+    await entry.done;
+    expect(entry.state).toBe("drawn");
+    for (const gone of ["script", "s:set", "javascript:", "<img", "leak.test", "@import", "\\72"]) {
+      expect(entry.picture.file, gone).not.toContain(gone);
+    }
+    for (const kept of ["<desc>Logo</desc>", "<style>.c{fill:url(#g)}</style>", 'stroke="url(#g)"', 'style="fill:#0a0"']) {
+      expect(entry.picture.file, kept).toContain(kept);
+    }
+  });
+
   it("stays code when it is not one SVG element, or too much to read", async () => {
     const events = [];
     const { window } = boot({ before(page) { page.trackUmamiEvent = (name, data) => events.push([name, { ...data }]); } });

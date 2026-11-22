@@ -20,6 +20,10 @@ from html.parser import HTMLParser
 _PROLOG = re.compile(r"(?:\uFEFF|\s|<\?xml\b[^>]*\?>|<!--.*?-->|<!DOCTYPE\s+svg\b[^>\[]*>)*",
                      re.IGNORECASE | re.DOTALL)
 _ROOT = re.compile(r"<svg[\s>]")
+# The root's start tag as a page's parser reads it: a quote opens a value
+# only after "=", and a ">" inside one does not end the tag. Possessive, so
+# a tag that never ends costs one pass.
+_ROOT_TAG = re.compile(r"""<svg(?:=[\t\n\f\r ]*(?:"[^"]*"|'[^']*')|[^>])*+>""")
 _LENGTH = re.compile(r"\s*\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*(px|pt|pc|mm|cm|in)?\s*", re.IGNORECASE)
 _UNITS = {"px": 1, "pt": 4 / 3, "pc": 16, "mm": 96 / 25.4, "cm": 96 / 2.54, "in": 96}
 # diagram-render.js MAX_SVG_CHARS, PICTURE_LEAST, PICTURE_MOST.
@@ -54,7 +58,8 @@ def _length(value) -> float:
     match = _LENGTH.fullmatch(str(value or ""))
     if not match:
         return math.nan
-    return float(match.group(1) + (match.group(2) or "")) * _UNITS[(match.group(3) or "px").lower()]
+    length = float(match.group(1) + (match.group(2) or "")) * _UNITS[(match.group(3) or "px").lower()]
+    return length if math.isfinite(length) else math.nan
 
 
 def _round(value: float) -> int:
@@ -72,16 +77,25 @@ def size(source):
     start = _PROLOG.match(text).end()
     if not _ROOT.match(text, start):
         return None
-    # The whole source: a ">" inside a quoted value does not end the tag.
+    # A page's parser drops a start tag the text never ends: no picture.
+    tag = _ROOT_TAG.match(text, start)
+    if not tag:
+        return None
+    # Only the root's tag: the parser reads markup after it in quadratic
+    # time (CVE-2025-6069), and some of it, such as "<![", makes it raise.
     reader = _Root()
-    reader.feed(text[start:])
-    reader.close()
+    try:
+        reader.feed(tag.group())
+        reader.close()
+    except Exception:  # noqa: BLE001 - what html.parser raises differs between versions
+        return None
     attributes = reader.attributes or {}
     try:
         box = [float(part) for part in re.split(r"[\s,]+", attributes.get("viewbox", "").strip())]
     except ValueError:
         box = []
-    box = box if len(box) == 4 and all(map(math.isfinite, box)) and box[2] > 0 and box[3] > 0 else None
+    valid = len(box) == 4 and all(map(math.isfinite, box)) and box[2] > 0 and box[3] > 0
+    box = box if valid and 0 < box[2] / box[3] < math.inf else None
     width, height = _length(attributes.get("width")), _length(attributes.get("height"))
     ratio = box[2] / box[3] if box else 2
     if not width > 0 and not height > 0:
@@ -90,6 +104,8 @@ def size(source):
         width = height * ratio
     elif not height > 0:
         height = width / ratio
+    if not (math.isfinite(width) and math.isfinite(height)):
+        width, height = 300, 150
     longer = max(width, height)
     scale = PICTURE_LEAST / longer if longer < PICTURE_LEAST else PICTURE_MOST / longer if longer > PICTURE_MOST else 1
     return max(1, _round(width * scale)), max(1, _round(height * scale))

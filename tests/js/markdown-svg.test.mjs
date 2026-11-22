@@ -75,6 +75,26 @@ describe("an SVG in an answer", () => {
     expect(el.querySelector("circle, style")).toBeNull();
   });
 
+  it("leaves the words after it on its line as the paragraph below the picture", () => {
+    // tests/test_answer_assets.py reads the same text on the share page.
+    const { window, document } = boot();
+    const source = '<svg width="10" height="10"><circle r="5"/></svg>';
+    const el = render(window, document, `${source} **Online**\nNext line.`);
+    expect(el.querySelector(".md-diagram code").textContent).toBe(`${source}\n`);
+    expect([...el.children].map(node => node.tagName)).toEqual(["DIV", "P", "P"]);
+    expect(el.children[1].innerHTML).toBe("<strong>Online</strong>");
+    expect(el.children[2].textContent).toBe("Next line.");
+  });
+
+  it("is no picture in a finished text that never closes it: its paragraph stays text", () => {
+    const { window, document } = boot();
+    const el = render(window, document, '<svg viewBox="0 0 1 1"> opens here\nand <b>is</b> text.\n\n## Then a heading\n\n- and a list');
+    expect(el.querySelector(".md-diagram, pre, svg, b")).toBeNull();
+    expect(el.querySelector("p").textContent).toBe('<svg viewBox="0 0 1 1"> opens here\nand <b>is</b> text.');
+    expect(el.querySelector("h2").textContent).toBe("Then a heading");
+    expect(el.querySelector("li").textContent).toBe("and a list");
+  });
+
   it("stays markup the sanitizer cleans without diagram-render.js", () => {
     const { window, document } = boot({ diagrams: false });
     const el = render(window, document, block(ICON));

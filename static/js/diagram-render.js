@@ -513,17 +513,31 @@
     return svg;
   }
 
+  // CSS that fetches: an import, a url() that names no part of the picture
+  // or data of its own, and escapes, which could spell either.
+  const FETCHES = /@import|\\|url\(\s*['"]?\s*(?!#|data:)/i;
+
   function cleanSvg(svg) {
     svg.querySelectorAll(UNSAFE).forEach(node => node.remove());
+    // The page's parser knows no prefixes: "h:script" is an SVG element here,
+    // but in the downloaded file, beside xmlns:h for XHTML, a script that
+    // runs. HTML stands inside only where <title> and <desc> allow it.
+    for (const node of [...svg.querySelectorAll("*")]) {
+      if (node.namespaceURI !== SVG || node.localName.includes(":")) node.remove();
+    }
     svg.querySelectorAll("set, animate").forEach(node => {
       const target = String(node.getAttribute("attributeName") || "").toLowerCase();
       if (/(^|:)href$|^on/.test(target)) node.remove();
+    });
+    svg.querySelectorAll("style").forEach(node => {
+      if (FETCHES.test(node.textContent)) node.remove();
     });
     for (const node of [svg, ...svg.querySelectorAll("*")]) {
       for (const { name, value } of [...node.attributes]) {
         const bare = name.toLowerCase();
         if (bare.startsWith("on")) node.removeAttribute(name);
         else if (/(^|:)href$/.test(bare) && !/^(#|data:image\/)/i.test(value.trim())) node.removeAttribute(name);
+        else if ((bare === "style" || /url\(/i.test(value)) && FETCHES.test(value)) node.removeAttribute(name);
       }
     }
     // The size of the picture is its attributes' (measure()), not a page's style.
@@ -535,7 +549,8 @@
 
   function lengthOf(value) {
     const match = /^\s*\+?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*(px|pt|pc|mm|cm|in)?\s*$/i.exec(String(value || ""));
-    return match ? parseFloat(match[1] + (match[2] || "")) * UNITS[(match[3] || "px").toLowerCase()] : NaN;
+    const length = match ? parseFloat(match[1] + (match[2] || "")) * UNITS[(match[3] || "px").toLowerCase()] : NaN;
+    return Number.isFinite(length) ? length : NaN;
   }
 
   // The picture's frame (its viewBox, or the area its own size covers) and
@@ -543,13 +558,15 @@
   // the 300 × 150 a browser gives an SVG without either.
   function measure(svg) {
     const numbers = (svg.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
-    const box = numbers.length === 4 && numbers.every(Number.isFinite) && numbers[2] > 0 && numbers[3] > 0 ? numbers : null;
+    const valid = numbers.length === 4 && numbers.every(Number.isFinite) && numbers[2] > 0 && numbers[3] > 0;
+    const box = valid && numbers[2] / numbers[3] > 0 && Number.isFinite(numbers[2] / numbers[3]) ? numbers : null;
     let width = lengthOf(svg.getAttribute("width"));
     let height = lengthOf(svg.getAttribute("height"));
     const ratio = box ? box[2] / box[3] : 2;
     if (!(width > 0) && !(height > 0)) [width, height] = box ? [box[2], box[3]] : [300, 150];
     else if (!(width > 0)) width = height * ratio;
     else if (!(height > 0)) height = width / ratio;
+    if (!Number.isFinite(width) || !Number.isFinite(height)) [width, height] = [300, 150];
     const longer = Math.max(width, height);
     const scale = longer < PICTURE_LEAST ? PICTURE_LEAST / longer : longer > PICTURE_MOST ? PICTURE_MOST / longer : 1;
     return { view: box || [0, 0, width, height], width: Math.max(1, Math.round(width * scale)),
@@ -633,13 +650,16 @@
     return hex(FALLBACK[theme === "dark" ? "light" : "dark"].ground);
   }
   // The picture inside a sheet of its own size, a margin of paper around it.
+  // Built in the picture's own inert document: nothing of it is adopted
+  // into the page, where an element would start to load.
   function onPaper(svg, width, height, color) {
     const margin = Math.round(Math.max(8, Math.min(24, Math.min(width, height) * 0.06)));
-    const sheet = document.createElementNS(SVG, "svg");
+    const doc = svg.ownerDocument;
+    const sheet = doc.createElementNS(SVG, "svg");
     sheet.setAttribute("viewBox", `0 0 ${width} ${height}`);
     sheet.setAttribute("width", String(width));
     sheet.setAttribute("height", String(height));
-    const paper = document.createElementNS(SVG, "rect");
+    const paper = doc.createElementNS(SVG, "rect");
     paper.setAttribute("width", String(width));
     paper.setAttribute("height", String(height));
     // Inline, so a rule of the picture's own <style> for every rect leaves it.

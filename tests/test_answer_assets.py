@@ -78,6 +78,16 @@ def test_an_svg_is_a_picture_however_the_answer_wrote_it():
     assert contains_diagram(render_public_markdown("> " + ICON.replace("\n", "\n> ")))
 
 
+def test_words_after_an_svg_on_its_line_are_the_paragraph_below_it():
+    # tests/js/markdown-svg.test.mjs reads the same text in the app.
+    html = render_public_markdown('<svg width="10" height="10"><circle r="5"/></svg> **Online**\nNext line.')
+    assert '&lt;circle r="5"/&gt;&lt;/svg&gt;\n</code></pre>\n<p><strong>Online</strong></p>' in html
+    assert "<p>Next line.</p>" in html
+    # On the element's last line too, and its markup stays text.
+    html = render_public_markdown(f"{ICON[:-6]}</svg>  then <b>this</b>")
+    assert contains_diagram(html) and "<p>then &lt;b&gt;this&lt;/b&gt;</p>" in html
+
+
 def test_unclosed_svg_tags_render_a_share_page_at_once():
     """A share page renders its answer on every request, without a cache:
     lines that each begin an <svg> never closed were each counted to the

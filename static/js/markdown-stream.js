@@ -248,7 +248,7 @@ function fenceClosed(raw) {
 
 // "mermaid", "svg" or "" for a token of marked.
 function drawingKind(token) {
-  if (token?.type === "svgElement") return "svg";
+  if (token?.type === "svgElement") return token.markup ? "" : "svg";
   if (token?.type !== "code") return "";
   const language = String(token.lang || "").trim();
   if (DIAGRAM_LANGUAGE.test(language)) return "mermaid";
@@ -269,13 +269,17 @@ function drawingClosed(token) {
 }
 
 // An <svg> element at the start of a line, up to its matching </svg>
-// (inner <svg> elements nest), or to the end of the text while it is
-// still being written. Nothing after </svg> on its line belongs to it. No
-// "<" outside quotes in a tag, as on the share page (public_markdown.py).
+// (inner <svg> elements nest). Words after </svg> on its line are the
+// paragraph below the picture. No "<" outside quotes in a tag. As on the
+// share page (public_markdown.py), an element a finished text never closes
+// is no picture: its paragraph stays text, markup and all. Only while a
+// stream writes it (renderMarkdownFragment's `growing`) does it run to the
+// end of the text.
 const SVG_ELEMENT_START = /^ {0,3}<svg[\s>]/;
 const SVG_TAG = /<(\/?)svg\b(?:"[^"]*"|'[^']*'|[^'"<>])*?(\/?)>/gi;
+let svgStillWritten = false;
 
-function svgElement(src) {
+function svgElement(src, lexer) {
   if (!SVG_ELEMENT_START.test(src)) return undefined;
   SVG_TAG.lastIndex = 0;
   let depth = 0;
@@ -286,10 +290,24 @@ function svgElement(src) {
       const end = SVG_TAG.lastIndex;
       const line = src.indexOf("\n", end);
       const raw = line === -1 ? src : src.slice(0, line + 1);
-      return { type: "svgElement", raw, text: src.slice(0, end).trim(), closed: true };
+      const after = src.slice(end, line === -1 ? src.length : line).trim();
+      const token = { type: "svgElement", raw, text: src.slice(0, end).trim(), closed: true, after, tokens: [] };
+      if (after) lexer.inline(after, token.tokens);
+      return token;
     }
   }
-  return { type: "svgElement", raw: src, text: src.trim(), closed: false };
+  if (svgStillWritten) return { type: "svgElement", raw: src, text: src.trim(), closed: false };
+  const paragraph = lexer.tokenizer.paragraph(src);
+  return paragraph ? { type: "svgElement", raw: paragraph.raw, text: paragraph.text, markup: true } : undefined;
+}
+
+function parseMarkdown(md, growing) {
+  svgStillWritten = growing;
+  try {
+    return window.marked.parse(md);
+  } finally {
+    svgStillWritten = false;
+  }
 }
 
 function ensureDiagramBlocks(marked) {
@@ -317,9 +335,12 @@ function ensureDiagramBlocks(marked) {
       return found ? found.index + found[1].length : undefined;
     },
     tokenizer(src) {
-      return window.ConsensusDiagram ? svgElement(src) : undefined;
+      return window.ConsensusDiagram ? svgElement(src, this.lexer) : undefined;
     },
-    renderer: place
+    renderer(token) {
+      if (token.markup) return `<p>${escapeHtml(token.text)}</p>\n`;
+      return token.after ? `${place(token)}<p>${this.parser.parseInline(token.tokens)}</p>\n` : place(token);
+    }
   }] });
 }
 
@@ -440,7 +461,7 @@ function renderMarkdownFragment(md, { growing = false } = {}) {
     ensureTaskMarkers(window.marked);
     ensurePictureRefs(window.marked);
     ensureDiagramBlocks(window.marked);
-    let fragment = window.DOMPurify.sanitize(window.marked.parse(prepared),
+    let fragment = window.DOMPurify.sanitize(parseMarkdown(prepared, growing),
       { ...MODEL_HTML_CONFIG, RETURN_DOM_FRAGMENT: true });
     if (typeof fragment === "string") {
       // A sanitizer that only returns markup: an inert template parses it.

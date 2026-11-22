@@ -2735,18 +2735,32 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     das am Zeilenanfang im Text steht (`markdown-stream.js` `svgElement`, bis
     zum passenden `</svg>`, auch über Leerzeilen; vorher war es Markup im
     Dokument, dessen IDs das Präfix des Sanitizers brach und dessen `<style>`
-    fiel). Ein ` ```html `-Block und ein eingerückter Block bleiben Code.
+    fiel). Worte hinter `</svg>` auf seiner Zeile sind der Absatz unter dem
+    Bild. Bis zum Textende reicht ein offenes Element nur, solange ein Stream
+    es schreibt (`renderMarkdownFragment` `growing` setzt `svgStillWritten`);
+    schließt ein fertiger Text es nie, ist es kein Bild, und sein Absatz bleibt
+    Text samt Markup, wie auf der Share-Seite. Ein ` ```html `-Block und ein
+    eingerückter Block bleiben Code.
     Gezeichnet wird ohne Bibliothek und wie ein Diagramm als `<img>`
     (`drawSvg`): Das Bild führt kein Skript aus und lädt nichts, deshalb
     behält das SVG seine Styles, Verläufe, Filter und Animationen (Neon).
     Gelesen wird es wie Inline-SVG in einer inerten `<template>`; was daneben
     steht (HTML, das der Parser aus der Zeichnung schiebt), macht es zu Code.
     `cleanSvg` nimmt `script`, `foreignObject`, eingebettete Dokumente,
-    `on*`-Attribute, Adressen außer `#…` und `data:image/` und Animationen
-    auf `href` oder Handler weg; diese bereinigte Datei ist der Download.
+    Elemente mit Präfix oder fremdem Namensraum (`h:script` neben
+    `xmlns:h` liefe in der Datei als XHTML-Skript; HTML in `<title>`/`<desc>`),
+    `on*`-Attribute, Adressen außer `#…` und `data:image/`, Animationen
+    auf `href` oder Handler und CSS, das lädt (`FETCHES`: `@import`,
+    `\`-Escapes, `url()` außer `#…`/`data:`; der ganze `<style>` bzw. das
+    Attribut) weg; diese bereinigte Datei ist der Download. Das Papier
+    (`onPaper`) entsteht im inerten Dokument des Bildes, nichts davon wird in
+    die Seite übernommen.
     Größe (`measure`): Breite/Höhe (absolute Einheiten), sonst die viewBox,
     sonst 300 × 150; die längere Seite mindestens `PICTURE_LEAST` (128 px,
     ein 24-px-Icon wird groß gezeichnet), höchstens `PICTURE_MOST` (4096).
+    Nicht endliche Längen und eine viewBox ohne endliches, positives
+    Seitenverhältnis zählen nicht; wird die Größe trotzdem unendlich, gilt
+    300 × 150.
     Sie steht vor dem Zeichnen fest: Der Platz hat sie sofort, ein Block im
     Stream ab seinem vollständigen `<svg …>`-Tag (`warm(partial, place)`).
     `currentColor` ist die Tinte des Themas. **Papier (`paperFor`):** Der
@@ -2767,7 +2781,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     höchstens `MAX_CHARS`, kein `<!ENTITY`, `<svg>`-Wurzel), gibt ihm eine
     Bildmarke (`f1` …, `shown_as: picture`) und legt `picture: "svg"` mit
     `width`/`height` ab (`svg.size`, dieselbe Rechnung wie `measure`; beide
-    Seiten lesen `tests/fixtures/svg_sizes.json`). Der Typ bleibt
+    Seiten lesen `tests/fixtures/svg_sizes.json`). `size` gibt `html.parser`
+    nur den Wurzel-Tag (`_ROOT_TAG`): Markup dahinter liest er in
+    quadratischer Zeit (CVE-2025-6069), manches lässt ihn werfen; ein Tag,
+    den der Text nie beendet, oder ein Fehler des Parsers heißt kein Bild. Der Typ bleibt
     `application/octet-stream` und die Auslieferung ein Download
     (`file_mime`): Als `image/svg+xml` würde jeder Weg, der die Datei öffnet,
     ihr Skript als consens.io ausführen. Der Browser zeichnet sie aus ihren
@@ -2885,7 +2902,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     `tag_attribute_values`), ein geschlossener ` ```xml `-Block oder einer
     ohne Sprache mit SVG-Wurzel heißt `language-svg` (`is_svg`), und ein
     `<svg>`-Element im Text wird über die Block-Regel `_svg_element` zum
-    Codeblock `svg` (sonst stünde sein Markup als Text da, `html=False`);
+    Codeblock `svg` (sonst stünde sein Markup als Text da, `html=False`;
+    Worte hinter `</svg>` auf seiner Zeile werden der Absatz darunter);
     `code-highlight.js` lässt `mermaid` und `svg` aus. `templates/partials/answer_blocks.html` bindet
     das Skript nur ein, wenn `page_has_diagram()`
     (`app/core/answer_assets.py`) die Marke im Template-Kontext findet;
