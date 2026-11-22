@@ -1070,6 +1070,28 @@ def test_a_look_at_the_deleted_vm_that_fails_is_asked_again(store, fake_vm, monk
     assert record["restored_by"] == "replace" and record["sign_ins"] == [] and record["secret_names"] == []
 
 
+def test_a_vm_made_anew_under_the_workspace_name_brings_back_no_checkpoint_of_the_old(store, fake_vm, monkeypatch):
+    """A VM made under the workspace's name (the old one deleted outside
+    this process, its probe got 404) has a disk of its own and numbers its
+    checkpoints from the start again: an older message's checkpoint would
+    name another state there (its Restore, heal)."""
+    _, turn_vm = stuck_after_a_message(store, fake_vm)
+    assert agent_workspace.restorable(agent_workspace.record(store.db, UID), turn_vm)
+    agent_vm._probe_began[NAME] -= agent_vm.PROBE_SECONDS
+    monkeypatch.setattr(agent_workspace, "heal_later", lambda db, uid, **kwargs: None)
+    del fake_vm.vms[NAME]
+
+    def reach(self, name):
+        self.vm.calls.append(("reach", name))
+        if name not in self.vm.vms:
+            raise VMUnavailable("wake: HTTP 404", 404)
+        agent_vm._touch(name)
+    monkeypatch.setattr(_FakeBackend, "reach", reach, raising=False)
+    assert agent_workspace.open_workspace(fake_vm.backend(), UID, db=store.db) == NAME
+    assert NAME in fake_vm.vms
+    assert not agent_workspace.restorable(agent_workspace.record(store.db, UID), turn_vm)
+
+
 def test_a_new_computer_only_for_a_stuck_workspace_and_once_an_hour(store, fake_vm, monkeypatch):
     """What the user's word alone may do (replace_refusal): nothing while
     this process does not know the VM as stuck or its repair still runs

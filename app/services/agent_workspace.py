@@ -628,6 +628,8 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
             if created:
                 # A VM made anew (after one deleted by hand) has no kit.
                 forget_kit(uid)
+                if db is not None:
+                    _new_disk(db, uid)
 
             def setting_up():
                 if created:
@@ -662,6 +664,20 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
 # restore brings back an older disk (mark_restored forgets it); a VM deleted
 # by hand in that time fails its next request, which opens it anew.
 _ready: set[str] = set()
+
+
+def _new_disk(db, uid):
+    """A VM made under the workspace's name has a disk of its own and numbers
+    its checkpoints from the start again: none taken before may come back
+    (restorable), as an old id names another state there (replace). Where
+    the record names none (record_checkpoint), there is nothing to keep
+    away, and a first VM's own first checkpoint stays clear of the floor."""
+    from app.services.agent_runs import AgentRunStore
+    try:
+        if record(db, uid).get("checkpoint"):
+            raise_restore_floor(AgentRunStore(db), uid)
+    except Exception as exc:
+        logging.warning("Agent workspace restore floor not raised category=%s", safe_exception(exc))
 
 
 def _gone(uid):

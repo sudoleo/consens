@@ -3912,7 +3912,10 @@ der VM) und, nur mit der VM, der Checkpoint:
   Konto-Dokument. Die Untergrenze setzen „Log out everywhere“ (vor dem
   Löschen des Profils) und das Löschen eines Chats mit Ordner im Arbeitsplatz
   (`raise_restore_floor`): ein älterer Checkpoint brächte Anmeldungen oder den
-  Ordner zurück. Ein temporärer Chat nimmt keine Checkpoints; sein Löschen
+  Ordner zurück. Ebenso ein Rechner, den `open_workspace` unter dem Namen neu
+  anlegt, während der Datensatz schon einen Checkpoint nennt (`_new_disk`,
+  etwa nach einer von außen gelöschten VM): Er zählt seine Checkpoints wieder
+  ab v1, eine alte Nummer hieße dort ein anderer Stand. Ein temporärer Chat nimmt keine Checkpoints; sein Löschen
   sperrt statt einer Untergrenze nur die Checkpoints seiner Lebenszeit
   (`restore_gaps`, `close_restore_gap`, seit 2026-11-01). Löschen kann die
   REST-API der Sprites Checkpoints nicht; nur ihre Nutzung endet hier. Der Chat merkt sich `agent_vm.restored`; die nächste
