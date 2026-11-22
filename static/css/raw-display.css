@@ -219,6 +219,19 @@ html.raw-display .dark-mode {
     background: transparent !important;
   }
 
+  /* Controls laid see-through over what they act on: the cover that takes
+     the workspace's browser over with one click, a native select over a
+     model's name. A white box there hid the live picture and the name. */
+  html.raw-display :is(.workspace-view-cover, .model-picker-wrapper select) {
+    background-color: transparent !important;
+    border-color: transparent !important;
+  }
+
+  html.raw-display .model-picker-wrapper select {
+    color: transparent !important;
+    appearance: none !important;
+  }
+
   /* A frame says "a control that acts on the page", as a submit button
      would. A row of a list, the actions under an answer, the reviewers'
      icons and the account's name read as text in the text's own font; the
@@ -286,12 +299,11 @@ html.raw-display .dark-mode {
     border-color: GrayText !important;
   }
 
-  /* The reading width is 66ch of Inter; in Times a ch is a fifth narrower,
-     and the column and its tables shrank with it. --inter-ch keeps the
-     design's width in the browser's font. */
+  /* A width in ch is measured in Inter's 0; in Times a ch is a fifth
+     narrower, and the box shrank with it. --inter-ch keeps the design's
+     width in the browser's font. (The answer's text and tables take the
+     column's length, layout.css, and need nothing here.) */
   html.raw-display :is(
-    .consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6),
-    .consensus-answer-body :is(.markdown-table-wrap, .stream-table-pending),
     .agent-pr-card,
     .agent-settings-card,
     .passage-check

@@ -109,6 +109,43 @@ def test_reading_widths_keep_the_designs_measure_in_the_browsers_font():
     assert not missing, "Reading widths in ch without an Inter width in raw-display.css:\n" + "\n".join(missing)
 
 
+# Boxes the design lays clear over the page that are no control; Raw HTML
+# paints no box white that is not a button or a field.
+NOT_CONTROLS = {".app-mobile-header"}
+
+
+def test_see_through_controls_stay_see_through():
+    """A control laid transparent over what it acts on (absolute, inset 0, no
+    background) turned into a white box in Raw HTML, which gives every
+    button and field a surface: the workspace's cover hid its live picture."""
+    clear = " ".join(
+        selector
+        for selector, body in rules(RAW.read_text(encoding="utf-8"))
+        if re.search(r"background-color:\s*transparent", body)
+    )
+    missing = []
+    for sheet in app_stylesheets():
+        if sheet == RAW:
+            continue
+        for selector, body in rules(sheet.read_text(encoding="utf-8")):
+            if "::" in selector:
+                continue
+            covers = (
+                re.search(r"position:\s*absolute", body)
+                and re.search(r"(?<![\w-])inset:\s*0\b", body)
+                and re.search(r"(?<![\w-])background(-color)?:\s*transparent", body)
+            )
+            # Never drawn: no box to paint.
+            if not covers or re.search(r"(?<![\w-])opacity:\s*0\s*(;|$)", body, re.M):
+                continue
+            missing += [
+                f"{sheet.name}: {part}"
+                for part in selector_list(selector)
+                if part not in NOT_CONTROLS and part not in clear
+            ]
+    assert not missing, "See-through controls Raw HTML would paint white:\n" + "\n".join(missing)
+
+
 def test_the_setting_reaches_the_page_before_its_first_paint():
     bootstrap = (STATIC / "js" / "app-bootstrap.js").read_text(encoding="utf-8")
     assert 'classList.toggle("raw-display"' in bootstrap

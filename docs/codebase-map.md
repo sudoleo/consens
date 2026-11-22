@@ -1499,10 +1499,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (Kopf der Seitenleiste und Composer 36 px, Kontozeile 32 px, Icon-Knöpfe
   quadratisch; Senden zeichnet auf Touch seinen Rahmen im 44-px-Trefferfeld
   auf 36 px). Die
-  Lesebreiten in `ch` bekommen über `--inter-ch` ihre Breite in Inter zurück
-  (in Times ist `ch` ein Fünftel schmaler); `tests/test_raw_display.py`
-  verlangt das für jede `max-width` ab 10ch. Tabellen zeichnen wie
-  `border="1"` eine Linie um jede Zelle, ohne Auslauf-Maske.
+  Breiten in `ch` (PR- und Einstellungskarte, Satzprüfung, Login-Zeile)
+  bekommen über `--inter-ch` ihre Breite in Inter zurück (in Times ist `ch`
+  ein Fünftel schmaler); `tests/test_raw_display.py` verlangt das für jede
+  `max-width` ab 10ch. Text und Tabellen der Antwort nehmen die Spaltenbreite
+  (`--app-container-width`) und brauchen das nicht. Tabellen zeichnen wie
+  `border="1"` eine Linie um jede Zelle, ohne Auslauf-Maske. Durchsichtige
+  Bedienelemente über ihrem Ziel (`.workspace-view-cover` über dem Live-Bild,
+  das native Select über einem Modellnamen) bleiben durchsichtig; der Test
+  verlangt das für jede Regel mit `position: absolute`, `inset: 0` und
+  transparentem Grund.
 - **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
