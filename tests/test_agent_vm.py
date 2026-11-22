@@ -1045,6 +1045,31 @@ def test_a_new_computer_never_comes_under_a_message_nor_before_the_old_one_is_go
     assert agent_workspace.start_until(UID) is None
 
 
+def test_a_look_at_the_deleted_vm_that_fails_is_asked_again(store, fake_vm, monkeypatch):
+    """Once the provider took the DELETE the old files are gone. A look at
+    whether the VM is still listed that fails (the API's 5xx, no connection)
+    is asked again like one that still lists it: it ended the replacement,
+    the next start made an empty VM, and no chat was told."""
+    stuck_after_a_message(store, fake_vm)
+    failures, listed = [VMUnavailable("get: HTTP 502", 502)], _FakeBackend.exists
+
+    def exists(self, name):
+        if failures:
+            self._call("exists", name)
+            raise failures.pop()
+        return listed(self, name)
+    monkeypatch.setattr(_FakeBackend, "exists", exists)
+    clock, waits = Clock(), []
+
+    def sleep(seconds):
+        waits.append(seconds)
+        clock.now += seconds
+    assert agent_workspace.replace(store.db, UID, factory=fake_vm.backend, sleep=sleep, clock=clock) is True
+    assert waits == [agent_workspace.REPLACE_GONE_POLL_SECONDS]
+    record = agent_workspace.record(store.db, UID)
+    assert record["restored_by"] == "replace" and record["sign_ins"] == [] and record["secret_names"] == []
+
+
 def test_a_new_computer_only_for_a_stuck_workspace_and_once_an_hour(store, fake_vm, monkeypatch):
     """What the user's word alone may do (replace_refusal): nothing while
     this process does not know the VM as stuck or its repair still runs

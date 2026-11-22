@@ -1765,7 +1765,7 @@ def replace(db, uid, *, factory=None, start=None, sleep=time.sleep, clock=time.m
         raise_restore_floor(store, uid)
         vm.delete(name)
         deadline = clock() + REPLACE_GONE_SECONDS
-        while vm.exists(name):
+        while _listed(vm, name):
             if clock() >= deadline:
                 logging.warning("Agent workspace not replaced, its VM is still there")
                 return False
@@ -1793,6 +1793,17 @@ def replace(db, uid, *, factory=None, start=None, sleep=time.sleep, clock=time.m
             vm.close()
     logging.warning("Agent workspace was stuck and got a new VM seconds=%.1f", clock() - began)
     return True
+
+
+def _listed(vm, name):
+    """Whether the provider still lists the VM replace deleted. A look that
+    fails counts as listed and is asked again: the DELETE was taken, so the
+    old files are gone, and ending there told no chat of it."""
+    try:
+        return vm.exists(name)
+    except agent_vm.VMUnavailable as exc:
+        logging.info("Agent workspace replace could not look category=%s", safe_exception(exc))
+        return True
 
 
 def _forget_old_vm(db, uid):

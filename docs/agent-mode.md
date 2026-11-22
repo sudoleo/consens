@@ -1584,8 +1584,9 @@ dritten Mal in drei Wochen. Seither bietet die Live-Ansicht das selbst an:
   21.11.): nur wenn `in_use` und `healing` falsch sind; `raise_restore_floor`
   zuerst, denn die neue VM zählt ihre Checkpoints wieder ab v1, und eine alte
   Nummer hieße dort ein anderer Stand; `vm.delete` und warten, bis der
-  Anbieter die VM nicht mehr führt (`REPLACE_GONE_SECONDS` = 60 s);
-  `mark_restored(by="replace")` schon hier, weil die alten Dateien von da an
+  Anbieter die VM nicht mehr führt (`REPLACE_GONE_SECONDS` = 60 s; ein
+  Nachsehen, das scheitert, gilt als noch geführt und wird wiederholt,
+  `_listed`); `mark_restored(by="replace")` schon hier, weil die alten Dateien von da an
   weg sind, was immer danach scheitert; die Listen der Anmeldungen und der
   Schlüsselnamen im Datensatz leeren (`_forget_old_vm`); `open_workspace`
   legt neu an und richtet ein; der Browser wird einmal gestartet (`warm`)
