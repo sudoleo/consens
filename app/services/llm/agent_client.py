@@ -338,7 +338,7 @@ def _provider_options(model):
 
 
 def agent_model_options():
-    from app.services.agent_policy import tools_for_model, supports_delegation
+    from app.services.agent_policy import tools_for_model
     catalog = agent_model_metadata.snapshot()
     options = [
         {"id": model.selection_id, "label": model.label, **_provider_options(model),
@@ -350,8 +350,6 @@ def agent_model_options():
          "free_default_effort": _free_default_effort(model, metadata),
          # The level Auto really runs at, by tier (null: not known).
          "auto_effort": auto_efforts(model, metadata),
-         "delegation_by_effort": {effort: supports_delegation(_resolve_effort(model, metadata, effort))
-                                  for effort in _choices(model, metadata)},
          "tools_by_effort": {effort: list(tools_for_model(model))
                              for effort in _choices(model, metadata)}}
         for model, metadata in agent_models(_metadata=catalog)

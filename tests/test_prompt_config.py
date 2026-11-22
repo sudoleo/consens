@@ -89,13 +89,13 @@ LEGACY_PROMPTS = {"agent": "Outdated admin agent prompt.", "answers": "Old answe
 
 def changed():
     config = {"reference_timezone": "America/New_York", "delegation": agent_delegation_config.settings_defaults()}
-    config["delegation"].update(enabled=True, max_agents=3)
+    config["delegation"].update(enabled=True, max_agents=6)
     return config
 
 
 def legacy_document(revision=4):
     """An old Firestore document that still stores admin-edited prompt texts."""
-    delegation = {**agent_delegation_config.settings_defaults(), "max_agents": 3,
+    delegation = {**agent_delegation_config.settings_defaults(), "max_agents": 6,
                   "orchestrator_prompt": "Outdated orchestrator.", "worker_prompt": "Outdated worker."}
     return {"reference_timezone": "UTC", "prompts": dict(LEGACY_PROMPTS), "delegation": delegation,
             "revision": revision, "updated_at": None, "updated_by": "someone"}
@@ -103,13 +103,13 @@ def legacy_document(revision=4):
 
 def assert_code_prompts(config):
     assert config["prompts"] == DEFAULT_PROMPTS
-    assert config["delegation"]["orchestrator_prompt"] == agent_delegation_config.ORCHESTRATOR_PROMPT
+    assert "orchestrator_prompt" not in config["delegation"]
     assert config["delegation"]["worker_prompt"] == agent_delegation_config.WORKER_PROMPT
 
 
 def assert_prompt_free(document):
     assert "prompts" not in document
-    assert not set(agent_delegation_config.PROMPTS) & set(document["delegation"])
+    assert not agent_delegation_config.holds_prompts(document["delegation"])
 
 
 def test_admin_read_is_write_free_and_save_is_versioned_and_audited(client, config_store):
@@ -144,7 +144,7 @@ def test_stored_prompt_texts_are_ignored_on_read(config_store):
     config_store.db.documents[("app_config", "prompts")] = legacy_document()
     config = prompt_config.get_config()
     assert config["revision"] == 4 and config["reference_timezone"] == "UTC"
-    assert config["delegation"]["max_agents"] == 3
+    assert config["delegation"]["max_agents"] == 6
     assert_code_prompts(config)
 
 
@@ -159,7 +159,7 @@ def test_legacy_clients_cannot_store_prompts_and_saving_cleans_old_documents(cli
     assert_prompt_free(response.json()["config"])
     stored = config_store.db.documents[("app_config", "prompts")]
     assert_prompt_free(stored)
-    assert stored["delegation"]["max_agents"] == 3
+    assert stored["delegation"]["max_agents"] == 6
     assert_code_prompts(config_store.read(force=True))
     again = client.put("/api/admin/prompt-config", headers=AUTH, json={"revision": 5, "config": payload})
     assert again.status_code == 200 and again.json()["config"]["revision"] == 5  # Clean documents stay put.
@@ -173,7 +173,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
         "audit_reviewer",
         "agent_vm", "agent_plan",
         "agent_github", "agent_workspace_closed", "answers", "consensus",
-        "delegation_orchestrator", "delegation_worker"]
+        "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
@@ -189,7 +189,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
                                    "AGENT_WRITE_NOTE", "AGENT_READ_SOURCE_PROMPT", "audit_compare", "check_text",
                                    "comparison mode", "audit mode"))
     assert texts["answers"] == ANSWER_SYSTEM_PROMPT and texts["consensus"] == CONSENSUS_SYSTEM_PROMPT
-    assert texts["delegation_orchestrator"] == agent_delegation_config.ORCHESTRATOR_PROMPT
+    assert "delegation_orchestrator" not in texts
     assert texts["delegation_worker"] == agent_delegation_config.WORKER_PROMPT
     comparison = texts["comparison"]
     assert comparison.startswith("You are an independent answer model")

@@ -125,13 +125,14 @@ MIN_QUOTE_CHARS = 4
 # spans more stays unplaced, like one the answer does not hold.
 MAX_MARK_SENTENCES = 3
 # Tools whose calls neither act outward nor change anything: reading the
-# user's files, emails, calendar, settings or the agent's own VM, and keeping
-# its plan. A step that calls only these waits for the next round (with a
+# user's files, emails, calendar, settings or the agent's own VM, keeping
+# its plan, and a helper's task (it only searches and reads; its steps stand
+# in the log the next round reads). A step that calls only these waits for the next round (with a
 # step that does more, QUIET_STEPS of them in a row, or the final round):
 # a halt could not undo or prevent anything they did, and every round sends
 # the reviewer's whole conversation again.
 QUIET_TOOLS = frozenset({"update_plan", "read_settings", "read_file", "read_document", "gmail_read",
-                         "calendar_read", "vm_read_file", "vm_process_output", "vm_view_image", "wait_agents"})
+                         "calendar_read", "vm_read_file", "vm_process_output", "vm_view_image", "delegate"})
 # The browser's actions that only read the page in front or the tabs, like
 # vm_read_file the VM (agent_browser.ACTIONS; workspace_vm/browser/browser.py
 # on_page answers them without acting, settling or navigating). By the

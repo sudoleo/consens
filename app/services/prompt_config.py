@@ -81,9 +81,7 @@ def _holds_prompt_texts(document):
     """True for a legacy document that still stores (ignored) prompt texts."""
     if not document:
         return False
-    delegation = document.get("delegation")
-    return "prompts" in document or (isinstance(delegation, dict)
-                                     and any(key in delegation for key in agent_delegation_config.PROMPTS))
+    return "prompts" in document or agent_delegation_config.holds_prompts(document.get("delegation"))
 
 
 def editable(snapshot):

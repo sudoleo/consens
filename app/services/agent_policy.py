@@ -82,10 +82,3 @@ def supports_client_tools(model):
     return (model.model == "anthropic/claude-haiku-4.5"
             and not reasoning.get("enabled") and not reasoning.get("max_tokens")
             and reasoning.get("effort", "none") == "none")
-
-
-def supports_delegation(model):
-    from app.services.llm.agent_client import _CATALOG
-    capability = _CATALOG["models"].get(model.model, {}).get("delegation", {})
-    return (capability.get("protocol") == "openrouter-reasoning-v1"
-            and model.reasoning_effort in capability.get("tested_efforts", []))

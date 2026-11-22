@@ -733,7 +733,8 @@ def test_comparison_models_answer_at_the_same_time(store):
 
     script = Parallel()
     loop = make_loop(store, script, models=THREE)
-    assert loop.policy.max_parallel == 2
+    # The helpers' slots (max_parallel) never hold back comparison answers.
+    loop.slots = threading.BoundedSemaphore(1)
     list(loop.run())
     review = saved_turn(store, loop)["agent_review"]
     assert [len(c["answers"]) for c in review["comparisons"]] == [3]

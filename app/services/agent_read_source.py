@@ -27,6 +27,7 @@ nachlesen".
 """
 from __future__ import annotations
 
+import contextvars
 from datetime import datetime, timezone
 import json
 import logging
@@ -58,6 +59,10 @@ ENABLED_ENV = "AGENT_READ_SOURCES"
 # fewer steps that each re-send the conversation.
 READS_PER_MESSAGE = 30
 READS_PER_STEP = 5
+# The helper step whose call reads (DelegationLoop._work), else None: a
+# helper's reads count toward its own step, not the agent's step that
+# delegated, which would fill up with every helper's reads at once.
+helper_step = contextvars.ContextVar("helper_step", default=None)
 # Exa cuts a page at about this many tokens (max_content_tokens); a 15-page
 # PDF arrived as 15,900 characters at 4,000 tokens.
 READ_CONTENT_TOKENS = 4000
@@ -474,8 +479,13 @@ class SourceReader:
         if len(attempted) >= READS_PER_MESSAGE:
             raise ValueError(f"This message already read {READS_PER_MESSAGE} sources, the maximum. Continue with "
                              "what you have: write the answer.")
-        if self._steps.get(loop.routing_steps, 0) >= READS_PER_STEP:
+        if self._steps.get(self._step(), 0) >= READS_PER_STEP:
             raise ValueError(f"At most {READS_PER_STEP} sources per step. Continue with what you have.")
+
+    def _step(self):
+        """The step whose reads READS_PER_STEP counts."""
+        step = helper_step.get()
+        return self.loop.routing_steps if step is None else step
 
     def room_for(self, count):
         """Whether ``count`` more reads fit this step's and this message's
@@ -484,7 +494,7 @@ class SourceReader:
         with self.lock:
             attempted = sum(1 for r in self.reads if r["status"] in {"completed", "failed", "running"})
             return (attempted + count <= READS_PER_MESSAGE
-                    and self._steps.get(self.loop.routing_steps, 0) + count <= READS_PER_STEP)
+                    and self._steps.get(self._step(), 0) + count <= READS_PER_STEP)
 
     def _time_budget(self):
         """Seconds this read may take, or a refusal close to the answer deadline."""
@@ -555,7 +565,8 @@ class SourceReader:
                       **({"start": start} if start else {}), **({"fresh": True} if fresh else {})}
             self.reads.append(record)
             self._summaries[record["id"]] = loop.run_summaries
-            self._steps[loop.routing_steps] = self._steps.get(loop.routing_steps, 0) + 1
+            step = self._step()
+            self._steps[step] = self._steps.get(step, 0) + 1
         if not self.direct:
             # A read that takes seconds stands in the saved review while it
             # runs; one straight from Exa is over before the write would be.

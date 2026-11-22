@@ -1,209 +1,142 @@
-# Delegation im Agent-Chat
+# Helfer des Agenten (`delegate`)
 
-Implementierung zur [Spezifikation](agent-delegation-spec.md), Stand 16.09.2026.
-Der ausgewählte Chatagent kann abgegrenzte Aufgaben delegieren. Einfache Fragen
-bleiben direkte Antworten. Consensus ist weder aufgerufen noch verändert.
-Die Funktion ist **standardmäßig aus**, weil der Live-Vergleich das Kostenkriterium
-der Spezifikation nicht erfüllt. Zum gezielten Einsatz kann ein Admin unter
-`/admin#configuration → Agent delegation → Allow delegation` sie aktivieren.
-Die Aktivierung gilt für neue Runs; laufende Runs behalten ihre Konfiguration.
+Der Agent kann abgegrenzte Aufgaben an Helfer geben: eigene Sitzungen eines
+Modells, die suchen und lesen und mit einem Bericht zurückkommen, wie die
+Teilagenten in Claude Code. Der Agent entscheidet selbst, ob er das tut; die App
+zerlegt nichts von sich aus. Die Funktion ist **standardmäßig aus**
+(`/admin#configuration → Agent delegation → Allow helpers`), bis die Messung
+unten trägt. Die Aktivierung gilt für neue Läufe; laufende behalten ihre
+Konfiguration.
 
-## Sitzungen und Kommunikation
+## Das Werkzeug
 
-`agent_delegation.py` erweitert den bestehenden Provider-/Run-Pfad um
-`start_agent`, `send_agent`, `wait_agents`, `stop_agent`, `review_agent`.
-Worker erhalten ausschließlich Auftrag und ausgewählten Kontext und können mit
-`report_to_orchestrator` Zwischenresultate, Blocker und Rückfragen senden.
-Fragen pausieren die Sitzung bis zur Antwort. Nachrichten während einer
-Modellantwort werden an der nächsten gültigen Fortsetzungsgrenze zugestellt.
-Nacharbeit verwendet dieselbe Agent-ID und denselben Gesprächsverlauf.
-Token-Deltas führen nicht zu neuen Orchestrator-Aufrufen. Der Orchestrator kann
-parallel selbst arbeiten oder explizit auf semantische Nachrichten warten.
+`delegate(task, context, file_ids, model, helper_id)` in
+`app/services/agent_delegation.py` (`DelegationLoop.delegate`):
 
-Pro Modellantwort werden maximal vier Toolaufrufe angenommen; sämtliche Resultate
-werden vor der nächsten Modellantwort in der ursprünglichen Reihenfolge geliefert.
-Das ist nötig, weil einzelne Provider trotz `parallel_tool_calls=false` mehrere
-Aufrufe liefern. Die tatsächliche Worker-Parallelität begrenzt ein gemeinsames
-Semaphore. Worker haben keine Delegationstools. Bevor eine finale Antwort gespeichert
-wird, müssen alle Ergebnisse oder unabhängig geprüften Ersatzlösungen mit
-`review_agent` bewertet sein. `accepted=false, use_fallback=true` erlaubt eine
-eigene, ausdrücklich geprüfte Korrektur ohne unnötige Echo-Nacharbeit.
-Die Bewertung durch ein Modell ist keine Garantie fachlicher Richtigkeit.
+- **Wartet auf den Bericht.** Der Aufruf kehrt zurück, wenn der Helfer fertig
+  ist, gescheitert ist oder keine Zeit mehr bleibt. Das Ergebnis ist
+  `{"helper_id", "report", "sources"?, "report_cut"?}` oder
+  `{"helper_id", "status": "failed"|"stopped", "reason"}`.
+- **Nebeneinander.** `delegate` gehört zu den `CONCURRENT_TOOLS`: bis zu vier
+  Aufrufe eines Schritts (`TOOL_CALLS_PER_STEP`) laufen gleichzeitig, die
+  Ergebnisse kommen in der Reihenfolge der Aufrufe. Eine Delegation kostet den
+  Agenten so einen Schritt zum Verteilen und einen zum Weiterarbeiten.
+- **Nächster Auftrag in derselben Sitzung.** Mit `helper_id` geht ein Helfer,
+  der berichtet hat, mit Kontext, Dateien und Modell weiter; seine Sitzung
+  (`Worker.session_key`) liest den Cache des Anbieters. Einem arbeitenden oder
+  beendeten Helfer schreibt man nicht.
+- **Was nicht mehr existiert:** Warten (`wait_agents`), Pflichtabnahme jedes
+  Ergebnisses (`review_agent`), Rückfragen, die den Helfer anhalten
+  (`report_to_orchestrator`), und `start_agent`/`send_agent`/`stop_agent`. Ein
+  Helfer, dem etwas fehlt, schreibt das in seinen Bericht; geprüft wird über
+  die Prüfer, nicht über einen Pflichtschritt des Agenten.
 
-## Provider und Modellwahl
+## Was ein Helfer kann
 
-Fähigkeiten und Tarife stammen aus `llm/agent_model_catalog.json`. Freigegeben sind
-nur explizit geprüfte `delegation.tested_efforts`. Am 16.09. waren echte
-Tool-Fortsetzungen für **Auto/default** mit Haiku 4.5, DeepSeek V4/V4.1 Flash,
-Gemini 3.5 Flash Lite, Grok 4.3 ohne Reasoning und Mistral Small erfolgreich.
-GPT-5.6 Luna ist nach Providerfehler nicht freigegeben. Nicht geprüfte manuelle
-Reasoning-Stufen verwenden weiterhin den bestehenden direkten Chatpfad.
-`GET /agent/models` liefert dies als `delegation_by_effort` aus.
+- Die Werkzeuge des Agenten zum Suchen und Lesen, sofern die Nachricht sie hat
+  (`DelegationLoop._helper_tools`): `web_search` (Exa) und `read_source`. Ohne
+  eigene Suche sucht er im Request des Anbieters. Dateien bekommt er über
+  `file_ids` als Dateiblock.
+- Nichts, was handelt: kein Arbeitsplatz, Browser, Google, Memory,
+  Einstellungen, Watch, Dokumente, `ask_user`, `compare_models` und kein
+  `delegate` (eine Ebene).
+- In Chats mit Google-Daten gilt für ihn dasselbe wie für den Agenten: keine
+  Websuche, nur Modelle mit passendem Routing (`_step`, `restricted_model`).
+- Seine Seiten zählen auf die 30 Lesevorgänge der Nachricht und je
+  Helfer-Schritt auf `READS_PER_STEP` (`agent_read_source.helper_step`), nicht
+  auf den Schritt des Agenten, der delegiert hat.
 
-Die vollständigen Reasoning-/Signaturblöcke werden ausschließlich im flüchtigen
-Provider-Gespräch zur Fortsetzung erhalten. Verschlüsselte Blöcke werden nicht in
-SSE, Seitenleiste oder Datenbank kopiert. Öffentliche Worker-Nachrichten sind eigene
-Toolargumente/Ergebnisse, keine rekonstruierten Denkprotokolle. Grundlage des
-Adapters: [OpenRouter-Fortsetzungsprotokoll](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens)
-und [Toolaufrufe](https://openrouter.ai/docs/guides/features/tool-calling).
+## Modell
 
-## Persistenz, Abbruch und Kosten
+`model: "same"` (Standard) ist das Chatmodell der Nachricht mit seiner
+Denkstufe, `"fast"` das Standardmodell der App (`resolve_agent_model()`).
+Helfer laufen über denselben `_step` wie der Agent; eine eigene Freigabeliste
+je Modell gibt es nicht mehr. Ein Helfer auf dem Modell des Agenten teilt dessen
+Anfragelimits: ein 429 vor jeder Ausgabe (oder die Sperre, die ein anderer
+Aufruf hinterließ) wartet einmal Retry-After ab und versucht es erneut
+(`_helper_step`, wie `_answer_attempt`); ein zweites beendet nur den Helfer.
 
-Die Root-Receipt-ID ist die Run-ID; Agent, Auftrag, Nachricht/Ereignis und
-Modellschritt haben stabile Identitäten. Modellschritte heißen `completion:N`
-oder `agent:<uuid>:N`. Alle Pfade liegen unter dem authentifizierten Nutzer.
-`agent_sessions.py` verwaltet kompakte Dokumente unter
-`chats/{chat}/turns/{turn}/agents/{agent}` und getrennte `messages`-Subcollections.
-Jedes Zustandsereignis trägt eine globale Sequenznummer; seit 2026-11-01 merkt sich
-die Sitzung die IDs ihrer letzten `SESSION_EVENT_IDS` = 8 Updates (`event_ids`,
-nie an den Browser), an denen ein wiederholter mehrdeutiger Commit erkennt, dass er
-schon gespeichert ist. Bis dahin war jedes Ereignis ein eigenes Dokument
-(`agent_events`), das außer dieser Prüfung nichts las: ein Schreib- und ein
-Lesevorgang mehr je Update. Die kurzen Reasoning-Zusammenfassungen bleiben davon getrennt.
+## Prompt
 
-Jeder tatsächliche Provideraufruf erhält genau einen `llm_calls`-Beleg.
-Claim, gemeinsame Token-/Kostenreserve und Account-Zähler werden atomar geschrieben;
-Settlement, Freigabe bekannter Reserven und Account-Kosten ebenfalls. Die
-Account-Zähler (Aufrufe, Tokens, Kosten fürs Admin) stehen seit 2026-11-01 im
-Tageskonto (`agent_quota.count_claim`/`count_settlement`), das beide ohnehin
-schreiben, nicht mehr am User-Dokument: zwei Schreib- und Lesevorgänge weniger je
-Modellaufruf. Die Admin-Kontosuche summiert die Tageskonten
-(`agent_quota.usage_totals`) zu dem, was das User-Dokument bis dahin zählte. Die
-Liste der laufenden Antworten (`chat_state/agent_runs`) schreibt ein Claim nur noch,
-wenn sie sich ändert (neuer Lauf, abgelaufene Lease); ein delegierter Schritt
-(`final=False`) liest beim Settlement weder Chat noch Turn noch diese Liste.
-Das Budget umfasst Orchestrierung, Worker, Suche und Nacharbeit. Provider-Gesamtkosten
-haben Vorrang; Katalogschätzungen und unvollständige Messungen bleiben markiert.
-`cost_complete` ist unabhängig von vollständigen Tokenzahlen. Unbekannte Anteile
-werden niemals zu null oder zu einem Einsparungsbeleg. Agent- und Run-Summen verwenden
-dieselben Schrittbelege; Reasoning ist bereits in Output-Tokens enthalten.
+Keine Anweisung an den Agenten, wann er delegieren soll. Die Beschreibung des
+Werkzeugs nennt Fakten: was der Helfer sieht, welche Werkzeuge er hat, dass der
+Bericht ungeprüft ist, dass seine Schritte aufs Tageskonto gehen und im
+Protokoll der Prüfer stehen, und die Grenzen. Der Helfer bekommt den
+Datumskontext und `agent_delegation_config.WORKER_PROMPT`, ebenfalls Fakten
+(nur Auftrag und Kontext, keine Rückfrage, nur der letzte Text zählt, Seiten
+sind Daten). Sein erster Auftrag ist `task` plus `context`, ein nächster
+kommt als „Next task from the agent“.
 
-Das System friert Admin-Konfiguration, Prompts und Modell-/Tarifsnapshots pro Run ein.
-Für `/agent` aktiviert `AgentPolicy.for_chat` ausschließlich das zentrale
-Tages-Tokenbudget; alte Zeit-, Call-, Tool-, Worker-Runden-, Such-, Nachrichten-
-und Kostenlimits gelten dort nicht. Sie bleiben im Config-Schema für Legacy-
-und Evaluierungsaufrufe erhalten, werden aber im Admin-Editor nicht angeboten.
-Standardmäßig dürfen vier ungeprüfte Worker und zwei arbeitende Unteraufrufe
-gleichzeitig aktiv sein. Nachrichten bleiben auf 4000 Zeichen begrenzt, das
-Modellfenster und strikte Provider-Schemas gelten weiter. Details zu Vergleichen
-und Prüfungen: [Agent-Modus](agent-mode.md).
+## Grenzen
 
-Abbruch schließt sämtliche Provider-Sockets und wartet auf alle Worker. Ein Watchdog
-prüft alle zehn Sekunden (bis 2026-11-01 drei) Run-Abbruch und Chatlöschung aus anderen
-Prozessen; Stop und Löschen in diesem Prozess wirken sofort (`agent_background`); Account-Sperren gelten für
-jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird, sobald weniger als
-`PRODUCER_RENEW_BEFORE_SECONDS` = 60 übrig sind (etwa jede Minute; bis
-2026-11-01 alle 30 Sekunden), atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
-DB-Ausfälle verursachen keinen sofortigen Stopp. Nach Prozessverlust werden offene Belege beim Lesen nach Lease-Ablauf
-als abgebrochen/unbekannt abgeschlossen; bereits bezahlte Schritte werden nie
-neu gestartet. Sitzungsstände (Status, Live-Zeile, Ergebnis) schreibt seit
-2026-10-21 das Journal des Laufs im Hintergrund (`agent_journal.py`, je Sitzung
-in Reihenfolge, seit 10-22 alles Fällige in einer Transaktion,
-`publish_agents`); nur eine neue Sitzung vor ihrem Claim und Nachrichten fürs
-Postfach des Orchestrators warten darauf. Beim Laufende ist alles geschrieben.
-Reload lädt gespeicherte Sitzungen. Ein verlorener HTTP-Stream
-wird aus Sicherheitsgründen abgebrochen, nicht als Hintergrundjob fortgesetzt.
-Chat- und Kontolöschung entfernen auch Sitzungen/Nachrichten; entstandene Account-
-Kosten bleiben bei Chatlöschung bestehen. Verspätete Resultate können gelöschte
-Chats oder abgeschlossene Runs nicht wiederherstellen.
+Admin-Einstellungen (`agent_delegation_config.SETTINGS_DEFAULTS`):
 
-## Oberfläche und API
+| Einstellung | Standard | Wirkung |
+|---|---:|---|
+| `max_agents` | 8 | Helfer je Nachricht |
+| `max_parallel` | 4 | gleichzeitige Modellaufrufe der Helfer (Semaphore `slots`) |
+| `worker_calls` | 12 | Schritte je Auftrag; der letzte läuft ohne Werkzeuge und schreibt den Bericht |
+| `message_chars` | 4000 | Länge eines Auftrags |
 
-`App.agentDelegation` verarbeitet die `delegation`-SSE-Ereignisse. Eine gemeinsame
-Projektion steuert Modell-Icons neben der Aktivität und die rechte Seitenleiste;
-mobil wird sie als ausklappbare Detailfläche angezeigt. Manueller Schließzustand,
-geöffnete Agenten und Scrollposition gelten pro Account und Turn. Bei Kontowechsel
-werden ausstehende Requests verworfen. Texte werden mit `textContent` ausgegeben,
-Quellen nur als validierte HTTP(S)-Links. Escape, native Details/Buttons und
-Reduced Motion werden unterstützt. Stop beendet den ganzen Run.
+Dazu gelten das Tageskonto (gemeinsame atomare Reservierung für Agent, Helfer,
+Suche), die 15 Minuten je Nachricht und die Antwortreserve: Muss die Antwort
+beginnen (`answer_time_left`), stoppt `_helper_report` den Helfer und meldet
+`stopped`. Ein Halt der Prüfer hält auch die Helfer vor ihrem nächsten Schritt
+und Aufruf an (`_helper_hold`). Die Entscheidung des Nutzers erreicht sie
+sofort, nicht erst über `_hold_wait` des Laufs, der ja im `delegate`-Aufruf auf
+sie wartet; ein Stopp oder 30 Minuten ohne Entscheidung beenden sie. Die eigene
+Karte des Agenten (`ask_user`) hält keinen Helfer an. Stop, Chatlöschung und Lease-Ablauf
+beenden alle Helfer über die gemeinsame Abbruchkette.
 
-Zusätzlich transportiert `delegation_progress` flüchtige numerische Zwischenstände
-für Worker, Vergleichsmodelle und Prüfer (bis 2026-10-31 auch Judges). `version`, `chat_id`, `turn_id`,
-`agent_id`, `session_seq` und eine eigene monotone `seq` binden den Stand an die
-aktive Sitzung; `chars`, optionale gemessene `usage` und `streaming` beschreiben
-den laufenden Modellaufruf. Reguläre Updates werden auf 500 ms begrenzt, Start
-und Ende sofort gemeldet. Der Zähler summiert Unicode-Codepoints aus empfangenen
-Antworten und sichtbarem Reasoning über die Schritte derselben Sitzung. Die
-Tokenmessung enthält die abgeschlossenen Schritte plus den aktuellen
-Provider-Snapshot, ohne kumulative Zwischenstände mehrfach zu addieren.
-Diese Zahlen werden weder als Nachrichten/Reasoning noch in Belegen oder dem
-Journal gespeichert. Ein separater Puffer hält nur den neuesten Zwischenstand
-pro Sitzung und belegt keine Plätze in der Queue für dauerhafte Ereignisse.
-Reload und endgültige Usage verwenden weiterhin die persistierten Sitzungen.
+## Sitzungen, Kosten, Protokoll
 
-Owner-/Pro-/Admin-geschützte Endpoints mit `private, no-store`:
+Helfer sind Sitzungen unter `chats/{chat}/turns/{turn}/agents/{agent}` mit
+`messages` (`agent_sessions.py`, geschrieben vom Journal des Laufs,
+`agent_journal.py`). Gespeichert werden Titel (erste Zeile des Auftrags),
+`assignment` (`goal` = Auftrag, `context`), Status (`waiting`, `working`,
+`completed`, `failed`, `stopped`), Berichte (`result`), nächste Aufträge
+(`message`) und das Ende (`failure`). Jeder Modellschritt hat einen eigenen Beleg
+`agent:<id>:N` in `llm_calls`; unbekannte Kosten bleiben unbekannt. Die
+Schritte stehen als `worker:<id>` im Arbeitsprotokoll, das die Prüfer lesen;
+ein Schritt des Agenten, der nur delegiert, löst keine eigene Prüferrunde aus
+(`agent_audit.QUIET_TOOLS`).
 
-- `GET /agent/chats/{chat}/turns/{turn}/agents`: die kompakten Agenten des Turns,
-  Run-Status und bekannte Gesamtkosten.
-- `GET /agent/chats/{chat}/turns/{turn}/agents/{agent}?after=<seq>&limit=25`:
-  Auftrag und paginierte Nachrichten, maximal 50 je Request.
-- `POST /agent/chats/{chat}/turns/{turn}/stop`: persistentes Abbruchsignal; ein
-  Turn dieses Prozesses wird zusätzlich sofort abgebrochen.
-- `POST /agent/chats/{chat}/requests/{request_id}/stop`: dasselbe per
-  Request-Identität (der Stop-Knopf, auch bevor die Turn-ID bekannt ist).
+Endpunkte (Besitzer, `private, no-store`):
+`GET /agent/chats/{chat}/turns/{turn}/agents`,
+`GET …/agents/{agent}?after=<seq>&limit=25`, `POST …/turns/{turn}/stop`,
+`POST /agent/chats/{chat}/requests/{request_id}/stop`.
 
-`/admin#configuration` verwaltet Delegationsregeln und Limits im bestehenden
-revisionsgesicherten Dokument `app_config/prompts.delegation`. Die beiden
-Rollenprompts (`ORCHESTRATOR_PROMPT`, `WORKER_PROMPT` in
-`agent_delegation_config.py`) sind seit 2026-10-07 code-eigen: der Admin zeigt sie
-nur schreibgeschützt, gespeicherte Alttexte werden ignoriert.
-Ältere Dokumente erhalten Defaults; ältere Save-Clients erhalten bereits gespeicherte
-Delegationseinstellungen. Bestehende Turns bleiben unverändert lesbar.
+## Oberfläche
 
-## Nachweise und Qualitäts-/Kostenvergleich
+`App.agentDelegation` (`static/js/agent-delegation.js`) zeigt Helfer in der
+Agenten-Seitenleiste neben Vergleichsmodellen und Prüfern: Icon, Titel, Status,
+Dauer, Verbrauch. Aufgeklappt stehen „Task“ und „Context“, dann „Report“,
+„Next task“ und „Ended“ in zeitlicher Folge. Die Zeitleiste nennt den Aufruf
+„Helper“ (`agent-activity.js`). Die Seitenleiste öffnet nur per Klick.
 
-Deterministischer Abnahmetest: `tests/test_agent_delegation.py` führt zwei parallele
-Worker mit Rückfrage, Antwort, falschem Ergebnis, Korrektur in derselben Sitzung,
-Prüfung und endgültiger Übernahme aus. Weitere Tests prüfen Teilfehler, Kosten,
-Abbruch, Ablauf nach Prozessverlust, doppelte Events, Zugriff und Protokollblöcke.
-Die Firestore-Racetests laufen in `tests/e2e/test_agent_transactions.py`;
-Browser- und JS-Tests prüfen Kontowechsel, Wiederherstellung, doppelte Ereignisse,
-echte Nachrichten und Desktop-/Mobilansichten.
+## Freigabe und Messung
 
-Reproduzierbare Live-Prüfungen (kostenpflichtig, lokale `.env`; keine DB-Writes):
+Am 16.09.2026 maß ein synthetischer Vergleich (sechs Rechen- und
+Extraktionsaufgaben) die damalige Fassung mit Warten und Pflichtabnahme: gleiche
+Qualität, aber 39 statt 18 Modellaufrufe und rund 129 % höhere Kosten
+(`artifacts/agent-delegation-evaluation-deepseek.json`). Das Ziel war damals
+Sparen. Die heutige Fassung zielt auf Tempo und Abdeckung bei breiten Fragen
+und spart die Zwischenschritte, die damals die Kosten trieben.
 
-```powershell
-.\venv\Scripts\python.exe scripts/probe_agent_delegation.py --live
-.\venv\Scripts\python.exe scripts/evaluate_agent_delegation.py --live --worker deepseek-v4.1-flash --repeats 3
-```
+Vor dem Einschalten für alle (braucht Max' Freigabe für bezahlte Läufe):
+12 echte Fragen, 6 breite mit mehreren unabhängigen Strängen und 6 einfache,
+jede mit und ohne Helfer auf demselben Chatmodell. Gemessen werden Zeit bis
+zur Antwort, Kosten aus den Belegen, ob bei einfachen Fragen delegiert wird,
+Marken der Prüfer und ein verblindeter Vergleich der Antworten. Freigabe, wenn
+einfache Fragen unverändert bleiben und breite spürbar schneller oder
+erkennbar besser werden, bei höchstens doppelten Kosten.
 
-(Der Worker-Kandidat des Ergebnisses unten, DeepSeek V4 Flash, migriert seit
-2026-10-15 auf V4.1 Flash; siehe codebase-map, Modellkonfiguration.)
+## Tests
 
-Der Vergleich verwendet denselben Orchestrator ohne und mit Delegation, sechs feste
-synthetische Aufgaben (Arithmetik, Extraktion, zwei unabhängige Tabellen, Planung,
-Regeln, Codeanalyse), exakte maschinelle Prüfkriterien, vollständige Schrittbelege,
-Gesamtkosten und Laufzeiten. Die Reihenfolge wechselt zwischen Wiederholungen.
-Die Tabellenaufgabe verlangt bei verfügbaren Tools explizit getrennte Prüfungen,
-damit die Workerstrategie tatsächlich geprüft wird; die anderen Aufgaben erlauben
-direkte Antworten. Der Datensatz ist mit SHA-256 eingefroren. Er belegt keine Qualität
-für beliebige offene Fragen oder aktuelle Webrecherche. Caching/Routing können die
-gemessenen Gesamtkosten beeinflussen; deshalb keine Hochrechnung einzelner Tarife.
-Freigabe verlangt mindestens drei vollständige Paare pro Aufgabe, keine fehlgeschlagene
-Prüfung, vollständige Providerkosten, tatsächliche Delegation und mindestens 5 %
-Gesamtersparnis mit Ersparnis in jeder Wiederholung. Unbekannte Kosten blockieren
-eine Preispräferenz. Ein gescheiterter Vergleich ändert die Workerwahl nicht automatisch.
-
-### Ergebnis vom 16.09.2026
-
-Orchestrator: DeepSeek V4.1 Flash; Worker-Kandidat: DeepSeek V4 Flash;
-drei Wiederholungen je Aufgabe. [Vollständige Belege](../artifacts/agent-delegation-evaluation-deepseek.json)
-und [Live-Protokollprüfung](../artifacts/agent-delegation-protocol.json).
-
-| Variante | Objektive Prüfungen | Gesamtkosten (Provider) | Modellaufrufe | Summe Laufzeiten |
-|---|---:|---:|---:|---:|
-| Ohne Delegation | 18/18 | 0,007289580 USD | 18 | 138,192 s |
-| Mit Delegation | 18/18 | 0,016690483 USD | 39 | 211,942 s |
-
-Damit **keine Freigabe als Standard oder einer automatischen Preispräferenz**: gleiche Qualität in
-diesem begrenzten Datensatz, aber rund 129 % höhere Gesamtkosten. Die beiden
-Tabellenprüfungen verwendeten tatsächlich zwei Worker; übrige Aufgaben wurden
-direkt gelöst. Die Workerstrategie kostet dort acht statt eines Modellaufrufs.
-Kleine Rechen-, Extraktions- und Regelaufgaben direkt zu lösen ist daher die
-begründete Ausgangswahl. Für umfangreichere unabhängige Aufgaben fehlen noch
-positive Belege; kein allgemeines Einsparungsversprechen.
-
-Ein [einzelner Mistral-Vorlauf](../artifacts/agent-delegation-ledger-check.json)
-zeigte Rechenfehler und wiederholte Nacharbeit. Er diente zur Verbesserung der
-Ersatzlösungs-Schnittstelle und ist wegen anderer Harness-Version und nur einer
-Aufgabe **kein fairer Modell-Rangvergleich** mit dem abschließenden Datensatz.
+`tests/test_agent_delegation.py`: zwei Helfer nebeneinander, nächster Auftrag
+in derselben Sitzung, gescheiterter Helfer, 429 mit einem Wiederholversuch,
+letzter Schritt ohne Werkzeuge, Halt hält Helfer, Ablehnungen, Stop,
+Fernstopp, Prozessverlust, Kosten. `tests/test_agent_chat_integrity.py`: der
+Bericht erreicht die Antwort, das Reasoning des Helfers nie.
+`tests/js/agent-delegation.test.mjs` und
+`tests/e2e/test_agent_delegation_frontend.py`: Seitenleiste.

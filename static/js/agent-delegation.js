@@ -5,6 +5,9 @@
   const views = new Map();
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
+  // A helper's messages (agent_delegation.delegate): the agent's next task,
+  // the helper's report, or why it ended. Its first task is its assignment.
+  const helperHeadings = { message: "Next task", result: "Report", failure: "Ended" };
   // Judge calls of the comparison mode's answer check (only in older saved
   // turns) are plumbing: retries and backup models are routine and say
   // nothing about the answer. The panel shows them as ONE row, "Answer
@@ -684,7 +687,7 @@
         try { const task = JSON.parse(context); context = [task.question, task.context].filter(Boolean).join("\n\n"); } catch (_) {}
         const task = node("details", "agent-session-task"); task.append(node("summary", "", "Comparison task"), node("p", "", context)); row.body.append(task); continue;
       }
-      row.body.append(node("h3", "", label), node("p", "", detail.assignment[key]));
+      row.body.append(node("h3", "", !agent.kind && key === "goal" ? "Task" : label), node("p", "", detail.assignment[key]));
     }
     // A reviewer's sessions follow one another: their messages in time order.
     if (agent.kind === "audit") reviewTimeline(row.body, [...detail.messages.values()].sort((a, b) =>
@@ -703,7 +706,7 @@
         if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
         if (message.kind === "result") item.append(node("h3", "", "Answer"));
         if (message.kind === "partial") item.append(node("h3", "", "Incomplete answer · not used"));
-      } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
+      } else item.append(node("h3", "", (!agent.kind && helperHeadings[message.kind]) || `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);
       else text.textContent = message.text;

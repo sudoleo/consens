@@ -770,13 +770,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Startansicht und Gespräch sowie Desktop-Sidebar offen/geschlossen.
       Composer und Inhalt bleiben bündig, ohne horizontalen Overflow;
       Desktop-/Mobil-Screenshots in Hell und Dunkel visuell kontrolliert.
-- [x] Delegation (16.09.2026): zwei parallele Worker, Rückfrage/Antwort und
-      Nacharbeit derselben Sitzung im Integrationstest; getrennte Kosten pro
-      Agent und Run, atomare Firestore-Reservierung und Deduplizierung geprüft.
+- [x] Helfer (`delegate`): zwei Helfer nebeneinander und ein nächster Auftrag
+      in derselben Sitzung im Integrationstest; getrennte Kosten pro
+      Helfer und Run, atomare Firestore-Reservierung und Deduplizierung geprüft.
       Agenten-Seitenleiste bei 1440/390/320 px in Hell/Dunkel mit echten Browser-
       Renderern geprüft: Nachrichten, gespeicherte Ansichten, Schließen/Escape,
-      Kontowechsel und kein horizontaler Overflow. Live-Protokolle und begrenzter
-      Qualitäts-/Kostenvergleich siehe `agent-delegation.md`.
+      Kontowechsel und kein horizontaler Overflow. Die bezahlte Messung vor dem
+      Einschalten steht in `agent-delegation.md`.
 - [ ] Agent Beta: mit Free-, Pro- und Admin-Konto auswählen (seit 2026-10-02
       jedes angemeldete Konto), Text senden, Folgefrage und
       gespeicherten Chat öffnen; eingebettete Vergleiche und Prüfungen bleiben

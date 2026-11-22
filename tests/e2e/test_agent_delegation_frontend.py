@@ -140,10 +140,10 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.route(f"**/agent/chats/{chat}/turns/{turn}/agents", lambda r: _json(r, {"agents": agents, "status": "succeeded", "usage": usage}))
         def details(route):
             requests.append(route.request.url)
-            _json(route, {"agent": {"assignment": {"goal": "Check the premise against the supplied material.", "acceptance_criteria": "Cite the relevant passage."}},
-                "messages": [{"id": "m1", "seq": 1, "sender": "orchestrator", "recipient": first, "kind": "message", "text": "Check the premise for Germany."},
-                    {"id": "m2", "seq": 2, "sender": first, "recipient": "orchestrator", "kind": "question", "text": "Does the exception apply?"},
-                    {"id": "m3", "seq": 3, "sender": "orchestrator", "recipient": first, "kind": "answer", "text": "Yes, apply the stated exception."}], "has_more": False})
+            _json(route, {"agent": {"assignment": {"goal": "Check the premise against the supplied material.", "context": "Cite the relevant passage."}},
+                "messages": [{"id": "m1", "seq": 1, "sender": first, "recipient": "orchestrator", "kind": "result", "text": "Does the exception apply?"},
+                    {"id": "m2", "seq": 2, "sender": "orchestrator", "recipient": first, "kind": "message", "text": "Check the premise for Germany."},
+                    {"id": "m3", "seq": 3, "sender": first, "recipient": "orchestrator", "kind": "result", "text": "Yes, apply the stated exception."}], "has_more": False})
         page.route(f"**/agent/chats/{chat}/turns/{turn}/agents/*", details)
         def answer(route):
             body = route.request.post_data_json
@@ -203,7 +203,8 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.locator(".agent-session summary").first.click()
         expect(page.locator('.agent-detail-skeleton')).to_be_visible()
         expect(page.locator('.agent-session-detail').first).to_have_attribute('aria-busy', 'true')
-        expect(sidebar).to_contain_text("Orchestrator → Check Germany")
+        expect(sidebar).to_contain_text("Next task")
+        expect(sidebar).to_contain_text("Report")
         expect(sidebar).to_contain_text("Does the exception apply?")
         expect(sidebar).to_contain_text("Yes, apply the stated exception.")
         expect(page.locator('.agent-session-detail').first).to_have_attribute('aria-busy', 'false')

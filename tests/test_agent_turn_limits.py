@@ -278,9 +278,9 @@ def test_three_invalid_rounds_still_end_in_an_answer(store, fail_model):
     assert len(saved["agent_review"]["comparisons"]) == 1
 
 
-def test_repeated_polling_is_not_counted_as_identical_calls(store):
+def test_repeatable_tools_are_not_counted_as_identical_calls(store):
     loop = chat_loop(store, Script())
-    call = {"id": "w", "type": "function", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}
+    call = {"id": "w", "type": "function", "function": {"name": "update_plan", "arguments": '{"steps":[]}'}}
     assert all(loop._identical_call(call) is None for _ in range(10))
     other = {"id": "c", "type": "function", "function": {"name": "read_file", "arguments": '{"b":1,"a":2}'}}
     reordered = {"id": "d", "type": "function", "function": {"name": "read_file", "arguments": '{"a":2,"b":1}'}}
@@ -292,7 +292,7 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     # rendering the same deck again after an edit is checking the edit.
     # The same plan between work steps says where the agent stands; refusing
     # it would end a long VM run at its fourth unchanged plan.
-    assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
+    assert agent_delegation.REPEATABLE_TOOLS == {"vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
                                                  "vm_process_output", "vm_stop_process", "vm_view_image",
                                                  "vm_render_office", "vm_install_packages", "update_plan",

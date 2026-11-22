@@ -155,13 +155,9 @@ _ENTRIES = (
      "Instructions for combining the model responses into the Consensus answer; question, answers, "
      "sources and date context are added at request time.",
      "prompt_defaults.py:CONSENSUS_SYSTEM_PROMPT", lambda: _defaults("consensus")),
-    ("delegation_orchestrator", "Delegation: orchestrator",
-     "Appended to the Agent instructions only when delegation is enabled in the settings AND the selected "
-     "model supports it (off by default).",
-     "agent_delegation_config.py:ORCHESTRATOR_PROMPT", lambda: _delegation("orchestrator_prompt")),
-    ("delegation_worker", "Delegation: worker",
-     "System prompt of a delegated worker session; only used when delegation is enabled AND the model "
-     "supports it (off by default).",
+    ("delegation_worker", "Delegation: helper",
+     "System prompt of a helper the agent starts with delegate, after the date context; only used when "
+     "delegation is enabled in the settings (off by default).",
      "agent_delegation_config.py:WORKER_PROMPT", lambda: _delegation("worker_prompt")),
 )
 

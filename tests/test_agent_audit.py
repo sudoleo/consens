@@ -1924,7 +1924,7 @@ def test_only_a_step_that_calls_a_tool_starts_a_live_round():
     assert work_goes_on([step(json.dumps({"tool_calls": [{"name": "update_plan"}, {"name": "vm_exec"}]}))])
     assert agent_audit.QUIET_TOOLS.isdisjoint({"vm_exec", "vm_write_file", "vm_edit_file", "vm_share_file",
                                                "read_source", "update_memory", "github_import", "prepare_pull_request",
-                                               "prepare_gmail_draft", "create_document", "start_agent"})
+                                               "prepare_gmail_draft", "create_document", "compare_models"})
 
 
 def test_a_quiet_step_rides_with_the_next_round(store):

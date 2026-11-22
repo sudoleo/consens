@@ -413,7 +413,7 @@ def test_memory_changes_also_once_outside_content_is_in_view(store):
     ("github_import", {"repo": "a/b"}, True),
     ("prepare_pull_request", {"status": "prepared"}, True),
     ("vm_exec", {"error": "Unpacking failed in the VM: what a command printed"}, True),
-    ("wait_agents", {"agents": []}, True),
+    ("delegate", {"helper_id": "a", "report": "From a page"}, True),
     ("compare_models", {"answers": []}, True),
     ("a_tool_added_later", {}, True),
     ("read_source", {"status": "refused", "reason": "There is no time left to read a source."}, False),

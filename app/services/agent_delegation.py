@@ -1,4 +1,5 @@
-"""One-level, bidirectional agent sessions with bounded concurrent providers."""
+"""The agent's run: its steps and tools, the comparison answers and reviewers
+beside it, and the helpers it delegates to (one level, docs/agent-delegation.md)."""
 from __future__ import annotations
 
 from collections import deque
@@ -26,7 +27,6 @@ from app.services.agent_costs import aggregate_usage, worst_case_nanos
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
-from app.services.agent_policy import supports_delegation
 from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelDeclined, ModelEmptyAnswer, ModelOutputLimit,
     agent_failure, provider_cooldowns,
@@ -35,7 +35,7 @@ from app.services.agent_tools import ArgumentsTooLong, ReadOnlyTool, ToolRegistr
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
-    AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, resolve_agent_model, running_effort,
+    AgentCompletion, answer_output_limit, lighter_reasoning, resolve_agent_model, running_effort,
     routing_output_limit,
 )
 from app.services.llm import agent_model_metadata
@@ -94,7 +94,7 @@ THINKING_UPDATE_SECONDS = 3
 # and time limits bound them (agent_vm_tools.py). The same plan again between
 # work steps says where the agent stands; refused, it ended a long VM run at
 # its fourth unchanged plan.
-REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
+REPEATABLE_TOOLS = frozenset({"vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
                               "vm_view_image", "vm_render_office", "vm_install_packages", "update_plan", "browser"})
 # Once a tool's result may have brought outside content into the agent's
@@ -197,7 +197,8 @@ CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
 # all (a pause, a limit) still gets the result it read, never "Not run".
 # Not the picture tools: their per-message budgets (agent_web_images) are
 # taken call by call, so two at once could both spend the same room.
-CONCURRENT_TOOLS = frozenset({"web_search", "read_source", "read_file", "search_chats"})
+# delegate: a helper only searches and reads (DelegationLoop._helper_tools).
+CONCURRENT_TOOLS = frozenset({"web_search", "read_source", "read_file", "search_chats", "delegate"})
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
@@ -393,39 +394,16 @@ class StrictArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
-class StartAgent(StrictArgs):
-    title: str = Field(min_length=1, max_length=100)
-    goal: str = Field(min_length=1, max_length=2000)
-    context: str = Field(max_length=12_000)
-    constraints: str = Field(min_length=1, max_length=2000)
-    expected_output: str = Field(min_length=1, max_length=1000)
-    acceptance_criteria: str = Field(min_length=1, max_length=2000)
-    model_id: str = Field(min_length=1, max_length=160)
-    file_ids: list[str] = Field(default_factory=list, max_length=5)
-
-
-class AgentTarget(StrictArgs):
-    agent_id: str = Field(pattern=r"^[a-f0-9]{32}$")
-
-
-class SendAgent(AgentTarget):
-    text: str = Field(min_length=1, max_length=8000)
-    kind: Literal["message", "answer", "rework"] = "message"
-
-
-class WaitAgents(StrictArgs):
-    seconds: int = Field(default=20, ge=0, le=30)
-
-
-class Report(StrictArgs):
-    kind: Literal["question", "blocker", "progress"]
-    text: str = Field(min_length=1, max_length=8000)
-
-
-class ReviewAgent(AgentTarget):
-    accepted: bool
-    check: str = Field(min_length=1, max_length=2000)
-    use_fallback: bool = False
+class Delegate(StrictArgs):
+    task: str = Field(min_length=1, max_length=4000, description=(
+        "What the helper does and what its report holds. With helper_id: your next message to that helper."))
+    context: str = Field(default="", max_length=12_000, description=(
+        "What the helper needs to know: it sees nothing of the chat but this and the task."))
+    file_ids: list[str] = Field(default_factory=list, max_length=5, description="Files of this chat the helper reads.")
+    model: Literal["same", "fast"] = Field(default="same", description=(
+        "same: your model. fast: the app's default model, quicker and cheaper."))
+    helper_id: str = Field(default="", pattern=r"^([a-f0-9]{32})?$", description=(
+        "A helper of this message that reported: it goes on with its task, context and model."))
 
 
 @dataclass
@@ -439,7 +417,8 @@ class Worker:
     thread: object = None
     usages: list = field(default_factory=list)
     calls: int = 0
-    reviewed: bool = False
+    # A helper's steps on its current task (DelegationLoop._work).
+    task_calls: int = 0
     started: float = field(default_factory=time.monotonic)
     stream_chars: int = 0
     # Text the latest step streamed, also when it ended early.
@@ -451,7 +430,8 @@ class Worker:
     # leaves out because the call has ended (_journal_write) is not lost.
     progress: dict | None = None
     result: dict | None = None
-    reviewed_evidence: dict | None = None
+    # How it failed (agent_failure), for the report delegate returns.
+    failure: dict | None = None
     # The OpenRouter session its requests use (worker_completion): its own
     # id, or the id of an earlier session whose conversation it goes on
     # with on the same endpoint (a reviewer's round cut short, agent_audit).
@@ -459,7 +439,7 @@ class Worker:
 
 
 class DelegationLoop(AgentLoop):
-    def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
+    def __init__(self, *, delegation_config, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
                  reviewers="always", temporary=False, watch_run=None, history_summary=None,
@@ -549,7 +529,6 @@ class DelegationLoop(AgentLoop):
         self.settling = None
         # The calls of the batch at hand started beside its first (_prefetch).
         self.prefetched = {}
-        self.mailbox = deque()
         # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
         # those not yet in the conversation.
         self.notes_seen, self.notes = set(), deque()
@@ -634,16 +613,9 @@ class DelegationLoop(AgentLoop):
         # The run's own messages a summary replaced: its work record and
         # evidence still know them (own_messages).
         self.summarized = []
-        # One catalog for all of them: built once per model of the picker,
-        # about 45 times, it was most of a message's work before its first
-        # request.
-        available = agent_models()
-        resolved = {model.selection_id: resolve_agent_model(model.selection_id, models=available) for model, _ in available}
-        self.models = {selection: model for selection, model in resolved.items() if supports_delegation(model)
-                       and (worker_model_ids is None or selection in worker_model_ids)}
-        catalog = [{"id": m.selection_id, "label": m.label, "input_usd_per_million": m.input_usd_per_million,
-                    "output_usd_per_million": m.output_usd_per_million, "context_length": m.context_length}
-                   for m in self.models.values()]
+        # The app's default model for a helper with model "fast", resolved
+        # at its first use (_helper_model).
+        self.fast_model = None
         self.messages[0] = dict(self.messages[0])
         # Whether the agent searches with a tool of its own (agent_web_search.py)
         # in this message. Decided once, like every tool: Exa set aside after
@@ -672,18 +644,14 @@ class DelegationLoop(AgentLoop):
             if temporary:
                 from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
                 self.messages[0]["content"] += "\n\n" + AGENT_TEMPORARY_CHAT_PROMPT
-        if self.config["enabled"] or comparison_models is None:
-            self.messages[0]["content"] += ("\n\n" + self.config["orchestrator_prompt"]
-                + "\nAvailable worker models (server registry): " + json.dumps(catalog))
         if not self.policy.account_budget_only:
             self.messages[0]["content"] += "\nShared run limits: " + json.dumps(self.policy.snapshot())
-        self.registry = ToolRegistry([
-            ReadOnlyTool("start_agent", "Start a bounded subtask in a new worker session. Returns immediately.", StartAgent, self.start_agent),
-            ReadOnlyTool("send_agent", "Send a clarification, answer or rework in the same worker session.", SendAgent, self.send_agent),
-            ReadOnlyTool("wait_agents", "Wait for semantic messages or results. Does not wait on tokens.", WaitAgents, self.wait_agents),
-            ReadOnlyTool("stop_agent", "Stop this worker including its active provider request.", AgentTarget, self.stop_agent),
-            ReadOnlyTool("review_agent", "Record your actual verification of a result or fallback after failure.", ReviewAgent, self.review_agent),
-        ], argument_limit=24_000)
+        # delegate comes with the admin switch, and in a bounded run without
+        # comparison tools. It is registered once the agent's own tools
+        # stand: a helper gets those of them it may use (_helper_tools), and
+        # its description names them.
+        self.delegates = bool(self.config["enabled"] or comparison_models is None)
+        self.registry = ToolRegistry([], argument_limit=24_000)
         self.comparison = None
         self.app_registry = None
         # The agent's own web search as a tool (agent_web_search.py), or None:
@@ -700,8 +668,7 @@ class DelegationLoop(AgentLoop):
             # limit per message stands in the tool's description.
             self.comparison = ComparisonTools(self, comparison_models, preferences=agent_preferences,
                                               reviewers=reviewers, findings=self.findings_to_agent)
-            self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
-                                          *self.comparison.tools], argument_limit=24_000)
+            self.registry = ToolRegistry(self.comparison.tools, argument_limit=24_000)
             # The review: run by the app once the answer is written, never
             # offered to the model.
             self.app_registry = ToolRegistry(self.comparison.app_tools)
@@ -865,6 +832,9 @@ class DelegationLoop(AgentLoop):
             if memory_tools:
                 self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
                                              argument_limit=max(self.registry.argument_limit, 24_000))
+        if self.delegates:
+            self.registry = ToolRegistry([*self.registry.tools.values(), self._delegate_tool()],
+                                         argument_limit=max(self.registry.argument_limit, 24_000))
         # The live work log (agent_work_log.py, docs/agent-work-log.md) of
         # every run with reviewers: what the agent sees and does, written by
         # the app. Saved once the run owns the turn (its first claimed step).
@@ -1451,9 +1421,8 @@ class DelegationLoop(AgentLoop):
 
         ``wait=False``: hand it over and go on; the journal saves it in this
         session's order and sends its event then. A caller that needs the
-        saved event (a new session before its receipt, a worker's message for
-        the orchestrator's mailbox) waits. ``progress``: a live reasoning
-        line, replaced by a newer one while it waits."""
+        saved event (a new session before its receipt) waits. ``progress``: a
+        live reasoning line, replaced by a newer one while it waits."""
         patch = dict(patch or {})
         if worker.state not in {"completed", "failed", "stopped"}:
             patch.setdefault("duration_ms", max(0, int((time.monotonic() - worker.started) * 1000)))
@@ -1463,15 +1432,7 @@ class DelegationLoop(AgentLoop):
         if not wait:
             self.journal.submit(worker, patch, message, wait=False, progress=progress)
             return None
-        event = self.journal.submit(worker, patch, message, wait=True)
-        if sender == worker.id and message and getattr(worker, "kind", "worker") == "worker":
-            with self.condition:
-                if kind == "result":
-                    worker.result = {key: message[key] for key in ("text", "sources", "result_truncated") if key in message}
-                    worker.reviewed_evidence = None
-                self.mailbox.append({**message, "agent_id": worker.id, "message_id": event["id"], "seq": event["seq"]})
-                self.condition.notify_all()
-        return event
+        return self.journal.submit(worker, patch, message, wait=True)
 
     def _journal_write(self, jobs):
         """Saves journal jobs of different sessions in one transaction (on
@@ -1569,108 +1530,126 @@ class DelegationLoop(AgentLoop):
     def _worker(self, agent_id):
         worker = self.workers.get(agent_id)
         if worker is None:
-            raise ValueError("Unknown agent in this run")
+            raise ValueError("No helper of this message has this helper_id.")
         return worker
 
-    def start_agent(self, args, *, cancellation):
+    def _helper_tools(self):
+        """What a helper may use of the agent's own tools: searching and
+        reading the web. Nothing that acts, opens the workspace or reaches
+        the user's accounts, and no delegate: one level."""
+        tools = [self.web_search.tool] if self.web_search is not None else []
+        reader = getattr(self.comparison, "reader", None)
+        return [*tools, reader.tool] if reader is not None else tools
+
+    def _delegate_tool(self):
+        names = [tool.name for tool in self._helper_tools()]
+        can = (" and ".join(names) if names else "the web search inside its own requests") + ", nothing else"
+        return ReadOnlyTool("delegate", (
+            "Give a task to a helper: another session of a model that sees only the task and context you write and "
+            f"the files you name, not this chat. It can use {can}: it acts nowhere and cannot delegate. The call "
+            "returns its report once the helper is done; several delegate calls of one step work side by side. "
+            "The report is the helper's own account, unchecked. Its steps count toward today's allowance and "
+            f"stand in the work log the reviewers read. At most {self.policy.max_agents} helpers per message, "
+            f"{self.policy.worker_calls} steps per task."), Delegate, self.delegate)
+
+    def _helper_model(self, choice):
+        if choice == "same":
+            return self.model
+        if self.fast_model is None:
+            self.fast_model = resolve_agent_model()
+        return self.fast_model
+
+    def delegate(self, args, *, cancellation):
+        """The tool: a new helper, or the next task of one that reported.
+        Returns once the helper reported, failed or ran out of time."""
         self._check(cancellation)
+        if len(args.task) > self.policy.message_chars:
+            raise ValueError(f"task: at most {self.policy.message_chars} characters.")
         with self.condition:
-            active = sum(not w.reviewed and w.state not in {"failed", "stopped"} for w in self.workers.values())
-            if (active if self.policy.account_budget_only else len(self.workers)) >= self.policy.max_agents:
-                raise ValueError("Agent limit reached; use an existing session or finish the work yourself.")
-            if args.model_id not in self.models:
-                raise ValueError("Model has no verified worker tool protocol. Select an offered worker model.")
-            assignment = args.model_dump(exclude={"model_id", "title"})
-            if args.file_ids and not self.file_context:
-                raise ValueError("Files are not available")
-            if self.file_context:
+            if args.helper_id:
+                worker = self._worker(args.helper_id)
+                if args.context or args.file_ids or args.model != "same":
+                    raise ValueError("A helper keeps its context, files and model: with helper_id, send only task.")
+                if worker.state in {"failed", "stopped"} or worker.cancellation.cancelled:
+                    raise ValueError("This helper has ended. Delegate the task anew, without helper_id, or do it "
+                                     "yourself.")
+                if worker.state != "completed" or worker.inbox:
+                    raise ValueError("This helper is still working on its task.")
+                worker.result = None
+                worker.inbox.append(args.task)
+                self._publish(worker, text=args.task, kind="message", wait=False)
+                self._state(worker, "waiting")
+            else:
+                if len(self.workers) >= self.policy.max_agents:
+                    raise ValueError(f"This message has had {len(self.workers)} helpers, the most it may. Go on "
+                                     "with one of them (helper_id) or do the task yourself.")
+                if args.file_ids and not self.file_context:
+                    raise ValueError("Files are not available")
                 for fid in args.file_ids:
                     self.file_context.files.get(self.uid, self.chat_id, fid)
-            encoded = json.dumps(assignment, ensure_ascii=False)
-            if len(encoded) > self.policy.context_chars:
-                raise ValueError("Assignment exceeds the configured context limit")
-            worker = Worker(uuid4().hex, self.models[args.model_id], [
-                {"role": "system", "content": "You are a research worker inside consens.io, a multi-model question-answering app. "
-                    "Complete your assigned supporting task for its Consensus workflow.\n" + self.config["worker_prompt"]},
-                {"role": "user", "content": encoded}])
-            self._publish(worker, patch={"title": args.title, "assignment": assignment, "task_id": uuid4().hex,
-                "model": worker.model.settings(), "status": "waiting", "duration_ms": 0, "usage": None,
-                "created_at": datetime.now(timezone.utc).isoformat()})
-            worker.file_ids = args.file_ids
-            self.workers[worker.id] = worker
-            worker.inbox.append(None)  # Initial assignment is already in the conversation.
-            worker.thread = threading.Thread(target=self._work, args=(worker,), name="agent-worker", daemon=True)
-            worker.thread.start()
-            return {"agent_id": worker.id, "status": "waiting"}
+                if len(args.task) + len(args.context) > self.policy.context_chars:
+                    raise ValueError("Task and context exceed the configured context limit")
+                from app.services import prompt_config
+                from app.services.llm.base import get_date_context
+                question = args.task + (f"\n\nContext from the agent:\n{args.context}" if args.context else "")
+                worker = Worker(uuid4().hex, self._helper_model(args.model), [
+                    {"role": "system", "content": get_date_context(prompt_config.get_config()["reference_timezone"])
+                        + "\n\n" + self.config["worker_prompt"]},
+                    {"role": "user", "content": question}])
+                title = " ".join(args.task.split())
+                self._publish(worker, patch={"title": title if len(title) <= 80 else title[:79].rstrip() + "…",
+                    "assignment": {"goal": args.task, "context": args.context}, "task_id": uuid4().hex,
+                    "model": worker.model.settings(), "status": "waiting", "duration_ms": 0, "usage": None,
+                    "created_at": datetime.now(timezone.utc).isoformat()})
+                worker.file_ids = args.file_ids
+                self.workers[worker.id] = worker
+                worker.inbox.append(None)  # The first task is already in the conversation.
+                worker.thread = threading.Thread(target=self._work, args=(worker,), name="agent-helper", daemon=True)
+                worker.thread.start()
+        return self._helper_report(worker, cancellation)
 
-    def send_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        if len(args.text) > self.policy.message_chars:
-            raise ValueError("Message exceeds the configured limit")
+    def _helper_report(self, worker, cancellation):
+        """Waits for ``worker``'s report. Once the answer must begin
+        (answer_time_left) the helper stops: the agent then writes with what
+        it has instead of losing the answer to the helper."""
+        out_of_time = False
         with self.condition:
-            worker = self._worker(args.agent_id)
-            if worker.state in {"failed", "stopped"} or worker.cancellation.cancelled:
-                raise ValueError("This worker stopped; handle the task yourself or start a replacement.")
-            self._publish(worker, text=args.text, kind=args.kind)
-            worker.inbox.append(args.text)
-            worker.reviewed = False
-            worker.reviewed_evidence = None
-            if worker.state in {"completed", "review", "question", "waiting"}:
-                self._state(worker, "rework" if args.kind == "rework" else "waiting")
-            self.condition.notify_all()
-            return {"agent_id": worker.id, "delivery": "next_model_boundary"}
-
-    def stop_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        worker = self._worker(args.agent_id)
-        worker.cancellation.cancel()
-        with self.condition:
-            self.condition.notify_all()
-        return {"agent_id": worker.id, "status": "stopping", "next": "Verify a fallback with review_agent."}
-
-    def review_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        with self.condition:
-            worker = self._worker(args.agent_id)
-            if worker.state not in {"review", "failed", "stopped", "completed"} or worker.inbox:
-                raise ValueError("Wait for the current result before reviewing it.")
-            self._publish(worker, text=args.check, kind="review")
-            worker.reviewed = args.accepted or args.use_fallback
-            if worker.reviewed:
-                replacement = args.use_fallback or worker.state in {"failed", "stopped"} or worker.result is None
-                worker.reviewed_evidence = ({"text": args.check, "sources": [], "replacement": True}
-                    if replacement else {**worker.result, "replacement": False})
-            else:
-                worker.reviewed_evidence = None
-            if worker.reviewed and worker.state == "review":
-                self._state(worker, "completed", review_outcome="fallback" if args.use_fallback else "accepted",
-                            ended_at=datetime.now(timezone.utc).isoformat())
-            return {"agent_id": worker.id, "accepted": args.accepted, "fallback_verified": args.use_fallback,
-                    "next": "Request targeted rework, or verify your own replacement with use_fallback=true." if not worker.reviewed else "verified"}
-
-    def _mail(self):
-        with self.condition:
-            messages = list(self.mailbox)
-            self.mailbox.clear()
-            return messages
-
-    def wait_agents(self, args, *, cancellation):
-        until = time.monotonic() + args.seconds
-        with self.condition:
-            while not self.mailbox and any(w.state in {"working", "waiting", "rework"} for w in self.workers.values()):
+            while worker.inbox or worker.state not in {"completed", "failed", "stopped"}:
                 self._check(cancellation)
-                left = until - time.monotonic()
-                if left <= 0:
-                    break
-                self.condition.wait(min(.2, left))
-            return {"messages": self._mail(), "agents": self._summaries()}
+                left = self.answer_time_left()
+                if left is not None and left <= 0 and not out_of_time:
+                    out_of_time = True
+                    worker.cancellation.cancel()
+                self.condition.wait(.2)
+            if worker.state == "completed" and worker.result is not None:
+                result = worker.result
+                return {"helper_id": worker.id, "report": result["text"],
+                        **({"sources": result["sources"]} if result.get("sources") else {}),
+                        **({"report_cut": True} if result.get("result_truncated") else {})}
+            if out_of_time:
+                return {"helper_id": worker.id, "status": "stopped",
+                        "reason": "No time was left before the answer: the helper stopped before its report."}
+            ended = ("The helper was stopped before its report." if worker.state == "stopped"
+                     else "The helper failed before its report.")
+            return {"helper_id": worker.id, "status": worker.state,
+                    "reason": str((worker.failure or {}).get("error") or ended)[:500]}
 
-    def _summaries(self):
-        return [{"agent_id": w.id, "status": w.state, "reviewed": w.reviewed} for w in self.workers.values()]
-
-    def _workers_ready(self):
+    def _helper_hold(self, worker):
+        """A reviewer's halt holds the helpers too: none starts a step or a
+        call until the user decided (request_hold). The decision reaches them
+        at once: the run takes it (_hold_wait) only after the delegate call
+        that waits for these very helpers. A stop, or no decision within
+        ``hold_timeout``, ends the helper. The user's own card (ask_user)
+        holds none: the agent asked, the helpers' work goes on."""
         with self.condition:
-            return all(w.reviewed and not w.inbox for w in self.workers.values())
+            while True:
+                hold, decision = self.hold, self.hold_decision
+                if hold is None or hold.get("ask") or decision in {"continue", "steer"}:
+                    return
+                if decision is not None or self.clock() - self.hold_started >= self.hold_timeout:
+                    worker.cancellation.cancel()
+                self._check(worker.cancellation)
+                self.condition.wait(.2)
 
     def _paid_comparison(self):
         """Whether a comparison of this message holds paid answers."""
@@ -1698,18 +1677,9 @@ class DelegationLoop(AgentLoop):
         overdraw after paid work), else None: the refusal ends it."""
         step = getattr(exc, "unclaimed_step", None)
         if not (step and self.merged and self.policy.account_budget_only
-                and (self._paid_comparison() or self._paid_audit()) and self._can_wrap_up()):
+                and (self._paid_comparison() or self._paid_audit())):
             return None
         return int(step.split(":")[1])
-
-    def _report(self, worker, args, *, cancellation):
-        self._check(cancellation)
-        if len(args.text) > self.policy.message_chars:
-            raise ValueError("Report exceeds the configured message limit")
-        self._publish(worker, text=args.text, kind=args.kind, sender=worker.id, recipient="orchestrator")
-        if args.kind in {"question", "blocker"}:
-            self._state(worker, "question")
-        return {"delivered": True, "wait_for_reply": args.kind in {"question", "blocker"}}
 
     @staticmethod
     def _log_rejected_call(call, exc):
@@ -1985,7 +1955,7 @@ class DelegationLoop(AgentLoop):
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
-              server_tools=(), completion=None, answer_candidate=False, hold=False,
+              server_tools=(), completion=None, answer_candidate=False,
               allow_tools=True, answer_output=0, summary=None, avoid_endpoint=""):
         """One claimed, metered model call.
 
@@ -2047,7 +2017,7 @@ class DelegationLoop(AgentLoop):
         # candidate (_candidate_delta, _show_answer); a delegation-only run
         # streams its text.
         publish_text = not worker and not self.comparison
-        stream_answer = answer_candidate and not worker and not hold
+        stream_answer = answer_candidate and not worker
         if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
             raise AnalysisBudgetExceeded("Agent session context limit reached")
         if check_cooldown:
@@ -2137,7 +2107,7 @@ class DelegationLoop(AgentLoop):
             if worker is None:
                 # The agent's previous step is settled before its next claim.
                 self._join_settling()
-            claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
+            claim_policy = self.policy.snapshot()
             try:
                 if self.policy.account_budget_only:
                     clamp_floor = cfg.MAX_TOKENS if getattr(worker, "kind", None) in SEARCHING_KINDS else None
@@ -2272,8 +2242,7 @@ class DelegationLoop(AgentLoop):
             self._check(cancellation)
             status = "succeeded"
             if (stream_answer and self.merged and not value.tool_calls and not getattr(value, "_tool_parts", None)
-                    and value.finish_reason == "stop" and value.text.strip()
-                    and self._workers_ready() and not self.mailbox):
+                    and value.finish_reason == "stop" and value.text.strip()):
                 # The step wrote its answer: one too short to stream
                 # (ANSWER_HOLD_CHARS) shows now, not only after the step's
                 # settlement and _finish_merged.
@@ -2525,9 +2494,14 @@ class DelegationLoop(AgentLoop):
         return value
 
     def _work(self, worker):
+        """A helper's session on its thread: a step, its calls, again, until a
+        step without calls is its report. Its last step on a task
+        (``worker_calls``) runs without tools and writes the report from
+        what it has. A next task (delegate with helper_id) goes on in the
+        same conversation."""
+        from app.services.agent_read_source import helper_step
         unregister = self.cancellation.register(worker.cancellation)
-        registry = ToolRegistry([ReadOnlyTool("report_to_orchestrator", "Report a finding, blocker or question to the orchestrator.",
-            Report, lambda args, cancellation: self._report(worker, args, cancellation=cancellation))], argument_limit=10_000)
+        registry = ToolRegistry(self._helper_tools(), argument_limit=24_000)
         try:
             with bind_provider_cancellation(worker.cancellation), bind_analysis_budget(self.budget):
                 ready = False
@@ -2537,47 +2511,45 @@ class DelegationLoop(AgentLoop):
                             self._check(worker.cancellation)
                             self.condition.wait(.2)
                         self._check(worker.cancellation)
-                        if worker.state in {"review", "completed", "question"}:
-                            self._state(worker, "waiting")
+                        if worker.inbox:
+                            worker.task_calls = 0
                         while worker.inbox:
                             text = worker.inbox.popleft()
                             if text is not None:
-                                worker.messages.append({"role": "user", "content": "Orchestrator message:\n" + text})
-                    if not self.policy.account_budget_only and worker.calls >= self.policy.worker_calls:
-                        raise AnalysisBudgetExceeded("Worker call limit reached")
-                    while not self.slots.acquire(timeout=.2):
-                        self._check(worker.cancellation)
-                    try:
-                        self._state(worker, "working")
-                        generator = self._step(worker.model, worker.messages, f"agent:{worker.id}:{worker.calls}",
-                                               registry, worker.cancellation, worker=worker,
-                                               completion=self.worker_completion(worker))
-                        try:
-                            while True:
-                                next(generator)
-                        except StopIteration as done:
-                            value = done.value
-                        worker.calls += 1
-                    finally:
-                        self.slots.release()
+                                worker.messages.append({"role": "user", "content": "Next task from the agent:\n" + text})
+                    self._helper_hold(worker)
+                    last = worker.task_calls >= self.policy.worker_calls - 1
+                    messages = (with_step_note(worker.messages, "This is your last step on this task: write your "
+                                               "report now from what you have.") if last else worker.messages)
+                    value = self._helper_step(worker, messages, registry, allow_tools=not last)
+                    worker.task_calls += 1
                     worker.messages.append(value.assistant_message())
                     if value.tool_calls:
-                        results = [self._execute(registry, value, worker.cancellation, call) for call in value.tool_calls]
+                        results = []
+                        for call in value.tool_calls:
+                            self._helper_hold(worker)
+                            token = helper_step.set(f"{worker.id}:{worker.calls}")
+                            try:
+                                results.append(self._execute(registry, value, worker.cancellation, call))
+                            finally:
+                                helper_step.reset(token)
                         worker.messages.extend(results)
-                        ready = not any(json.loads(result["content"]).get("wait_for_reply", False) for result in results)
+                        ready = True
                     else:
-                        # A result and a concurrently queued clarification stay ordered.
+                        text = value.text[:self.policy.result_chars]
                         with self.condition:
-                            worker.reviewed = False
-                            self._state(worker, "review", sources=value.sources, finish_reason=value.finish_reason)
-                            self._publish(worker, text=value.text[:self.policy.result_chars], kind="result",
-                                          sender=worker.id, recipient="orchestrator",
+                            worker.result = {"text": text, "sources": value.sources,
+                                             "result_truncated": len(value.text) > self.policy.result_chars}
+                            self._publish(worker, text=text, kind="result", sender=worker.id, recipient="orchestrator",
                                           patch={"result_truncated": len(value.text) > self.policy.result_chars,
-                                                 "sources": value.sources, "finish_reason": value.finish_reason})
+                                                 "sources": value.sources, "finish_reason": value.finish_reason},
+                                          wait=False)
+                            self._state(worker, "completed", sources=value.sources,
+                                        finish_reason=value.finish_reason)
                         ready = False
         except (ProviderCancelled, GeneratorExit):
             if worker.state != "completed":
-                self._terminal(worker, "stopped", "Worker stopped.")
+                self._terminal(worker, "stopped", "Helper stopped.")
         except Exception as exc:
             failure = agent_failure(exc)
             self._terminal(worker, "failed", failure["error"], failure)
@@ -2587,20 +2559,59 @@ class DelegationLoop(AgentLoop):
             if worker.state not in {"completed", "failed", "stopped"}:
                 self._terminal(worker, "stopped", "Run ended.")
 
-    def _terminal(self, worker, state, text, failure=None):
-        """Save how a worker (a comparison answer, a page read) ended.
+    def _helper_step(self, worker, messages, registry, *, allow_tools):
+        """One step of ``worker`` while it holds one of the run's slots. A 429
+        before any output (free), or the cooldown another call's 429 left on
+        the model, waits once and tries again, as the agent's own step does
+        (_answer_attempt): a helper on the agent's model shares its limits,
+        and four of them at once meet them first."""
+        retried = False
+        while True:
+            while not self.slots.acquire(timeout=.2):
+                self._check(worker.cancellation)
+            try:
+                self._state(worker, "working")
+                generator = self._step(worker.model, messages, f"agent:{worker.id}:{worker.calls}", registry,
+                                       worker.cancellation, worker=worker, completion=self.worker_completion(worker),
+                                       searches_enabled=self.web_search is None, allow_tools=allow_tools,
+                                       retry_rate_limit=not retried, check_cooldown=not retried)
+                try:
+                    while True:
+                        next(generator)
+                except StopIteration as done:
+                    value = done.value
+                worker.calls += 1
+                cause = getattr(value, "rate_limited", None)
+            except AgentProviderCooldown as exc:
+                # Refused before its claim: the step index is still free.
+                cause = exc
+            finally:
+                self.slots.release()
+            if cause is None:
+                return value
+            delay = None if retried else self._rate_limit_delay(getattr(cause, "retry_after", None))
+            if delay is None:
+                raise cause
+            retried = True
+            logging.warning("Agent helper rate limited model=%s retry_in=%s", worker.model.model, delay)
+            self._state(worker, "waiting")
+            end = time.monotonic() + delay
+            with self.condition:
+                while (left := end - time.monotonic()) > 0:
+                    self._check(worker.cancellation)
+                    self.condition.wait(min(.2, left))
 
-        A short database outage retries once (_journal_write) and otherwise
-        leaves only this record unsaved: one model's failure never stops the
-        whole turn over a transient write error. Only a delegated worker's
-        end waits for the database: it is a message for the orchestrator's
-        mailbox."""
-        mailbox = getattr(worker, "kind", "worker") == "worker"
+    def _terminal(self, worker, state, text, failure=None):
+        """Save how a worker (a helper, a comparison answer, a page read)
+        ended. A short database outage retries once (_journal_write) and
+        otherwise leaves only this record unsaved: one model's failure never
+        stops the whole turn over a transient write error."""
         try:
             with self.condition:
+                worker.failure = failure
                 self._state(worker, state, ended_at=datetime.now(timezone.utc).isoformat(), failure=failure)
                 self._publish(worker, text=text[:self.policy.message_chars], kind="failure", sender=worker.id,
-                              recipient="orchestrator", wait=mailbox)
+                              recipient="orchestrator", wait=False)
         except Exception as exc:
             with self.condition:
                 worker.state = state
@@ -3531,8 +3542,7 @@ class DelegationLoop(AgentLoop):
         if not self.merged:
             return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                     rate_limit=False, **search))
-        args = {**search, "answer_candidate": True, "hold": self._hold_answer(),
-                "answer_output": self._answer_output()}
+        args = {**search, "answer_candidate": True, "answer_output": self._answer_output()}
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                 rate_limit=bool(self.claimed), **args))
 
@@ -3660,23 +3670,16 @@ class DelegationLoop(AgentLoop):
                 return True
         return False
 
-    def _hold_answer(self):
-        """Whether a step's text must stay hidden while it streams: a text
-        reply now would not be sent (unchecked workers)."""
-        return not self._workers_ready() or bool(self.mailbox)
-
     def _answer_check_follows(self, value):
         """Whether the step that just streamed ``value`` ends the turn with a
         review of exactly its visible text (_finish_merged, _finish_review):
-        a complete answer, shown in full, without tool calls, and nothing
-        left that would take the text back (_workers_ready, mailbox)."""
+        a complete answer, shown in full, without tool calls."""
         comparison = self.comparison
         return bool(comparison is not None and not comparison.text and not comparison.finalized
                     and value.text.strip() and getattr(value, "published", "") == value.text
                     and not value._tool_parts and not value.tool_calls
                     and value.finish_reason not in {"length", "max_tokens"}
-                    and not getattr(value, "output_limited", False)
-                    and self._workers_ready() and not self.mailbox)
+                    and not getattr(value, "output_limited", False))
 
     def _finish_merged(self, value):
         """The agent's text is the answer: visible in full, then fixed as a
@@ -3827,18 +3830,11 @@ class DelegationLoop(AgentLoop):
                 self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
                     {"error": CALL_AT_LIMIT})})
 
-    def _can_wrap_up(self):
-        """Whether a merged turn may close with its answer: the agent's own
-        research and work carry it, once no worker result is unchecked."""
-        return self._workers_ready()
-
     def _merged_wrap_up(self, reason, steps, value):
         """A per-turn limit in a merged turn: one last step of the agent, its
         tools listed but not callable (tool_choice none, prompt cache kept),
         writes the answer from what it has."""
         comparison = self.comparison
-        if not self._can_wrap_up():
-            raise AnalysisBudgetExceeded(reason)
         logging.info("Agent turn limit reached; the agent writes the answer from what it has")
         if not comparison.text:
             self._close_open_calls()
@@ -3974,9 +3970,6 @@ class DelegationLoop(AgentLoop):
                         status = "succeeded"
                         break
                     self.routing_steps += 1
-                    incoming = self._mail()
-                    if incoming:
-                        self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
                     if self._take_notes(f"completion:{index}"):
                         yield from self._events()
                     if self._deliver_findings(f"completion:{index}"):
@@ -4263,16 +4256,6 @@ class DelegationLoop(AgentLoop):
                         if (not (self.comparison and (self.comparison.finalized or self.comparison.text))
                                 and not answered_with_tools):
                             continue
-                    if self.comparison and self.comparison.finalized and self._workers_ready():
-                        # All accepted results are already in the synthesis.
-                        # Old mailbox notifications cannot restart a finished run.
-                        self._mail()
-                    if not self._workers_ready() or self.mailbox:
-                        # No unchecked result can silently become the final response.
-                        if self.merged:
-                            yield from self._retract(value)
-                        self.messages.append({"role": "user", "content": "Before finalizing, resolve questions and verify each worker result or your own replacement with review_agent (use_fallback=true for a verified replacement). Preserve the original user's requested output format, without a workflow recap. Current sessions: " + json.dumps(self._summaries())})
-                        continue
                     if self.hold is not None:
                         # A reviewer's halt still open as the answer stands:
                         # it counts only once the user decided, and their

@@ -27,7 +27,7 @@ from app.services.agent_memory import FirestoreAgentMemoryRepository, MemorySnap
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_sessions import HoldActionRefused, NotesFull
-from app.services.agent_policy import AgentPolicy, supports_delegation
+from app.services.agent_policy import AgentPolicy
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
@@ -631,10 +631,9 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 raise HTTPException(403, "Authorize Gmail for the selected account first.")
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
+        # Helpers run on the chat model or the default one, the same path as
+        # the agent's own steps: the admin switch alone decides.
         delegation_config = config["delegation"]
-        # Comparisons always use the shared bounded loop; worker delegation
-        # retains its separately configured model/protocol feature gate.
-        delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
         # No reviewer chosen ("No cross-check" in the composer): nobody

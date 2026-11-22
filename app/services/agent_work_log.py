@@ -5,13 +5,13 @@ owner read it. While
 the agent works, the app records what it sees and does, never the agent
 itself: the context each model step receives (``context``: the chat's
 history and question, then everything the run adds to the conversation,
-such as the app's hints and workers' messages), the step's readable
+such as the app's hints), the step's readable
 reasoning, text, tool calls and search hits (``step``), every tool result
 (``tool``), the app's own interventions (``app``: a retracted text, a
 pause, the fixed answer), and the run's ``start`` and ``end``.
-Delegated workers write into the same log under their own id. The reviewers,
-the comparison answers and the app's page fetches are not part of it
-(DelegationLoop._log_actor).
+The agent's helpers (delegate) write into the same log under their own id.
+The reviewers, the comparison answers and the app's page fetches are not
+part of it (DelegationLoop._log_actor).
 
 The log only grows: an entry is never changed, a retraction is a new entry.
 One writer thread saves the entries in order, up to BATCH_LIMIT per
@@ -77,8 +77,8 @@ TOOL_DATA = {
     "gmail_read": "google", "calendar_read": "google", "import_gmail_attachment": "google",
     "prepare_gmail_draft": "google", "prepare_calendar_event": "google",
     "update_memory": "memory",
-    "start_agent": "agent", "send_agent": "agent", "wait_agents": "agent", "review_agent": "agent",
-    "stop_agent": "agent", "report_to_orchestrator": "agent",
+    # A helper's report (DelegationLoop.delegate): model output.
+    "delegate": "agent",
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
     "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm", "vm_render_office": "vm",
     "vm_install_packages": "vm", "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
@@ -169,9 +169,8 @@ def context_data(actor, index, own_from, message, text):
     user's questions (with the app's context block) and the agent's earlier
     answers, and after an answer that called tools its work record (the
     app's, record_data). Later user-role messages are never the user's
-    words: the app adds its hints, and workers report to the agent. A
-    worker's user-role messages are the agent's (its assignment and later
-    messages)."""
+    words: the app adds its hints. A helper's user-role messages are the
+    agent's (its tasks, DelegationLoop.delegate)."""
     from app.services.agent_compaction import PICTURE_OPEN, is_summary, is_work_record
     role = message.get("role")
     if role in {"system", "tool"}:

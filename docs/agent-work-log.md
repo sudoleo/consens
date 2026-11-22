@@ -40,7 +40,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 | `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`, bis 2026-11-02), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis), seit 2026-10-30 die Grenze, an der die Arbeit endete (`limit`: `{reason, steps, seconds, text}`, `reason` = `time`, `steps`, `repeat`, `invalid`, `allowance` oder `context`; dieselben Werte ohne `text` als `agent_wrap_up` am Turn, I1), mit der Kontoeinstellung `findings_to_agent` die Zustellung harter Befunde an den Agenten (`findings_delivered`: `phase` `work` vor seinem nächsten Schritt oder `answer` im Korrekturdurchgang, je Befund Kennung, Art, Zahl der Prüfer, Notizen mit Quelle und der Schritt bzw. Satz) und das Ergebnis der Korrektur (`answer_corrected`: je Befund `corrected` mit dem neuen Satz oder `disputed` mit der Begründung des Agenten, `skipped` mit Grund), siehe [agent-mode.md](agent-mode.md) „Befunde an den Agenten“. Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
-Worker (`start_agent`) schreiben in dasselbe Protokoll, mit ihrer ID als
+Helfer (`delegate`) schreiben in dasselbe Protokoll, mit ihrer ID als
 Absender (`worker:<id>`). Nie im Protokoll: die Prüfer, die Antworten der
 Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
 (`DelegationLoop._log_actor`); ihr Ergebnis steht als `tool`-Eintrag darin.
@@ -74,8 +74,9 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   dieses Laufs und die Frage selbst, nie das Arbeitsprotokoll-Résumé eines
   früheren Turns mit Werkzeugaufrufen im Verlauf (`agent_work_record`, Herkunft nach seinen Aufrufen:
   `vm`, sobald einer in der VM lief, sonst `web`, `google`, `file` oder `agent`, `record_data`); was der Lauf danach als Nutzernachricht
-  anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
-  Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`). Das Ergebnis von
+  anhängt, ist von der App (`app`); alles, was ein Helfer liest, ab seinem
+  Auftrag, schrieb der Agent (`agent`), und sein Bericht kommt als Ergebnis von
+  `delegate` (`agent`). Das Ergebnis von
   `compare_models` (seit 2026-10-31) sind die Antworten anderer Modelle
   mit ihren Seiten: `agent`. Prüfer lesen es als Struktur bis
   `agent_audit.COMPARISON_ENTRY_CHARS`, nicht als einen bei `ENTRY_CHARS`
@@ -228,7 +229,7 @@ der Prüfer frei ist (`work_goes_on`); alles, was inzwischen kam, geht mit.
 Ein Schritt, der nur liest oder seinen Plan pflegt (`QUIET_TOOLS`:
 `update_plan`, `read_settings`, `read_file`, `read_document`, `gmail_read`,
 `calendar_read`, `vm_read_file`, `vm_process_output`, `vm_view_image`,
-`wait_agents`), löst seit 2026-10-27 keine eigene Runde aus: Er geht mit der
+`delegate`; die Schritte des Helfers stehen im Protokoll), löst seit 2026-10-27 keine eigene Runde aus: Er geht mit der
 nächsten Runde mit, die ein handelnder Schritt auslöst, spätestens beim
 dritten solchen Schritt in Folge (`QUIET_STEPS`) oder in der Schlussrunde.
 Seit 2026-10-30 gehört dazu auch `browser` mit `read`, `text`, `find`,

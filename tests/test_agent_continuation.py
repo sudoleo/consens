@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import json
 
 import httpx
+from pydantic import BaseModel, ConfigDict
 import pytest
 
 from app.services import agent_sessions, agent_quota
@@ -13,6 +14,7 @@ from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import AgentRunInterrupted
+from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from test_agent_runs import UID, AUTH, api, pending, store, totals, priced
@@ -29,6 +31,19 @@ def chat_loop(store, factory):
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Work through the task."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=factory)
+
+
+class NoArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+def with_plan(loop):
+    """``loop`` with a plan tool that changes nothing (update_plan is one of
+    the REPEATABLE_TOOLS: the same call again is no repeated request)."""
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool(
+        "update_plan", "Keep the plan.", NoArgs, lambda args, cancellation: {"status": "updated"})],
+        argument_limit=loop.registry.argument_limit)
+    return loop
 
 
 def clock(monkeypatch):
@@ -58,15 +73,15 @@ def test_all_turn_steps_and_eighteen_minutes_complete_with_live_lease(store, mon
             self.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, "cost": .000138}, model)
             index = int(self.step_id.split(":")[-1])
             # The old admin max_calls=1 does not apply; the turn's own step
-            # cap (24) does, and identical polling is not a repeated request.
+            # cap (24) does, and the same plan again is not a repeated request.
             if index < loop.policy.turn_steps - 1:
                 self.tool_calls = [{"id": f"wait-{index}", "type": "function", "function": {
-                    "name": "wait_agents", "arguments": '{"seconds":0}'}}]
+                    "name": "update_plan", "arguments": '{}'}}]
                 self.finish_reason = "tool_calls"
             else:
                 self.text, self.finish_reason = "Finished after many rounds.", "stop"
                 yield {"type": "delta", "text": self.text}
-    loop = chat_loop(store, Completion)
+    loop = with_plan(chat_loop(store, Completion))
     assert loop.budget.deadline == float("inf")
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -91,7 +106,7 @@ def test_daily_budget_still_stops_before_any_additional_paid_step_and_saves_reas
             # suite's 250,000 micro-euros). The next step must not be
             # dispatched, even with no per-run caps.
             self.usage = measured_usage({"prompt_tokens": 249990, "completion_tokens": 10, "cost": .2875}, model)
-            self.tool_calls = [{"id": "wait", "type": "function", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}]
+            self.tool_calls = [{"id": "wait", "type": "function", "function": {"name": "delegate", "arguments": '{}'}}]
             self.finish_reason = "tool_calls"
             yield from ()
     loop = chat_loop(store, Completion)

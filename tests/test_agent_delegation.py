@@ -1,4 +1,4 @@
-"""Real session/mailbox execution with deterministic providers; no paid calls."""
+"""Helper sessions (delegate) with deterministic providers; no paid calls."""
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
@@ -21,8 +21,8 @@ from test_agent_loop import packet, transport
 
 
 def assignment(title):
-    return dict(title=title, goal=title, context="A=2, B=3", constraints="Use only these numbers",
-                expected_output="An integer", acceptance_criteria="Check arithmetic", model_id="claude-haiku-4-5")
+    """A helper's session as the store keeps it."""
+    return {"goal": title, "context": "A=2, B=3"}
 
 
 def make_loop(store, factory=AgentCompletion, **kwargs):
@@ -37,63 +37,63 @@ def make_loop(store, factory=AgentCompletion, **kwargs):
         completion_factory=factory, **kwargs)
 
 
+def call(name, data, identity):
+    return {"id": identity, "type": "function", "function": {"name": name, "arguments": json.dumps(data)}}
+
+
+def task_of(messages):
+    """A helper's first task: its conversation's first user message."""
+    return messages[1]["content"].split("\n", 1)[0]
+
+
 class Conversation:
+    """The agent delegates two calculations in one step; the multiply helper
+    reports a wrong product, the agent sends it a next task in the same
+    session, and answers once both reports stand."""
+
     def __init__(self):
         self.gate = threading.Barrier(2)
         self.loop = None
         self.actions = []
-        self.worker_contexts = []
+        self.helper_contexts = []
+        self.agent_messages = []
         self.failure = None
 
     def factory(self):
         plan = self
         class Completion(AgentCompletion):
             def stream(self, *, model, messages, **kwargs):
-                action = None
+                calls = []
                 if self.step_id.startswith("agent:"):
                     index = int(self.step_id.split(":")[-1])
-                    title = json.loads(messages[1]["content"])["goal"]
-                    plan.worker_contexts.append(json.loads(json.dumps(messages)))
+                    task = task_of(messages)
+                    plan.helper_contexts.append(json.loads(json.dumps(messages)))
                     if index == 0:
-                        plan.gate.wait(timeout=5)  # Both paid worker steps really overlap.
-                    if title == "multiply" and index == 0:
-                        action = ("report_to_orchestrator", {"kind": "question", "text": "Multiply A and B?"})
-                    elif title == "multiply" and index == 1:
-                        assert any("Yes, multiply" in m.get("content", "") for m in messages)
+                        plan.gate.wait(timeout=5)  # Both paid helper steps really overlap.
+                    if task == "multiply" and index == 0:
                         self.text = "5"
-                    elif title == "multiply":
-                        assert any("2 times 3" in m.get("content", "") for m in messages)
+                    elif task == "multiply":
+                        assert "Next task from the agent:\nCheck 2 times 3; 5 is incorrect." in messages[-1]["content"]
                         self.text = "6"
                     elif plan.failure:
                         raise plan.failure
                     else:
                         self.text = "5"
                 else:
-                    workers = list(plan.loop.workers.values())
-                    text = json.dumps(messages)
-                    if not workers:
-                        action = ("start_agent", assignment("multiply"))
-                    elif len(workers) == 1:
-                        action = ("start_agent", assignment("sum"))
+                    plan.agent_messages.append(json.loads(json.dumps(messages)))
+                    helpers = {task_of(w.messages): w for w in plan.loop.workers.values()}
+                    if not helpers:
+                        calls = [call("delegate", {"task": "multiply", "context": "A=2, B=3"}, "call_1"),
+                                 call("delegate", {"task": "sum", "context": "A=2, B=3"}, "call_2")]
+                    elif helpers["multiply"].calls == 1:
+                        calls = [call("delegate", {"task": "Check 2 times 3; 5 is incorrect.",
+                                                   "helper_id": helpers["multiply"].id}, "call_3")]
                     else:
-                        a, b = workers
-                        if a.state == "question" and 'Multiply A and B?' in text:
-                            action = ("send_agent", {"agent_id": a.id, "kind": "answer", "text": "Yes, multiply A and B."})
-                        elif a.state == "review" and a.calls == 2:
-                            action = ("send_agent", {"agent_id": a.id, "kind": "rework", "text": "Check 2 times 3; 5 is incorrect."})
-                        elif a.state == "review":
-                            action = ("review_agent", {"agent_id": a.id, "accepted": True, "check": "2 times 3 = 6, independently verified."})
-                        elif b.state in {"review", "failed"} and not b.reviewed:
-                            action = ("review_agent", {"agent_id": b.id, "accepted": True, "check": "Fallback: independently computed 2 + 3 = 5."})
-                        elif all(w.reviewed for w in workers):
-                            self.text = "Product 6; sum 5."
-                        else:
-                            action = ("wait_agents", {"seconds": 2})
+                        self.text = "Product 6; sum 5."
                 self.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, "cost": .0002}, model)
-                if action:
-                    plan.actions.append(action[0])
-                    self.tool_calls = [{"id": "call_" + str(len(plan.actions)), "type": "function",
-                        "function": {"name": action[0], "arguments": json.dumps(action[1])}}]
+                if calls:
+                    plan.actions.extend(c["function"]["name"] for c in calls)
+                    self.tool_calls = calls
                     self.finish_reason = "tool_calls"
                 else:
                     self.finish_reason = "stop"
@@ -101,35 +101,46 @@ class Conversation:
         return Completion()
 
 
-def test_parallel_question_answer_rework_and_review_persist_same_session_and_total_costs(store):
+def tool_results(messages):
+    return {m["tool_call_id"]: json.loads(m["content"]) for m in messages if m.get("role") == "tool"}
+
+
+def test_two_helpers_work_side_by_side_and_a_next_task_goes_on_in_the_same_session(store):
     script = Conversation()
     loop = script.loop = make_loop(store, script.factory)
     events = list(loop.run())
     assert loop.completion.text == "Product 6; sum 5."
-    assert len(loop.workers) == 2
-    assert script.actions.count("start_agent") == 2 and script.actions.count("send_agent") == 2
-    assert all(w.reviewed and not w.thread.is_alive() for w in loop.workers.values())
-    a, b = loop.workers.values()
-    detail = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=a.id)
-    messages = detail["messages"]
-    assert [m["kind"] for m in messages] == ["question", "answer", "result", "rework", "result", "review"]
-    assert [m["text"] for m in messages if m["kind"] == "result"] == ["5", "6"]
-    assert detail["agent"]["assignment"]["goal"] == "multiply"
-    assert any(e.get("agent", {}).get("status") == "question" for e in events)
+    assert len(loop.workers) == 2 and script.actions == ["delegate"] * 3
+    assert all(not w.thread.is_alive() for w in loop.workers.values())
+    multiply = next(w for w in loop.workers.values() if task_of(w.messages) == "multiply")
+    # The reports reach the agent as the calls' results, in the order of its calls.
+    first = tool_results(script.agent_messages[1])
+    assert first["call_1"] == {"helper_id": multiply.id, "report": "5"}
+    assert first["call_2"]["report"] == "5"
+    assert tool_results(script.agent_messages[2])["call_3"] == {"helper_id": multiply.id, "report": "6"}
+    # The helper sees its task and the agent's context, never the agent's chat.
+    helper_view = json.dumps(script.helper_contexts[0])
+    assert "A=2, B=3" in helper_view and "Verify two independent calculations" not in helper_view
+    detail = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=multiply.id)
+    assert [m["kind"] for m in detail["messages"]] == ["result", "message", "result"]
+    assert [m["text"] for m in detail["messages"] if m["kind"] == "result"] == ["5", "6"]
+    assert detail["agent"]["assignment"] == assignment("multiply")
+    assert detail["agent"]["title"] == "multiply" and detail["agent"]["status"] == "completed"
     seqs = [e["seq"] for e in events if e["type"] == "delegation"]
     assert seqs == sorted(set(seqs))
     assert totals(store)["calls"] == loop.costs.calls
     assert totals(store)["estimated_cost_nano_usd"] == loop.costs.calls * 200_000
     assert loop.completion.usage["estimated_cost_nano_usd"] == totals(store)["estimated_cost_nano_usd"]
-    assert detail["agent"]["usage"]["estimated_cost_nano_usd"] == 600_000
+    assert detail["agent"]["usage"]["estimated_cost_nano_usd"] == 400_000
     view = store.delegation_view(UID, loop.chat_id, loop.turn_id)
     assert view["usage"] == loop.completion.usage
-    page = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=a.id, limit=2)
+    page = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=multiply.id, limit=2)
     assert page["has_more"] and len(page["messages"]) == 2
-    next_page = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=a.id, after=page["messages"][-1]["seq"])
-    assert len(next_page["messages"]) == 4
+    next_page = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=multiply.id,
+                                      after=page["messages"][-1]["seq"])
+    assert len(next_page["messages"]) == 1
     with pytest.raises(ChatNotFound):
-        store.delegation_view("other-owner", loop.chat_id, loop.turn_id, agent_id=a.id)
+        store.delegation_view("other-owner", loop.chat_id, loop.turn_id, agent_id=multiply.id)
 
 
 def test_simple_request_does_not_delegate_or_repeat_after_reload(store, monkeypatch):
@@ -138,17 +149,20 @@ def test_simple_request_does_not_delegate_or_repeat_after_reload(store, monkeypa
     loop = make_loop(store)
     list(loop.run())
     assert not loop.workers and len(requests) == 1
+    assert [tool["function"]["name"] for tool in requests[0]["tools"]] == ["delegate"]
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] == []
     assert not store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
                           policy=loop.policy.snapshot(), reservation=(10, priced(10)))
 
 
-def test_worker_failure_reports_unknown_cost_and_orchestrator_can_finish_fallback(store):
+def test_a_failed_helper_reports_why_and_unknown_cost_and_the_agent_still_answers(store):
     script = Conversation()
     script.failure = RuntimeError("Upstream unavailable")
     loop = script.loop = make_loop(store, script.factory)
     list(loop.run())
     assert loop.completion.text == "Product 6; sum 5."
+    failed = tool_results(script.agent_messages[1])["call_2"]
+    assert failed["status"] == "failed" and failed["reason"]
     assert loop.completion.usage["complete"] is False
     assert loop.completion.usage["cost_complete"] is False
     assert totals(store)["unmetered_calls"] == 1
@@ -195,21 +209,6 @@ def test_atomic_durable_and_memory_budget_reservations(store):
         assert sum(pool.map(reserve, range(2))) == 1
 
 
-def test_stop_joins_all_workers_and_accounts_every_started_step(store):
-    script = Conversation()
-    loop = script.loop = make_loop(store, script.factory)
-    source = loop.run()
-    for event in source:
-        if event.get("agent", {}).get("status") == "question":
-            loop.cancellation.cancel()
-            break
-    with pytest.raises(ProviderCancelled):
-        list(source)
-    assert all(not worker.thread.is_alive() for worker in loop.workers.values())
-    assert totals(store)["unsettled_calls"] == 0
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["error_code"] == "cancelled"
-
-
 def test_crashed_process_never_restarts_paid_steps_and_deduplicates_events(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
@@ -242,7 +241,7 @@ def test_reasoning_continuation_preserves_signed_blocks_without_public_exposure(
     encrypted = {"type": "reasoning.encrypted", "index": 0, "id": "wait", "format": "google-gemini-v1", "data": "private-token"}
     requests, _, _ = transport(monkeypatch, [
         [packet({"reasoning_details": [thought]}), packet({"reasoning_details": [encrypted],
-          "tool_calls": [{"index": 0, "id": "wait", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}]},
+          "tool_calls": [{"index": 0, "id": "wait", "function": {"name": "delegate", "arguments": '{}'}}]},
           finish="tool_calls", usage={"prompt_tokens": 10, "completion_tokens": 2, "cost": .001})],
         [packet({"content": "Done"}, finish="stop", usage={"prompt_tokens": 10, "completion_tokens": 2, "cost": .001})],
     ])
@@ -256,7 +255,8 @@ def test_reasoning_continuation_preserves_signed_blocks_without_public_exposure(
 
 
 def test_bounded_parallel_tool_batch_is_replayed_with_every_result(store, monkeypatch):
-    calls = [{"index": i, "id": f"wait_{i}", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}} for i in range(2)]
+    # Refused before any helper starts (no task): each call still gets its result.
+    calls = [{"index": i, "id": f"wait_{i}", "function": {"name": "delegate", "arguments": '{}'}} for i in range(2)]
     requests, _, _ = transport(monkeypatch, [
         [packet({"tool_calls": calls}, finish="tool_calls", usage={"prompt_tokens": 10, "completion_tokens": 2, "cost": .001})],
         [packet({"content": "Done"}, finish="stop", usage={"prompt_tokens": 10, "completion_tokens": 2, "cost": .001})]])
@@ -284,14 +284,14 @@ def test_admin_enabled_delegation_is_frozen_and_replay_does_not_consult_new_conf
     from app.services import prompt_config
     client, store, calls = api
     config = {**prompt_config.defaults(), "revision": 7}
-    assert config["delegation"]["enabled"] is False  # Cost/quality release gate is not met.
+    assert config["delegation"]["enabled"] is False  # Off until the paired measurement passes.
     config["delegation"].update(enabled=True, max_agents=2)
     monkeypatch.setattr(prompt_config, "get_config", lambda: config)
     chat = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat, "question": "Hi", "client_request_id": "enabled", "bookmark_id": "enabled"}
     response = client.post("/agent", json=payload, headers=AUTH)
     assert response.status_code == 200 and "event: final" in response.text, response.text
-    assert any(tool.get("function", {}).get("name") == "start_agent" for tool in calls[0]["tools"])
+    assert any(tool.get("function", {}).get("name") == "delegate" for tool in calls[0]["tools"])
     monkeypatch.setattr(prompt_config, "get_config", lambda: pytest.fail("Replay must use the saved turn"))
     replay = client.post("/agent", json=payload, headers=AUTH).json()
     settings = replay["turn"]["agent_settings"]
@@ -300,75 +300,24 @@ def test_admin_enabled_delegation_is_frozen_and_replay_does_not_consult_new_conf
     assert len(calls) == 1
 
 
-def test_quality_gate_rejects_cheap_bad_unknown_unpaired_or_unused_delegation():
-    from copy import deepcopy
-    from scripts.evaluate_agent_delegation import gate, task_set
-    rows = [{"task": task["id"], "repeat": repeat, "mode": mode, "passed": True, "agents": 2 if mode == "delegation" else 0,
-             "usage": {"cost_complete": True, "cost_source": "provider", "estimated_cost_nano_usd": 100 if mode == "direct" else 80}}
-            for task in task_set() for repeat in range(3) for mode in ("direct", "delegation")]
-    assert gate(rows)["approved"] is True
-    for mutate in (lambda r: r[1].update(passed=False), lambda r: r[1]["usage"].update(cost_complete=False),
-                   lambda r: r.pop(), lambda r: r[1]["usage"].update(estimated_cost_nano_usd=10000)):
-        candidate = deepcopy(rows)
-        mutate(candidate)
-        assert gate(candidate)["approved"] is False
-    assert not gate([r for r in rows if r["task"] == "parallel_ledgers"])["approved"]
-    assert not gate([{**r, "agents": 0} for r in rows])["approved"]
+def test_stop_joins_all_helpers_and_accounts_every_started_step(store):
+    script = Conversation()
+    loop = script.loop = make_loop(store, script.factory)
+    source = loop.run()
+    for event in source:
+        if event.get("agent", {}).get("status") == "completed":
+            loop.cancellation.cancel()
+            break
+    with pytest.raises(ProviderCancelled):
+        list(source)
+    assert all(not worker.thread.is_alive() for worker in loop.workers.values())
+    assert totals(store)["unsettled_calls"] == 0
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["error_code"] == "cancelled"
 
 
-def test_confirmed_own_fallback_finishes_without_echo_rework(store):
-    from app.services.agent_delegation import Worker, ReviewAgent
-    loop = make_loop(store)
-    args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, priced(1)))
-    worker = Worker("a" * 32, loop.model, [], state="review")
-    loop.workers[worker.id] = worker
-    loop._publish(worker, patch={"assignment": {"goal": "Check"}, "status": "review"})
-    result = loop.review_agent(ReviewAgent(agent_id=worker.id, accepted=False, use_fallback=True,
-        check="I independently computed 2 + 3 = 5; the worker's result 6 was wrong."), cancellation=loop.cancellation)
-    assert result["fallback_verified"] and worker.reviewed and worker.state == "completed"
-
-
-def test_message_during_active_generation_is_delivered_at_next_boundary(store):
-    from app.services.agent_delegation import StartAgent, SendAgent
-    entered, release, revised = threading.Event(), threading.Event(), threading.Event()
-    class Completion(AgentCompletion):
-        def stream(self, *, model, messages, **kwargs):
-            if self.step_id.endswith(":0"):
-                entered.set()
-                assert release.wait(5)
-                self.text = "Original result"
-            else:
-                assert any("Use period 2025" in m.get("content", "") for m in messages)
-                self.text = "Revised result for 2025"
-                revised.set()
-            self.finish_reason = "stop"
-            self.usage = measured_usage({"prompt_tokens": 20, "completion_tokens": 4, "cost": .001}, model)
-            yield {"type": "delta", "text": self.text}
-    loop = make_loop(store, Completion)
-    args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, priced(1)))
-    store.settle(*args, completion=receipt(), status="succeeded", final=False)
-    try:
-        aid = loop.start_agent(StartAgent(**assignment("Check")), cancellation=loop.cancellation)["agent_id"]
-        assert entered.wait(5)
-        assert loop.workers[aid].state == "working"
-        response = loop.send_agent(SendAgent(agent_id=aid, text="Use period 2025", kind="rework"), cancellation=loop.cancellation)
-        assert response["delivery"] == "next_model_boundary"
-        release.set()
-        assert revised.wait(5)
-    finally:
-        release.set()
-        loop.closed.set()
-        loop.cancellation.cancel()
-        for worker in loop.workers.values():
-            worker.thread.join(timeout=5)
-            assert not worker.thread.is_alive()
-
-
-def test_remote_stop_cancels_a_worker_with_an_active_stream(store, monkeypatch):
+def test_remote_stop_cancels_a_helper_with_an_active_stream(store, monkeypatch):
     """A stop saved by another process reaches the run at its watcher's next
-    look (WATCH_SECONDS, 10 s; shortened here)."""
+    look (WATCH_SECONDS, 10 s; shortened here), also while delegate waits."""
     from app.services import agent_delegation
     from app.services.llm.provider_runtime import current_provider_cancellation
     monkeypatch.setattr(agent_delegation, "WATCH_SECONDS", .2)
@@ -382,8 +331,7 @@ def test_remote_stop_cancels_a_worker_with_an_active_stream(store, monkeypatch):
                     cancellation.raise_if_cancelled()
                     threading.Event().wait(.01)
                     yield {"type": "delta", "text": "still working"}
-            name, data = ("start_agent", assignment("Check")) if self.step_id == "completion:0" else ("wait_agents", {"seconds": 20})
-            self.tool_calls = [{"id": "call", "type": "function", "function": {"name": name, "arguments": json.dumps(data)}}]
+            self.tool_calls = [call("delegate", {"task": "Check"}, "call")]
             self.finish_reason = "tool_calls"
             self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .001}, model)
     loop = make_loop(store, Completion)
@@ -397,38 +345,148 @@ def test_remote_stop_cancels_a_worker_with_an_active_stream(store, monkeypatch):
     assert totals(store)["unsettled_calls"] == 0 and totals(store)["unmetered_calls"] == 1
 
 
-def test_worker_429_can_use_checked_fallback_without_retrying_worker(store):
+def test_a_rate_limited_helper_waits_once_then_reports_why_it_failed(store):
+    """A helper's 429 before any output waits out Retry-After and tries
+    again, as the agent's own step does; a second one ends the helper, not
+    the run. The cooldown lands on the helper's model ("fast" here), never
+    on the agent's next step."""
     from app.services.agent_provider_limits import ProviderCooldowns
     from app.services.llm.engines import _ProviderHTTPStatusError
-    worker_calls = []
-    loop = None
+    helper_calls, sent = [], []
     class Completion(AgentCompletion):
-        def stream(self, *, model, **kwargs):
+        def stream(self, *, model, messages, **kwargs):
             if self.step_id.startswith("agent:"):
-                worker_calls.append(self.step_id)
-                raise _ProviderHTTPStatusError(429, retry_after=10)
-            workers = list(loop.workers.values())
-            if not workers:
-                name, data = "start_agent", {**assignment("Check"), "model_id": "mistral-small-latest"}
-            elif workers[0].state == "failed" and not workers[0].reviewed:
-                name, data = "review_agent", {"agent_id": workers[0].id, "accepted": False,
-                    "use_fallback": True, "check": "Independently checked 2 + 3 = 5."}
-            elif workers[0].reviewed:
-                self.text, self.finish_reason = "5", "stop"
-                name = None
-            else:
-                name, data = "wait_agents", {"seconds": 2}
+                helper_calls.append((self.step_id, model.model))
+                raise _ProviderHTTPStatusError(429, retry_after=.1)
+            sent.append(messages)
             self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .001}, model)
-            if name:
-                self.tool_calls = [{"id": "call", "type": "function", "function": {"name": name, "arguments": json.dumps(data)}}]
+            if len(sent) == 1:
+                self.tool_calls = [call("delegate", {"task": "Check 2 + 3", "model": "fast"}, "call")]
                 self.finish_reason = "tool_calls"
+                return
+            self.text, self.finish_reason = "5", "stop"
             yield {"type": "delta", "text": self.text}
     loop = make_loop(store, Completion, cooldowns=ProviderCooldowns())
     events = list(loop.run())
-    assert loop.completion.text == "5" and len(worker_calls) == 1
+    assert loop.completion.text == "5"
+    assert len(helper_calls) == 2 and helper_calls[0][1] != loop.model.model
+    [helper] = loop.workers.values()
+    assert [step for step, _ in helper_calls] == [f"agent:{helper.id}:0", f"agent:{helper.id}:1"]
+    result = tool_results(sent[1])["call"]
+    assert result["status"] == "failed" and result["helper_id"] == helper.id
     assert any(e.get("agent", {}).get("failure", {}).get("code") == "provider_rate_limited"
                for e in events if e.get("agent", {}).get("failure"))
     assert loop.completion.usage["cost_complete"] is True
+
+
+def test_a_helpers_last_step_on_a_task_writes_its_report_without_tools(store):
+    seen = []
+    class Completion(AgentCompletion):
+        def stream(self, *, model, messages, allow_tool_calls=True, **kwargs):
+            self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .001}, model)
+            if self.step_id.startswith("agent:"):
+                seen.append((allow_tool_calls, messages[-1]["content"]))
+                if allow_tool_calls:
+                    self.tool_calls = [call("web_search", {"queries": ["2 + 3"]}, f"search_{len(seen)}")]
+                    self.finish_reason = "tool_calls"
+                    return
+                self.text, self.finish_reason = "Report: 5", "stop"
+            elif self.step_id == "completion:0":
+                self.tool_calls = [call("delegate", {"task": "Check 2 + 3"}, "call")]
+                self.finish_reason = "tool_calls"
+                return
+            else:
+                self.text, self.finish_reason = "5", "stop"
+            yield {"type": "delta", "text": self.text}
+    loop = make_loop(store, Completion)
+    loop.policy = replace(loop.policy, worker_calls=3)
+    list(loop.run())
+    assert [allowed for allowed, _ in seen] == [True, True, False]
+    assert "last step on this task" in seen[-1][1]
+    assert tool_results(loop.messages)["call"]["report"] == "Report: 5"
+
+
+def test_a_reviewers_halt_holds_the_helpers_until_the_user_decides(store):
+    started = threading.Event()
+    class Completion(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            started.set()
+            self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .001}, model)
+            self.text, self.finish_reason = "Report", "stop"
+            yield {"type": "delta", "text": self.text}
+    from app.services.agent_delegation import Delegate
+    loop = make_loop(store, Completion)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, priced(1)))
+    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    loop.hold, loop.hold_started = {"id": "halt", "reasons": []}, loop.clock()
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            report = pool.submit(loop.delegate, Delegate(task="Check"), cancellation=loop.cancellation)
+            assert not started.wait(.6)
+            # The user's decision reaches the helpers while the card is still
+            # open: the run takes it only after the delegate call that waits.
+            with loop.condition:
+                loop.hold_decision = "continue"
+                loop.condition.notify_all()
+            assert report.result(timeout=5)["report"] == "Report"
+            # A stop ends a held helper; the agent hears why.
+            started.clear()
+            with loop.condition:
+                loop.hold, loop.hold_decision = {"id": "halt2", "reasons": []}, None
+            stopped = pool.submit(loop.delegate, Delegate(task="Check again"), cancellation=loop.cancellation)
+            assert not started.wait(.4)
+            with loop.condition:
+                loop.hold_decision = "stop"
+                loop.condition.notify_all()
+            assert stopped.result(timeout=5)["status"] == "stopped" and not started.is_set()
+            # The user's own card (ask_user) holds none.
+            with loop.condition:
+                loop.hold, loop.hold_decision = {"id": "ask", "ask": {"question": "Which?"}}, None
+            assert pool.submit(loop.delegate, Delegate(task="Third"),
+                               cancellation=loop.cancellation).result(timeout=5)["report"] == "Report"
+    finally:
+        loop.closed.set()
+        loop.cancellation.cancel()
+        for worker in loop.workers.values():
+            worker.thread.join(timeout=5)
+
+
+def test_delegate_refuses_what_a_helper_cannot_do(store):
+    from types import SimpleNamespace
+    from app.services.agent_delegation import Delegate, Worker
+    loop = make_loop(store)
+    with pytest.raises(ValueError, match="No helper"):
+        loop.delegate(Delegate(task="Again", helper_id="a" * 32), cancellation=loop.cancellation)
+    working = loop.workers["b" * 32] = Worker("b" * 32, loop.model, [], state="working")
+    with pytest.raises(ValueError, match="still working"):
+        loop.delegate(Delegate(task="Again", helper_id=working.id), cancellation=loop.cancellation)
+    with pytest.raises(ValueError, match="only task"):
+        loop.delegate(Delegate(task="Again", context="More", helper_id=working.id), cancellation=loop.cancellation)
+    working.state = "failed"
+    with pytest.raises(ValueError, match="has ended"):
+        loop.delegate(Delegate(task="Again", helper_id=working.id), cancellation=loop.cancellation)
+    loop.policy = replace(loop.policy, max_agents=1)
+    with pytest.raises(ValueError, match="the most it may"):
+        loop.delegate(Delegate(task="New"), cancellation=loop.cancellation)
+    # The description names what a helper has; in a run with its own search
+    # and reading the tools themselves.
+    assert "web search inside its own requests" in loop.registry.tools["delegate"].description
+    loop.web_search = SimpleNamespace(tool=SimpleNamespace(name="web_search"))
+    assert "It can use web_search, nothing else" in loop._delegate_tool().description
+
+
+def test_a_helpers_page_reads_count_toward_its_own_step():
+    from types import SimpleNamespace
+    from app.services.agent_read_source import SourceReader, helper_step
+    reader = SourceReader.__new__(SourceReader)
+    reader.loop = SimpleNamespace(routing_steps=3)
+    assert reader._step() == 3
+    token = helper_step.set("a" * 32 + ":0")
+    try:
+        assert reader._step() == "a" * 32 + ":0"
+    finally:
+        helper_step.reset(token)
 
 
 def test_one_update_the_database_refuses_costs_no_other_session_of_its_batch(store, monkeypatch):
@@ -651,10 +709,6 @@ def reads_beside(store, read, *, calls=2, policy=None):
     loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("read_file", "Read.", Args, read)],
                                  argument_limit=loop.registry.argument_limit)
     return loop, sent
-
-
-def tool_results(messages):
-    return {m["tool_call_id"]: json.loads(m["content"]) for m in messages if m.get("role") == "tool"}
 
 
 def test_a_read_started_beside_that_breaks_gets_not_run_once_the_batch_stopped(store):

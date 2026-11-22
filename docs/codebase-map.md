@@ -607,7 +607,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Modellkatalog (jedes angemeldete Konto, Premium-Modelle Pro) aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, seit 2026-10-31 jedes Turns, lesbar für seinen Besitzer, siehe „Ein Modus“ → „Arbeitsprotokoll“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/requests/{request_id}/notes` (Nachricht in den laufenden Lauf, jeder Agent-Lauf seit 2026-11-15, vorher nur mit VM; optional `now`) und `POST …/notes/{note_id}/now` („Send now“: bricht den laufenden Schritt für sie ab; 404 unbekannte Notiz, 409 `not_running`; siehe §4 „Nachsteuern während des Laufs“; Browser: `agent-chat.js` `steer`/`hurry`, sichtbare Warteschlange `#agentQueue`, Ungelesenes geht danach als nächste Nachricht), `POST /agent/chats/{chat}/requests/{request_id}/hold` (Entscheidung des Nutzers, wenn ein Prüfer die Arbeit pausiert hat: `continue`/`stop`/`steer`, seit 2026-10-26, seit 2026-11-07 mit der gesehenen `revision` der Karte; seit 2026-10-27 `deny` für eine Domain, um die der Agent bat, und seine eigene Frage; seit 2026-10-29 sonst 422 `invalid_action`, `agent_sessions.deniable`; seit 2026-10-30 `choose` mit `choice` (Index) auf der Auswahlkarte des Agenten, dort nur das, `stop` oder `steer`, `agent_sessions.check_answer`; siehe „Ein Modus“ → „Aussteuern“), `POST /agent/chats/{chat}/turns/{turn}/vm-restore` (Arbeitsplatz auf den Checkpoint vor dieser Nachricht, Konten mit VM (`vm_allowed`), seit 2026-10-26; seit 2026-10-27 nur Checkpoints, die `agent_workspace.restorable` erlaubt, sonst 409 `expired`), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); `compare_models` und die Prüfer der Antwort im gemeinsamen Tageskonto (siehe §4 „Agent · Beta“ und „Ein Modus“). `agent_preferences` im Body wird seit 2026-10-31 angenommen und ignoriert. `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). Seit 2026-11-03 ist der Kern `start_agent_turn(uid, payload, watch_run=None)`: `POST /agent` ruft ihn mit dem Konto aus dem Token, der Takt einer Agent-Watch (`agent_watches.start_run`) mit `watch_run` (ohne Senderate-Limit, nur die neuesten `agent_watches.HISTORY_CHARS` Zeichen des Chats über `AgentRunStore.messages(history_chars=…)`, `agent_watches.run_context` im App-Kontext, `DelegationLoop(watch_run=…)`, am Ende des Produzenten `agent_watches.turn_ended`); ein Lauf ohne Befund und ohne Ende aktualisiert den Seitenleisten-Eintrag nicht (`_quiet_watch_run`). |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Modellkatalog (jedes angemeldete Konto, Premium-Modelle Pro) aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Helfer des Agenten (`delegate`, nur mit dem Admin-Schalter) mit eigenen Sitzungen, Seitenleiste und dem gemeinsamen Tageskonto; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, seit 2026-10-31 jedes Turns, lesbar für seinen Besitzer, siehe „Ein Modus“ → „Arbeitsprotokoll“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/requests/{request_id}/notes` (Nachricht in den laufenden Lauf, jeder Agent-Lauf seit 2026-11-15, vorher nur mit VM; optional `now`) und `POST …/notes/{note_id}/now` („Send now“: bricht den laufenden Schritt für sie ab; 404 unbekannte Notiz, 409 `not_running`; siehe §4 „Nachsteuern während des Laufs“; Browser: `agent-chat.js` `steer`/`hurry`, sichtbare Warteschlange `#agentQueue`, Ungelesenes geht danach als nächste Nachricht), `POST /agent/chats/{chat}/requests/{request_id}/hold` (Entscheidung des Nutzers, wenn ein Prüfer die Arbeit pausiert hat: `continue`/`stop`/`steer`, seit 2026-10-26, seit 2026-11-07 mit der gesehenen `revision` der Karte; seit 2026-10-27 `deny` für eine Domain, um die der Agent bat, und seine eigene Frage; seit 2026-10-29 sonst 422 `invalid_action`, `agent_sessions.deniable`; seit 2026-10-30 `choose` mit `choice` (Index) auf der Auswahlkarte des Agenten, dort nur das, `stop` oder `steer`, `agent_sessions.check_answer`; siehe „Ein Modus“ → „Aussteuern“), `POST /agent/chats/{chat}/turns/{turn}/vm-restore` (Arbeitsplatz auf den Checkpoint vor dieser Nachricht, Konten mit VM (`vm_allowed`), seit 2026-10-26; seit 2026-10-27 nur Checkpoints, die `agent_workspace.restorable` erlaubt, sonst 409 `expired`), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); `compare_models` und die Prüfer der Antwort im gemeinsamen Tageskonto (siehe §4 „Agent · Beta“ und „Ein Modus“). `agent_preferences` im Body wird seit 2026-10-31 angenommen und ignoriert. `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). Seit 2026-11-03 ist der Kern `start_agent_turn(uid, payload, watch_run=None)`: `POST /agent` ruft ihn mit dem Konto aus dem Token, der Takt einer Agent-Watch (`agent_watches.start_run`) mit `watch_run` (ohne Senderate-Limit, nur die neuesten `agent_watches.HISTORY_CHARS` Zeichen des Chats über `AgentRunStore.messages(history_chars=…)`, `agent_watches.run_context` im App-Kontext, `DelegationLoop(watch_run=…)`, am Ende des Produzenten `agent_watches.turn_ended`); ein Lauf ohne Befund und ohne Ende aktualisiert den Seitenleisten-Eintrag nicht (`_quiet_watch_run`). |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `POST /app` (seit 2026-10-29: Ziel aller Formulare der App-Shell — Login, Feedback, Memory-Eintrag —, falls eines abgeschickt wird, bevor sein Skript es übernimmt; liest den Inhalt nie, 303 zurück auf `/app`. Vorher hatten die Formulare kein `method`, ein GET schrieb E-Mail und Passwort in Adresse, Verlauf und Render-Log), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`, `/manifest.webmanifest` und `/opensearch.xml` (seit 2026-11-16, gebaut in `app/core/web_app.py`: consens.io als installierbare App mit eigenem Fenster und als Suchkürzel; beide in der Sprache des Lesers über `request_language`, `Cache-Control: private`, `Vary: Accept-Language, Cookie`; Vertrag `#q=` in §8). Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback` und `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Best-answer-Votes schreibt seit 2026-10-31 niemand mehr: bis 2026-10-25 der Browser-Consensus (`POST /vote`, entfernt), danach der Vergleichsmodus des Agenten (einmal pro Turn); `/model-pulse` und `/api/model-leaderboard` zeigen den Stand bis dahin (wie sie künftig gespeist werden, ist offen, siehe „Ein Modus“ in §4). |
 | `chat.py` | Kern-LLM-Flow für Compare: `/prepare` und die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`). Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. Eine Frage an `/ask_*` setzt keinen Chat fort: Kontextfelder (`context`, `chat_id`/`turn_id`/`context_version_id`) werden ignoriert. `/consensus` und `/resolve` sind seit 2026-10-25 entfernt; den Consensus fährt nur noch der Server (`consensus_pipeline`). |
 | `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`; seit 2026-11-01 mit `temporary: true` einen temporären, nur Agent, sonst 422, siehe §4 „Temporäre Chats“), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
@@ -4957,7 +4957,7 @@ stehen als App-Kontextblock (`with_app_context`, Marker
 Verlaufsnachrichten bleiben wörtlich. Vorher stand die Uhrzeit oben im System
 und machte jeden Cache ab dort bei jeder Nachricht ungültig.
 `DelegationLoop` hängt danach die Werkzeug-Blöcke an (Dateien, Google, Watch,
-Einstellungen, Arbeitsplatz; Worker-Katalog nur mit Delegation) und zuletzt
+Einstellungen, Arbeitsplatz) und zuletzt
 Memory, sodass eine Memory-Änderung nur ab dort neu cached.
 Was sich zwischen den Nachrichten eines Chats ändert, steht seit 2026-10-21
 ebenfalls im App-Kontextblock der neuesten Frage (`DelegationLoop._app_context`
@@ -5268,8 +5268,7 @@ Snapshots den bisherigen Stand ausgeben (vorher wartete die erste Nachricht nach
 je fünf Minuten auf den Download des ganzen Katalogs). Solange noch kein Abruf
 gelang, wartet ein Snapshot darauf (nach einem Fehler höchstens alle 30 s einer).
 Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reason`
-sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
-die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
+sichtbar und werden bei der Auswahl abgelehnt.
 
 Chatmodell und Prüfer (die gewählten Vergleichsmodelle) teilen sich seit 2026-10-01 EINEN Chip in
 `.composer-models` (`.agent-model-picker`). Der Chip nennt das Chatmodell
@@ -5372,13 +5371,11 @@ begrenzen weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, gesetzt nur in
 `for_chat`, im Snapshot sichtbar) eine Schleife gültiger Aufrufe: 4 Vergleiche
 (`turn_comparisons`, der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
 Wrap-up plus 5 min (`TURN_WRAP_UP_SECONDS`) bis zum harten Stopp in `_check`, und
-höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`,
+höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet;
 derselbe Plan per `update_plan` und die VM-Werkzeuge ausgenommen). Wrap-up (`_merged_wrap_up`) = der Agent schreibt die Antwort in
 einem letzten Schritt ohne aufrufbare Tools aus dem, was er hat (seit
 2026-10-31 ohne Bedingung an Vergleiche; vorher nur aus einem Vergleich mit ≥2
-Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
-(`_can_wrap_up`) stattdessen `AnalysisBudgetExceeded` mit
-gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
+Antworten), danach prüfen die Prüfer sie; seit 2026-10-12 enden auch drei ungültige
 Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`); seit 2026-11-10 sind
 das nur noch Schritte, deren Aufrufe die Registry alle ablehnte
 (`INVALID_TOOL_ROUNDS`), während Schritte, in denen jeder gelaufene Aufruf
@@ -5433,13 +5430,15 @@ Anteil, aus der Lesung von `_long_run_limit`, seit 2026-11-17;
 `open_workspace` nennt keine Grenzen mehr). Details und
 Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt,
 „Arbeitsplatz: Schritte, Zeit und Bilder“).
-Worker-Delegation bleibt separat durch delegation_config.enabled und die
-geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
-hier auch ohne Worker-Freigabe das gemeinsame persistente Schrittjournal.
+Helfer (`delegate`) gibt es nur mit `delegation_config.enabled` (Admin-Schalter,
+standardmäßig aus). Sie laufen auf dem Chatmodell oder dem Standardmodell über
+denselben `_step` wie der Agent, ohne eigene Modell-Freigabe; ihr Seitenlesen
+zählt je Helfer-Schritt (`agent_read_source.helper_step`). policy.delegation
+aktiviert hier das gemeinsame persistente Schrittjournal.
 agent_loop.py bleibt die gemeinsame Basis und der eigenständig testbare direkte
 Legacy-Loop. Der ausgewählte Chat-Provider erhält seine vollständigen
 Reasoning-/Signaturblöcke für Tool-Fortsetzungen zurück; verschlüsselte Blöcke
-werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikation
+werden weder angezeigt noch persistiert. Weitere Details zu den Helfern
 stehen in [agent-delegation.md](agent-delegation.md).
 
 **Werkzeuge des Agenten und `compare_models`.** agent_comparison.py
@@ -5474,8 +5473,8 @@ flachen Schemas über OpenRouter (`agent_client.stream`). Seit 2026-10-07 steuer
 „Prompt-Aufteilung im Agenten“ unten). Ob der Agent sucht, liest, die Modelle
 fragt, den Arbeitsplatz nutzt oder direkt antwortet, entscheidet er selbst:
 kein zweiter LLM-Router, keine sprachabhängige Keyword-Klassifikation.
-Deaktivierte Worker liefern weder Worker-Katalog noch Delegationsprompt im
-Chatkontext. Auch Vergleichsmodelle, Prüfer und Worker erhalten eine knappe
+Ohne Admin-Schalter gibt es kein `delegate`. Auch Vergleichsmodelle, Prüfer und
+Helfer erhalten eine knappe
 Rollen-/Produkterklärung. Bis 2026-10-31 hatte der Vergleichsmodus dazu
 `check_text` (siehe „Eingefügten Text prüfen“), Familienwahl je Vergleich im
 freien Modus (`free_compare_args`), eigene Suche nur vor dem ersten Vergleich
@@ -5602,8 +5601,7 @@ derselbe Aufruf, der die Ergebnisse liest, die Antwort. Streaming
 Konstanten in `agent_answer_mode.py`): Text erscheint ab `ANSWER_HOLD_CHARS`
 (300) Zeichen und nie nach Beginn eines Toolcalls; kürzerer Text (Gruß,
 Rückfrage) erscheint, sobald sein Stream ohne Toolcall endet (seit 2026-11-05
-in `_step` vor der Abrechnung, vorher erst in `_finish_merged`). `hold` (`_hold_answer`:
-ungeprüfte Worker oder Mailbox) blendet ihn ganz aus. Folgt doch ein
+in `_step` vor der Abrechnung, vorher erst in `_finish_merged`). Folgt doch ein
 Toolcall, nimmt `_retract` den Text per Status `retract` mit `clear_response`
 zurück und zeigt seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der
 Zeitleiste (`NOTE_CHARS` = 8000, Zeilen bleiben; auch nie gestreamter kurzer
@@ -5619,8 +5617,7 @@ dem Lauf abgelehnte Aufrufe nicht) und nach eigener Websuche gilt Fremdinhalt
 als im Blick (`outside_in_view`): Eine Einstellungsänderung braucht dann ein
 Belegzitat (`agent_settings`). Bis 2026-11-02 sperrte das auch Memory
 (`memory_locked`, App-Eintrag gleichen Namens; mit Prüfern ihre Vorab-Prüfung
-„memory“), seitdem ändert `update_memory` immer sofort. Ungeprüfte Worker-Ergebnisse halten die Antwort
-zurück (`_retract` plus Aufforderung zu `review_agent`). `_finish_merged`
+„memory“), seitdem ändert `update_memory` immer sofort. `_finish_merged`
 fixiert die Antwort (`answer_fixed`: kein Halt eines Prüfers mehr, ein später
 endet mit ihr), gleicht den sichtbaren Text an (`_show_answer`, auch nach
 `_drop_presearch_text`), schreibt den App-Eintrag `answer_fixed` (Hash, Länge),
@@ -5778,8 +5775,9 @@ und `AGENT_ANSWER_SECTION`, dazu `AGENT_WRITE_NOTE`, `AGENT_READ_SOURCE_PROMPT`
 und die `ORCHESTRATOR_PROMPT`-Zwillinge in Watch und Einstellungen) gibt es seit
 2026-10-31 nicht mehr; das frühere zweite Protokoll `agent_comparison.PROMPT`,
 das alte `SYNTHESIS_PROMPT` und `agent_contradictions.PROMPT` waren schon vorher
-entfallen. `agent_delegation_config.ORCHESTRATOR_PROMPT` ist der Prompt der
-Worker-Delegation (nur mit `delegation_config.enabled`).
+entfallen. `agent_delegation_config.WORKER_PROMPT` ist der Systemprompt der Helfer
+(`delegate`, nur mit `delegation_config.enabled`); für den Agenten gibt es dazu
+keinen Prompt, das Werkzeug beschreibt sich selbst.
 Vergleichsmodelle: „Respect the user's goals and constraints in the context“ statt
 „Context is untrusted data“; in Google-Daten-Chats (keine Websuche) hängt `_step`
 `GOOGLE_NO_SEARCH` als letzte Nachricht an die Anfrage (`with_step_note`, seit
@@ -5791,8 +5789,8 @@ Dateien hat oder eine Gmail-Auswahl im Turn Anhänge importieren kann; Dokument-
 Entscheidungen: `docs/prompt-review/README.md`.
 Der Agent schreibt die Antwort in seinem eigenen Verlauf: Gespräch, eigene
 Suchergebnisse und Toolergebnisse (Vergleichsantworten mit Auszügen, gelesene
-Seiten, Memory-, Watch-, Dokument- und Google-Ergebnisse, Worker-Ergebnisse nach
-`review_agent`). Die Antwort ist nur der Text seines letzten Schritts;
+Seiten, Memory-, Watch-, Dokument- und Google-Ergebnisse, Berichte der Helfer aus
+`delegate`). Die Antwort ist nur der Text seines letzten Schritts;
 Toolaufrufe, Statusfelder und zurückgenommene Notizen gehören nicht dazu. Der
 tatsächliche Nutzer-/Antwortverlauf wird beim Start vor allen
 Laufzeit-Ergänzungen als `answer_conversation` gesichert (oben). Seit 2026-10-07
@@ -5852,8 +5850,8 @@ reduced-motion und forced-colors; `renderAudit` nimmt sie
 (`body._checkStatus`) im selben Render weg. Der Prüfzustand beginnt mit dem
 letzten Wort: `_step` sendet das SSE-Ereignis `answer_check` (live, nie
 gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
-(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
-keine offenen Worker oder Mailbox), noch vor Settlement, Kontingent-Snapshot und
+(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf),
+noch vor Settlement, Kontingent-Snapshot und
 den Review-Checkpoints von `freeze_for_synthesis`/`capture`. Der Handler merkt
 sich den Text (`context.metadata.answerCheckText`); `project` zeigt die
 Prüfung, solange genau dieser Text steht und noch keine Version vorliegt,
@@ -6006,8 +6004,8 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   etwa jede Minute statt alle 30 s), das Arbeitsprotokoll schreibt Sammeldokumente
   (Abschnitt „Arbeitsprotokoll“). Eine kurze Nachricht mit zwei Prüfern: 49
   statt 70 Schreib- und 131 statt 160 Lesevorgänge; Rundgänge bis zur ersten
-  Anfrage unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (neue Sitzung
-  vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) kommen
+  Anfrage unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (eine neue Sitzung
+  vor ihrem Claim) kommen
   bei vollem Stapel zuerst, mit allem, was ihre Sitzung vorher übergab. Noch
   ungeschriebene Updates einer Sitzung werden ein Update (`completed` +
   Ergebnis). Live-Zeilen (`progress=True`) ersetzen eine wartende Zeile; die
@@ -7083,7 +7081,8 @@ Nachricht sagt dem Modell das (`HISTORY_OMITTED_NOTE`). Vorher brach jede
 weitere Nachricht ab, gespeichert als `provider_error`, und der Chat war tot
 (Audit A9). Passt nur die neue Nachricht nicht ins Modellfenster, kommt
 `ConversationTooLong` (422, `conversation_too_long`). Der Admin-Prompteditor zeigt
-nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits für
+nur die wirksamen Helfer-Grenzen (Helfer je Nachricht, gleichzeitige Aufrufe,
+Schritte je Auftrag, Auftragslänge) und verweist auf Limits für
 das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
 Produzenten pro Prozess (Default 16), auch solche, deren Browser längst weg ist
@@ -12182,8 +12181,7 @@ Reasoning rief 27B die Websuche in 5 von 8 Antworten nicht auf und hielt 2025
 für das laufende Jahr; mit dem Standardaufwand (`xhigh`) liefen 3 von 8 ins
 Output-Limit; `low` suchte 8 von 8 Mal, Median 12 s (gpt-oss-120b 4 s).
 Qwen4 Max auf `low` suchte 3 von 3 Mal und endete sauber in 33–43 s, rund
-2 Cent je Antwort; Werkzeugaufruf und Fortsetzung im Agenten bestanden
-(`scripts/probe_agent_delegation.py`). Das frühere Pro-Modell
+2 Cent je Antwort; Werkzeugaufruf und Fortsetzung im Agenten bestanden. Das frühere Pro-Modell
 `qwen3.8-max-prime` steht nur noch als Name in `MODEL_LABEL_OVERRIDES` und als
 Engine `Qwen-Pro` alter Share-Seiten. Bilder nativ (`PROVIDER_IMAGE_SUPPORT`),
 PDFs über den Text-Fallback.

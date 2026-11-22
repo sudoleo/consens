@@ -198,28 +198,28 @@ def test_repeated_invalid_tools_end_with_the_answer_without_exhausting_daily_all
     assert agent_quota.snapshot(store.db, UID)["reserved"] == 0
 
 
-@pytest.mark.parametrize("mode", ["accepted", "rework", "fallback"])
-def test_late_worker_results_reach_the_answer_only_after_review_without_private_data(store, mode):
-    """The agent writes the answer itself once every worker result is
-    reviewed; worker reasoning never reaches it, and a result sent back for
-    rework stands before the rework request, superseded by the new one."""
-    from test_agent_delegation import assignment
+@pytest.mark.parametrize("mode", ["report", "next_task", "failed"])
+def test_a_helpers_report_reaches_the_answer_without_its_private_reasoning(store, mode):
+    """The agent writes the answer from its helper's report, delivered as the
+    delegate call's result; the helper's reasoning never reaches it, and a
+    next task's report stands after the stale one and the agent's message."""
     script = Script()
     base = type(script.factory())
     captured = []
     answer_steps = []
     action_number = []
-    did_rework = []
+    next_task = []
 
     class Delegated(base):
         def stream(self, *, model, messages, tools, **kwargs):
-            if self.step_id.startswith("agent:") and messages[0]["content"].startswith("You are a research worker"):
+            if self.step_id.startswith("agent:") and "You are a helper of the consens.io agent" in messages[0]["content"]:
                 script.calls.append((self.step_id, model.model))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
-                if mode == "fallback":
-                    raise RuntimeError("Worker unavailable")
+                if mode == "failed":
+                    raise RuntimeError("Helper unavailable")
                 self._reasoning_text = "PRIVATE_WORKER_THOUGHTS"
-                self.text = "OUTDATED_FINDING" if mode == "rework" and self.step_id.endswith(":0") else "VERIFIED_CURRENT_FINDING"
+                self.text = ("OUTDATED_FINDING" if mode == "next_task" and self.step_id.endswith(":0")
+                             else "VERIFIED_CURRENT_FINDING")
                 self.sources = [{"url": "https://example.org/worker", "title": "Worker evidence"}]
                 self.finish_reason = "stop"
                 yield {"type": "delta", "text": self.text}
@@ -232,31 +232,17 @@ def test_late_worker_results_reach_the_answer_only_after_review_without_private_
                 action_number.append(True)
                 identity = str(len(action_number))
                 if not workers:
-                    self.tool_calls = [tool("start_agent", assignment("Supporting constraint"), identity)]
+                    self.tool_calls = [tool("delegate", {"task": "Supporting constraint"}, identity)]
+                elif mode == "next_task" and not next_task:
+                    next_task.append(True)
+                    self.tool_calls = [tool("delegate", {"task": "Update the stale finding.",
+                                                         "helper_id": workers[0].id}, identity)]
                 else:
-                    worker = workers[0]
-                    if worker.reviewed and not worker.inbox:
-                        # Every result is reviewed: this step writes the answer.
-                        captured.append(json.dumps(messages))
-                        answer_steps.append(self.step_id)
-                        self.text, self.finish_reason = "The first option costs 100.", "stop"
-                        yield {"type": "delta", "text": self.text}
-                        return
-                    # Like a model, review only a result that reached the
-                    # conversation: the worker's state flips before its result
-                    # is delivered (wait_agents), and a review sent in between
-                    # would put the rework request ahead of the result it reworks.
-                    latest = (None if mode == "fallback" else
-                              "OUTDATED_FINDING" if mode == "rework" and not did_rework else "VERIFIED_CURRENT_FINDING")
-                    if (worker.state in {"review", "failed"} and not worker.reviewed
-                            and (latest is None or latest in json.dumps(messages))):
-                        self.tool_calls = [tool("review_agent", {"agent_id": worker.id, "accepted": mode != "fallback",
-                            "use_fallback": mode == "fallback", "check": "VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "Checked the supporting fact."}, identity)]
-                        if mode == "rework" and not did_rework:
-                            did_rework.append(True)
-                            self.tool_calls.append(tool("send_agent", {"agent_id": worker.id, "kind": "rework", "text": "Update the stale finding."}, identity + "_rework"))
-                    else:
-                        self.tool_calls = [tool("wait_agents", {"seconds": 1}, identity)]
+                    captured.append(json.dumps(messages))
+                    answer_steps.append(self.step_id)
+                    self.text, self.finish_reason = "The first option costs 100.", "stop"
+                    yield {"type": "delta", "text": self.text}
+                    return
                 self.finish_reason = "tool_calls"
                 return
             yield from super().stream(model=model, messages=messages, tools=tools, **kwargs)
@@ -265,20 +251,21 @@ def test_late_worker_results_reach_the_answer_only_after_review_without_private_
     loop.factory = Delegated
     list(loop.run())
     assert len(captured) == 1
-    # The answer is the last orchestrator step.
+    # The answer is the last step of the agent.
     assert [s for s, _ in script.calls if s.startswith("completion:")][-1] == answer_steps[0]
     context = captured[0]
-    assert ("VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "VERIFIED_CURRENT_FINDING") in context
     assert "PRIVATE_WORKER_THOUGHTS" not in context
-    if mode == "rework":
-        # The agent keeps its own history: the stale result stays in its context,
-        # before its rework request and the current result.
+    if mode == "failed":
+        assert "failed" in context and "VERIFIED_CURRENT_FINDING" not in context
+    else:
+        assert "VERIFIED_CURRENT_FINDING" in context and "https://example.org/worker" in context
+    if mode == "next_task":
+        # The agent keeps its own history: the stale report stays in its
+        # context, before its next task and the current report.
         assert (context.index("OUTDATED_FINDING") < context.index("Update the stale finding.")
                 < context.rindex("VERIFIED_CURRENT_FINDING"))
-    else:
+    elif mode == "report":
         assert "OUTDATED_FINDING" not in context
-    if mode != "fallback":
-        assert "https://example.org/worker" in context
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["consensus"] == "The first option costs 100."
     assert saved["agent_review"]["answer_hash"] == answer_hash(saved["consensus"])

@@ -1939,7 +1939,7 @@ def test_a_server_without_a_vm_provider_offers_no_vm(api, monkeypatch):
 
 
 def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, monkeypatch):
-    # VM with GitHub and pictures, a file in the chat, Memory and workers at
+    # VM with GitHub and pictures, a file in the chat, Memory and helpers at
     # once: a bound of 20 tools failed every message of such a chat
     # ("Invalid tool registry", 422).
     from app.services.agent_files import AgentFiles, FileContext
@@ -1961,7 +1961,7 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
         agent_preferences=AgentPreferences(vm="on"),
         file_context=FileContext(files, UID, chat_id, [upload["id"]]),
         memory=MemorySnapshot(available=True, enabled=True, auto=True))
-    assert {"start_agent", "compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",
+    assert {"delegate", "compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",
             "github_import", "update_plan"} <= set(loop.registry.tools)
 
 

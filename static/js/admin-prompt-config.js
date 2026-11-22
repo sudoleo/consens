@@ -82,14 +82,14 @@ export function createPromptConfigPanel(request) {
             delegation.hidden = !result.config.delegation;
             const budgetNote = document.createElement('p');
             budgetNote.className = 'admin-muted';
-            budgetNote.textContent = 'The Agent spends the daily allowance in euros (Allowance), with no cap on time, rounds, search or cost per answer. The worker and message limits below still apply.';
+            budgetNote.textContent = 'The Agent spends the daily allowance in euros (Allowance), with no cap on time, rounds, search or cost per answer. The helper limits below still apply.';
             delegation.append(budgetNote);
             const legacyLimits = new Set(['max_calls', 'max_tools', 'seconds', 'max_tokens', 'max_cost_nano_usd',
-                'max_messages', 'context_chars', 'worker_calls', 'max_searches']);
-            const labels = { enabled: 'Allow delegation', max_calls: 'Model calls per run', max_tools: 'Coordination calls per run',
+                'max_messages', 'context_chars', 'max_searches']);
+            const labels = { enabled: 'Allow helpers (delegate)', max_calls: 'Model calls per run', max_tools: 'Coordination calls per run',
                 seconds: 'Run duration (seconds)', max_tokens: 'Shared token budget', max_cost_nano_usd: 'Shared cost budget (nanodollars; 1 USD = 1,000,000,000)',
-                max_agents: 'Unreviewed workers at once', max_parallel: 'Workers running at once', max_messages: 'Messages per run',
-                context_chars: 'Context per session (characters)', message_chars: 'Message length (characters)', worker_calls: 'Model calls per worker',
+                max_agents: 'Helpers per message', max_parallel: 'Helper model calls at once', max_messages: 'Messages per run',
+                context_chars: 'Context per session (characters)', message_chars: 'Task length (characters)', worker_calls: 'Steps per helper task',
                 max_searches: 'Web searches per run' };
             for (const [key, value] of Object.entries(result.config.delegation || {})) {
                 // Prompt texts are shown in the read-only catalog, never as inputs.

@@ -27,12 +27,7 @@
     // With Settings › Agent › Pass notes to the agent, the agent checks the
     // reviewers' notes on its reviewed answer once (agent_review_feedback.py).
     correct_answer: ['Correction', 'Checking the reviewers’ notes…', 'Checked the reviewers’ notes'],
-    start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
-    wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
-    send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
-    review_agent: ['Review a model', 'Reviewing a model response…', 'Reviewed a model response'],
-    stop_agent: ['Stop a model', 'Stopping a model…', 'Stopped a model'],
-    report_to_orchestrator: ['Report to the main model', 'Reporting to the main model…', 'Reported to the main model'],
+    delegate: ['Helper', 'A helper is working…', 'A helper reported'],
     read_file: ['Read files', 'Reading your files…', 'Read your files'],
     read_document: ['Open document', 'Opening the document…', 'Opened the document'],
     create_document: ['Create document', 'Writing the document…', 'Created a document'],

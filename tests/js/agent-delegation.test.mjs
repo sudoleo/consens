@@ -377,7 +377,7 @@ describe("Agent sidebar", () => {
     await settle();
     d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-session-detail").textContent).toContain("Check the premise for Germany."));
-    expect(d.querySelector(".agent-session-detail").textContent).toContain("Orchestrator → Check Germany");
+    expect(d.querySelector(".agent-session-detail").textContent).toContain("Next task");
     const focused = d.querySelector(".agent-inline-model"); focused.focus();
     receive(w, agent());
     expect(d.activeElement).toBe(focused);

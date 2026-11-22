@@ -103,8 +103,7 @@ Premium ist: `agent_model_options()` setzt dort `premium: false` und
 dasselbe Modell Pro. Der Standard trägt die Registry-ID wie alle
 anderen Modelle (einmal in der Liste); die OpenRouter-ID wird für ältere Clients
 weiter aufgelöst. Er steht im eingebauten Katalog `agent_model_catalog.json`,
-damit der Agent auch ohne Live-Katalog startet. Hilfsagenten (Delegation) sind mit dem neuen Standard nicht geprüft;
-die Delegation ist ohnehin standardmäßig aus.
+damit der Agent auch ohne Live-Katalog startet.
 
 **Auto zeigt seine Stufe.** Im Picker, im (+)-Menü und auf der
 Einstellungskarte steht bei „Auto“ die Stufe, mit der die Anfrage für dieses
@@ -6154,10 +6153,9 @@ Suchaktivität; Startzeiten/Queries werden nicht erfunden. Vergleichsmodelle
 sehen keine anderen Vergleichsantworten. Kein eigener Suchdienst, kein
 zusätzliches Suchmodell; Provider-Routing/ZDR bleiben bestehen.
 
-Worker-Delegation bleibt standardmäßig deaktiviert und verwendet weiter die
-geprüften Modell-/Reasoning-Kombinationen und die bestehende Admin-Konfiguration;
-siehe [agent-delegation.md](agent-delegation.md). Vergleichstools sind davon
-unabhängig. Der gemeinsame Tool-Loop erhält die kompletten Provider-Fortsetzungs-
+Helfer (`delegate`) bleiben standardmäßig aus und laufen auf dem Chatmodell oder
+dem Standardmodell; siehe [agent-delegation.md](agent-delegation.md).
+Vergleichstools sind davon unabhängig. Der gemeinsame Tool-Loop erhält die kompletten Provider-Fortsetzungs-
 informationen intern; verschlüsselte Reasoning-Blöcke werden nie öffentlich oder
 persistiert. Gespeichertes sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt
 (`REASONING_STORAGE_CHARS`); weitere Deltas erreichen nur noch die Live-

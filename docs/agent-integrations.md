@@ -98,8 +98,8 @@ files that cannot be read visually must be re-exported, split or transcribed.
 **Data sent to models.** The root receives a file catalog and bounded, relevant
 excerpts of selected files. `read_file` pages through specific additional evidence.
 Comparisons receive explicit IDs or, without them, the current selection.
-Workers receive only the `file_ids` passed to `start_agent` (they have no
-`read_file` tool), so the orchestrator must pass files a worker needs.
+Helpers receive only the `file_ids` passed to `delegate` (they have no
+`read_file` tool), so the agent must pass files a helper needs.
 Visual files the root opens via `read_file` are added after the user's
 selection and never displace it (five files at most per call). Ordinary judges
 retain their existing comparison-based input. Binary payloads stay in process
