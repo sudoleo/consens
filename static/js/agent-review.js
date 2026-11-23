@@ -671,16 +671,30 @@
     return Boolean(feedback) && feedback.status !== 'done' && ended === false;
   }
   // The agent's pass over the findings: those it checks now, those it
-  // improved, whether it got any, and why a pass did not run or was not kept
+  // improved, those whose sentence it kept with a reason (`disputed`),
+  // whether it got any, and why a pass did not run or was not kept
   // (`skipped`, agent_review_feedback). Null without findings for the agent.
   function passOf(audit) {
     const feedback = audit?.feedback;
     if (!feedback) return null;
     const findings = [...findingsOf(audit).values()];
+    const answered = state => findings.filter(finding => finding.on === 'answer' && finding.state === state).length;
     return { status: feedback.status, skipped: typeof feedback.skipped === 'string' ? feedback.skipped : '',
       checking: findings.filter(finding => finding.state === 'checking'),
-      improved: findings.filter(finding => finding.on === 'answer' && finding.state === 'corrected').length,
+      improved: answered('corrected'), disputed: answered('disputed'),
       attempted: findings.some(finding => finding.delivered === 'final') };
+  }
+  // What came of a finished pass that took notes, for the head (lower case)
+  // or the first line of Notes: the sentences it improved, else those it
+  // kept, else, unless the user stopped it, that the answer was not refined.
+  // The reader saw it being refined: the end says what came of that, also
+  // where nothing did. '' without such a pass.
+  function passResult(pass, start = false) {
+    if (pass?.status !== 'done') return '';
+    if (pass.improved) return pass.improved === 1 ? '1 sentence improved' : `${pass.improved} sentences improved`;
+    if (!pass.attempted || pass.skipped === 'stopped') return '';
+    if (pass.disputed) return pass.disputed === 1 ? '1 sentence kept' : `${pass.disputed} sentences kept`;
+    return start ? 'Not refined' : 'not refined';
   }
   // Whether a sentence of the answer has a reviewer's note.
   const notedSentences = audit => (audit?.claims || []).some(claim => claim?.anchor
@@ -691,22 +705,19 @@
     sum + Math.max(1, Array.isArray(finding.notes) ? finding.notes.length : 0), 0);
   const checkingWords = count => (count === 1 ? 'The agent is refining the answer with 1 note…'
     : `The agent is refining the answer with ${count} notes…`);
-  // What came of a finished pass: its head (sentences improved, or that the
-  // user stopped the correction) and the notes still open, each a phrase of
-  // its own for the translation. A pass that came to nothing for another
-  // reason (`skipped`) is not labelled: the notes it left stand open, as
-  // they would without it; the activity names its step. Null where no pass
-  // ran and nothing is to be said.
+  // What came of a finished pass: its head (passResult, or that the user
+  // stopped the correction) and the notes still open, each a phrase of its
+  // own for the translation. A pass that never took a note (`skipped`
+  // before it began) leaves them open, as they would be without it. Null
+  // where no pass ran and nothing is to be said.
   function passSummary(audit) {
     const pass = passOf(audit);
     if (!pass || pass.status !== 'done') return null;
     const count = auditMarks(audit).length + auditWork(audit).length;
     const open = count === 1 ? '1 note open' : count ? `${count} notes open` : '';
-    if (pass.skipped && !pass.improved) {
-      return count ? { head: pass.skipped === 'stopped' ? 'Correction stopped' : '', open } : null;
-    }
-    if (!pass.attempted) return null;
-    const head = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved` : '';
+    if (pass.skipped === 'stopped' && !pass.improved) return count ? { head: 'Correction stopped', open } : null;
+    if (!pass.attempted) return pass.skipped && count ? { head: '', open } : null;
+    const head = passResult(pass, true);
     return head || open ? { head, open } : null;
   }
   // The reviewers who gave their review, by the short names of their
@@ -762,10 +773,9 @@
   // ended, in the sense of the line under the answer: checked (by every
   // reviewer or in part, named by their families: `by` is the index of that
   // phrase, `forms` its shorter forms for a narrower head) and the one thing that came
-  // of it, stopped by the user, or not checked (the reviewers did not
-  // finish). A pass that came to nothing (`skipped`) leaves its notes open,
-  // nothing more (passSummary). Null without such a check: the head says
-  // what it always said.
+  // of it (passResult), stopped by the user, or not checked (the reviewers
+  // did not finish). Null without such a check: the head says what it
+  // always said.
   function headNote(review, ended) {
     if (!isAudit(review) || !review.audit.feedback) return null;
     const audit = review.audit, pass = passOf(audit);
@@ -779,8 +789,8 @@
     if (!AUDIT_DONE.has(review.status) || review.status === 'failed') return { live: false, parts: ['not checked'] };
     const count = auditMarks(audit).length + auditWork(audit).length;
     const stopped = pass.status === 'done' && pass.skipped === 'stopped' && !pass.improved && count;
-    const result = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved`
-      : stopped ? 'correction stopped' : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections';
+    const result = passResult(pass) || (stopped ? 'correction stopped'
+      : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections');
     const by = checkedBy(review);
     if (by) return { live: false, parts: [by.full, result], by: 0, forms: by };
     return { live: false, parts: [review.status === 'partial' ? 'checked in part' : 'checked', result] };

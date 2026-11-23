@@ -160,6 +160,19 @@ html.raw-display .dark-mode {
     animation-iteration-count: infinite !important;
   }
 
+  /* So does the band of ink through a sentence the agent is still
+     refining (agent-chat.css). Its letters are transparent and the band
+     draws them: without it the sentence vanished until its new version
+     came. It comes and goes at once, as all motion here does. */
+  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+    html.raw-display .cx-claim.is-agent-checking:not(.is-still) {
+      background-image: var(--checking-band) !important;
+      animation-duration: 0s, var(--dur-beat) !important;
+      animation-delay: 0s, var(--checking-phase, 0s) !important;
+      animation-iteration-count: 1, infinite !important;
+    }
+  }
+
   html.raw-display a:any-link,
   html.raw-display a:any-link * {
     color: revert !important;

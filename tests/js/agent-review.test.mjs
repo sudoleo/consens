@@ -1904,7 +1904,7 @@ it('lands a correction only once the reader lets go of a selection in the answer
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
 });
 
-it('leaves a correction that came to nothing unlabelled, and shows the review as it is', () => {
+it('says that a correction came to nothing, and shows the review as it is', () => {
   const { window: w, document: d, body } = feedbackSetup();
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
   // Failed or out of time: the findings stay open, the marks as without the setting.
@@ -1914,10 +1914,10 @@ it('leaves a correction that came to nothing unlabelled, and shows the review as
   expect(w.renderStoredAuditMarks.mock.calls[0][1].claims).toHaveLength(2);
   expect(body.textContent).toBe(ORIGINAL);
   expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
-  // The head says only what stands open, as it would without the pass;
+  // The head says that the answer the reader saw being refined was not;
   // nothing under the row.
   expect(d.querySelector('.agent-review-findings')).toBeNull();
-  expect(w.App.agentReview.headNote(skipped, true).parts).toEqual(['checked by OpenAI and Anthropic', '2 notes open']);
+  expect(w.App.agentReview.headNote(skipped, true).parts).toEqual(['checked by OpenAI and Anthropic', 'not refined']);
   // Its reason stays in the record; no error word.
   expect(d.querySelector('.agent-review').textContent).not.toMatch(/time|skipped|fail|error|possible/i);
   // The activity still names the step for what it was.
@@ -1925,7 +1925,7 @@ it('leaves a correction that came to nothing unlabelled, and shows the review as
   // The notes say per passage that the agent has not checked it, as the mark does.
   notesCell(d).click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('2 notes open');
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('Not refined · 2 notes open');
   expect([...panel.querySelectorAll('.agent-audit-unchecked')].map(line => line.textContent)).toEqual([
     'Not checked by the agent: the correction did not finish.', 'Not checked by the agent: the correction did not finish.']);
   // The user's own Stop is said as such.

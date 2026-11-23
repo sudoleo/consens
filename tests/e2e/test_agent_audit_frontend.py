@@ -614,6 +614,15 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
         off = swept.first.evaluate("""el => { const s = getComputedStyle(el);
             return [s.backgroundClip, s.color, s.animationName]; }""")
         assert off[0] == "text" and off[1] == "rgba(0, 0, 0, 0)" and "agent-checking-sweep" in off[2], off
+        # Raw HTML keeps the band, the one sign that the answer is being
+        # refined: without it the clear letters vanished until the new version.
+        raw = swept.first.evaluate("""el => { document.documentElement.classList.add('raw-display');
+            const s = getComputedStyle(el);
+            const seen = [s.backgroundImage.startsWith('linear-gradient('), s.backgroundClip, s.color,
+                s.animationDuration, s.animationIterationCount];
+            document.documentElement.classList.remove('raw-display');
+            return seen; }""")
+        assert raw == [True, "text", "rgba(0, 0, 0, 0)", "0s, 1.8s", "1, infinite"], raw
         page.evaluate(highlights, "concerns")
         page.wait_for_timeout(700)
         _snapshot(page, f"findings-checking-{width}")
@@ -925,9 +934,9 @@ def test_the_head_ends_on_not_checked_when_the_reviewers_did_not_finish(browser,
 
 def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser, phase4_server):
     """The pass failed: the sweep ends, every mark stands as reviewed, the
-    head says only which notes stand open (no label on the failure), the
-    card of a mark that the agent did not check says so, and the activity
-    names the step."""
+    head says calmly that the answer was not refined (the reader saw it
+    being refined), the card of a mark that the agent did not check says
+    so, and the activity names the step."""
     events = feedback_events("checking", "failed", final=True, end="failed")
     context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events)
     try:
@@ -941,7 +950,7 @@ def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser,
             expect(marked.filter(has_text=text)).not_to_have_count(0)
         expect(page.locator("#agentAnswer .agent-review-findings")).to_have_count(0)
         head = page.locator("#agentAnswer .agent-activity-title")
-        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked by ChatGPT and MiMo · 4 notes open$"))
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked by ChatGPT and MiMo · not refined$"))
         # In the head's quiet ink, never an error colour.
         colors = head.locator(".agent-activity-after").evaluate("""el => [getComputedStyle(el).color,
             getComputedStyle(document.documentElement).getPropertyValue('--dispute').trim()]""")
@@ -1401,8 +1410,9 @@ def test_a_narrow_german_head_and_row_keep_their_words_whole(browser, phase4_ser
 HEAD_REVIEWERS = [("anthropic", "Anthropic", {"model": "anthropic/claude-haiku-4.5", "label": "Claude Haiku 4.5"}),
                   ("deepseek", "DeepSeek", {"model": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"}),
                   ("openai", "OpenAI", LUNA)]
-HEAD_OUTCOMES = ["no objections", "1 sentence improved", "12 sentences improved", "3 notes open", "12 notes open",
-                 "check stopped", "not checked", "checked in part", "checked in part, no objections"]
+HEAD_OUTCOMES = ["no objections", "1 sentence improved", "12 sentences improved", "12 sentences kept", "not refined",
+                 "3 notes open", "12 notes open", "check stopped", "not checked", "checked in part",
+                 "checked in part, no objections"]
 
 
 def head_review(outcome, count):
@@ -1414,17 +1424,24 @@ def head_review(outcome, count):
     reviewers = [{"provider": provider, "provider_label": label, "model": model,
                   "status": "failed" if status == "failed" or (status == "partial" and index == count - 1) else "completed"}
                  for index, (provider, label, model) in enumerate(HEAD_REVIEWERS[:count])]
-    notes = {"3 notes open": 3, "12 notes open": 12, "checked in part": 12}.get(outcome, 0)
+    notes = {"3 notes open": 3, "12 notes open": 12, "checked in part": 12, "12 sentences kept": 12,
+             "not refined": 3}.get(outcome, 0)
     claims = [{"anchor": f"Sentence {n}.", "kind": "doubtful", "audit": True, "agree": [],
                "dissent": [{"model": "Anthropic", "kind": "doubtful", "note": f"Note {n}.", "mark": n}]}
               for n in range(1, notes + 1)]
     improved = {"1 sentence improved": 1, "12 sentences improved": 12}.get(outcome, 0)
     findings = [{"id": f"s{n}", "on": "answer", "kind": "wrong", "state": "corrected", "delivered": "final"}
                 for n in range(1, improved + 1)]
+    # The agent kept its sentences (with a reason each), or its pass came to nothing.
+    passed = {"12 sentences kept": "disputed", "not refined": "open"}.get(outcome)
+    if passed:
+        findings = [{"id": f"s{n}", "on": "answer", "kind": "doubtful", "state": passed, "delivered": "final"}
+                    for n in range(1, notes + 1)]
     return {"mode": "audit", "status": status, "answer_version": 1, "answer_hash": "h", "comparisons": [], "checks": [],
             "versions": [{"id": 1, "text": ANSWER, "hash": "h", "status": status}],
             "audit": {"reviewers": reviewers, "claims": claims, "unplaced": [], "process": [],
-                      "feedback": {"status": "done", "findings": findings, "counts": dict(NO_COUNTS)}}}
+                      "feedback": {"status": "done", "findings": findings, "counts": dict(NO_COUNTS),
+                                   **({"skipped": "failed"} if outcome == "not refined" else {})}}}
 
 
 # The head drawn as a finished turn's, after a run of twelve minutes (the

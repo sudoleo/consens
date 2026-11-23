@@ -62,7 +62,9 @@
   // <3> is the claim the reviewers mark wrong, <0> the year in it, <1> what
   // the agent corrects that year to, <2> the passage they doubt. The
   // translation keeps the tags and may move them; <0> and <1> stay together
-  // inside <3>. --i is each word's place in the stream (first-run.css).
+  // inside <3>. --i is each word's place in the stream (first-run.css). In
+  // the doubted passage a word carries its text for its dots, and a space is
+  // a span of its own: the dots fade in apart from the words.
   function sceneAnswer() {
     const line = element("p", "first-run-answer");
     let year = null;
@@ -71,9 +73,11 @@
     const open = [];
     const words = text => text.split(/(\s+)/).forEach(piece => {
       if (!piece) return;
-      if (/^\s+$/.test(piece)) return into.append(" ");
+      const doubted = into.classList.contains("first-run-mark");
+      if (/^\s+$/.test(piece)) return into.append(doubted ? element("span", "first-run-gap", " ") : " ");
       const word = element("span", "first-run-word", piece);
       word.style.setProperty("--i", String(place++));
+      if (doubted) word.dataset.dots = piece;
       into.append(word);
     });
     t("The Eiffel Tower <3>opened in <0>1887</0><1>1889</1></3> and is <2>the most visited monument in the world</2>.")

@@ -1492,7 +1492,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Layout-Eigenschaften bleiben die der App. Wichtige Deklarationen in einer
   Ebene schlagen die ungeschichteten der App samt ihrer `!important`.
   Transitionen und Animationen enden sofort (Dauer 0, `animationend` feuert
-  weiter), Spinner drehen; `App.motion.reduced()` ist wahr, Buchstabenwolken und
+  weiter), Spinner drehen, und ebenso läuft das Band durch Sätze, die der
+  Agent gerade verfeinert (`--checking-band` aus `agent-chat.css`, sonst
+  verschwänden ihre klaren Buchstaben bis zur neuen Fassung);
+  `App.motion.reduced()` ist wahr, Buchstabenwolken und
   Stream-Licht sind aus, die Satzmarken zeichnen ihre Linien
   (`components-consensus-visuals.css`). Schwebende Ebenen (alles mit
   `box-shadow: var(--lift)` und die Popover aus `overlays.css`) bekommen statt
@@ -7438,7 +7441,8 @@ per `background-clip: text` gleichmäßig (`--ease-linear`) im Takt
 erben die transparente Schrift, Quellen-Pills und Inline-Code ruhen im Grau.
 Ruhegrau ist der Token `--ink-rest`: hell `#767676` (4,5:1 auf Weiß; `--ink-3`
 läge zu nah an der Tinte), dunkel `--ink-3`. Ohne Bewegung durch System oder
-`stream_animation` steht der Satz nur im Ruhegrau, `.is-still`; `forced-colors`
+`stream_animation` steht der Satz nur im Ruhegrau, `.is-still`; Raw HTML
+behält das Band, `raw-display.css`; `forced-colors`
 unterstreicht gepunktet), die
 Prüfer-Marken der Leiste gehen, und die Live-Region der Leiste sagt „The
 agent is refining the answer with 3 notes…“ (die Anmerkungen der geprüften
@@ -7458,19 +7462,22 @@ wurde, steht nicht unter der Leiste (dort steht für den Durchgang nie eine
 eigene Zeile, weder während er läuft noch danach), sondern im Kopf über der
 Antwort (siehe unten) und als erste Zeile in Notes (`passSummary`):
 „1 sentence improved · 3 notes open“ (verbessert = Befunde `corrected`, offen =
-die stehenden Anmerkungen wie in Notes). Ein Durchgang, der aus einem anderen
-Grund ohne Ergebnis blieb (`skipped`, nicht `stopped`), wird nicht beschriftet:
-dort steht nur „8 notes open“, wie ohne Durchgang (seit 2026-11-16; vorher
-„Correction not possible“); der Stopp des Nutzers bleibt „Correction stopped“,
-ohne Durchgang nichts. Die Aktivität nennt den
+die stehenden Anmerkungen wie in Notes; `passResult`). Ohne verbesserten Satz
+sagt es trotzdem, was aus der Verfeinerung wurde, die der Leser laufen sah:
+„2 sentences kept“, wo der Agent Sätze mit Begründung stehen ließ
+(`disputed`), sonst „Not refined“ (ein Durchgang, der Anmerkungen nahm und aus
+einem anderen Grund ohne Ergebnis blieb, `skipped`); der Stopp des Nutzers
+bleibt „Correction stopped“. Ein Durchgang, der nie eine Anmerkung nahm
+(`skipped` vor dem Start), lässt nur „8 notes open“ stehen, ohne Durchgang
+nichts. Die Aktivität nennt den
 Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
 sachlich „Couldn’t check the reviewers’ notes“ (`correctionUnchecked`). Der Kopf über
 der Antwort (`agent-activity.js` `setNote`/`writeNote`, `agent-review.js` `headNote`, nur
 nach der Übergabe, nicht während der Lauf läuft) sagt es dort, wo der Leser
 liest: „Answer in 14s · refining…“, solange Prüfer und Agent arbeiten (eine
 Wendung für beide), am Ende
-„… · checked by Claude and DeepSeek · 1 sentence improved“ (sonst „2 notes
-open“, „no objections“, „correction stopped“). Die Namen sind die kurzen
+„… · checked by Claude and DeepSeek · 1 sentence improved“ (sonst „2 sentences
+kept“, „not refined“, „2 notes open“, „no objections“, „correction stopped“). Die Namen sind die kurzen
 Familiennamen der Prüfer, die ihre Prüfung abgaben (`familyNames`: der `title`
 ihrer Familie aus `window.MODEL_FAMILIES`, also `config.PROVIDERS`: ChatGPT,
 Claude, Gemini, DeepSeek …; sonst `provider_label`), die vollen Modellnamen
@@ -9805,7 +9812,11 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   der Prüfer steht wie die Live-Zeile der App über der Antwort. Die Lesart
   entscheidet, was die Szene markiert: `answer` nichts (das Jahr wird still
   korrigiert), `doubts` Rot, Korrekturspur und Zweifel, `all` dazu die
-  Schritte in der Fortschrittszeile und Grün auf der korrigierten Aussage. Dazu der Schalter fürs Gedächtnis (aus; `userMemory.enableAgentMemory("first_run")`);
+  Schritte in der Fortschrittszeile und Grün auf der korrigierten Aussage.
+  Die Zweifelspunkte zeichnet eine klare Kopie jedes Worts und jeder Lücke
+  (`::after`, `data-dots`, `.first-run-gap`), die nur über ihre Deckkraft
+  einblendet: eine animierte Linienfarbe ließ jedes Wort, beim Streamen eine
+  eigene Ebene, in jedem Bild neu zeichnen, und die Punkte flackerten. Dazu der Schalter fürs Gedächtnis (aus; `userMemory.enableAgentMemory("first_run")`);
   (2) „Almost there“: die Anbieter aus `window.MODEL_FAMILIES` als Logo-Reihe,
   die Namen hinter „Show names“ (`citationLabel`, `icon`, `iconClass`; fehlt
   ein Logo, steht die Namensliste offen), ein Satz, dass die Frage nur an die

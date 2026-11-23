@@ -288,14 +288,18 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     // Its shorter forms for a narrower head, each whole (agent-chat.css).
     expect([names.dataset.count, names.dataset.brief, names.dataset.least]).toEqual(["checked by 2 AIs", "checked", "checked"]);
     expect(host.querySelector(".agent-activity").classList.contains("has-check-names")).toBe(true);
+    // The agent kept its sentences, with a reason on each mark.
     render(review({ feedback: { status: "done", findings: findings("disputed", { delivered: "final", reason: "So." }) } }), true);
-    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 sentences kept");
     const quiet = review({ feedback: { status: "done", findings: [] } });
     quiet.audit.claims = [];
     render(quiet, true);
     expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · no objections");
-    // A pass that came to nothing is not labelled: its notes stand open.
+    // A pass that came to nothing says so: the reader saw the answer being refined.
     render(review({ feedback: { status: "done", skipped: "failed", findings: findings("open", { delivered: "final" }) } }), true);
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · not refined");
+    // One that never took a note leaves them open, as without it.
+    render(review({ feedback: { status: "done", skipped: "no_time", findings: findings("open") } }), true);
     expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
     render(review({ feedback: { status: "done", skipped: "stopped", findings: findings("open", { delivered: "final" }) } }), true);
     expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · correction stopped");
@@ -328,7 +332,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
       { provider: "deepseek", provider_label: "DeepSeek", status: "completed" }] };
     expect(end("partial", undefined, one)).toBe("Answer in 17s · checked in part by DeepSeek · 2 notes open");
     expect(end("partial", { status: "done", skipped: "no_time", findings: findings("open", { delivered: "final" }) }, one))
-      .toBe("Answer in 17s · checked in part by DeepSeek · 2 notes open");
+      .toBe("Answer in 17s · checked in part by DeepSeek · not refined");
     // Every shorter form of it still says "in part" (agent-chat.css picks one by width).
     const part = host.querySelector(".agent-activity-by");
     expect([part.dataset.count, part.dataset.brief, part.dataset.least])
@@ -378,7 +382,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     activity.render(host, { ...after, reviewLive: false, reviewEnded: true, review: review({ feedback: { status: "done",
       findings: findings("disputed", { delivered: "final", reason: "So." }) } }) });
     expect(said()).toBeNull();
-    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 sentences kept");
     expect(host.querySelector(".agent-activity").classList.contains("is-refining")).toBe(false);
     vi.useRealTimers();
     app.dom.window.close();
@@ -420,7 +424,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     render({ running: false, elapsedMs: 17000, review: review({ feedback: { status: "done",
       findings: findings("disputed", { delivered: "final", reason: "So." }) } }), reviewEnded: true });
     expect(states).toEqual(["Reviewing · 16s", "Answer in 17s · refining…", "Answer in 17s · refining…",
-      "Answer in 17s · refining…", "Answer in 17s · checked by Claude and DeepSeek · 2 notes open"]);
+      "Answer in 17s · refining…", "Answer in 17s · checked by Claude and DeepSeek · 2 sentences kept"]);
     // A head that never knew its time says what it is, never "Answer in" alone.
     const fresh = boot();
     fresh.activity.render(fresh.host, { running: false, status: "succeeded", elapsedMs: null, events: [], review: live, reviewEnded: false });

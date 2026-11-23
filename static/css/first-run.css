@@ -409,34 +409,52 @@
 
 /* A doubt is dotted under its passage, as in the app
    (components-consensus-visuals.css); "Just the answer" leaves it out. The
-   words are inline blocks, which a line of their parent does not reach: each
-   draws its own, in the colour the passage fades in (--first-run-dots). */
-@property --first-run-dots { syntax: '<color>'; inherits: true; initial-value: transparent; }
-
-.first-run-mark {
-  --first-run-dots: color-mix(in srgb, var(--ink) 52%, transparent);
+   words are inline blocks, which a line of their parent does not reach: a
+   copy of each word and of each space in clear ink lies over it and draws
+   the dots. The dots fade in by their opacity alone, as the year's trace
+   does: a fading colour had every word, each a layer of its own while it
+   streams, drawn anew at every frame, and the dots flickered. A space's
+   copy takes its box, the content area of an inline (hence line-height
+   normal, so its baseline is the line's), and is cut to it: at the end of
+   a line that box has no width, and no dots follow the last word. It is a
+   few clear letters, not a space: Chrome draws no underline on a space
+   that animates, nor a layer of white space alone. */
+.first-run-mark > :is(.first-run-word, .first-run-gap) {
+  position: relative;
 }
 
-.first-run-mark,
-.first-run-mark > .first-run-word {
+.first-run-mark > :is(.first-run-word, .first-run-gap)::after {
+  content: attr(data-dots);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  white-space: nowrap;
+  pointer-events: none;
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 0.1em;
   text-underline-offset: 0.24em;
-  text-decoration-color: var(--first-run-dots);
+  text-decoration-color: color-mix(in srgb, var(--ink) 52%, transparent);
 }
 
-.first-run-dialog[data-view="answer"] :is(.first-run-mark, .first-run-mark > .first-run-word) {
+.first-run-mark > .first-run-gap::after {
+  content: "xxxx";
+  bottom: auto;
+  line-height: normal;
+  overflow-x: clip;
+}
+
+.first-run-dialog[data-view="answer"] .first-run-mark > :is(.first-run-word, .first-run-gap)::after {
   text-decoration-line: none;
 }
 
-.first-run-dialog[open] .first-run-mark {
+.first-run-dialog[open] .first-run-mark > :is(.first-run-word, .first-run-gap)::after {
   animation: first-run-doubt calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
 }
 
 @keyframes first-run-doubt {
-  0%, 53.2% { --first-run-dots: transparent; }
-  59.5%, 100% { --first-run-dots: color-mix(in srgb, var(--ink) 52%, transparent); }
+  0%, 53.2% { opacity: 0; }
+  59.5%, 100% { opacity: 1; }
 }
 
 .first-run-dialog .first-run-caption {

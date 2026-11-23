@@ -740,8 +740,10 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .cx-claim.is-agent-checking:not(.is-still) {
     --checking-rest: var(--ink-rest);
+    /* Raw HTML draws the same band (raw-display.css). */
+    --checking-band: linear-gradient(100deg, var(--checking-rest) 42%, var(--ink) 47%, var(--ink) 53%, var(--checking-rest) 58%);
     color: transparent;
-    background-image: linear-gradient(100deg, var(--checking-rest) 42%, var(--ink) 47%, var(--ink) 53%, var(--checking-rest) 58%);
+    background-image: var(--checking-band);
     background-repeat: no-repeat;
     background-size: 300% 100%;
     -webkit-background-clip: text;

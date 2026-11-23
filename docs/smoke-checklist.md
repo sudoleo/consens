@@ -297,7 +297,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Buchstaben ruhig ein Band aus Tinte läuft, ohne Fläche und ohne Farbe,
       auf Anhieb zu sehen, hell wie dunkel (lesbar, markierbar, auch fette
       Wörter, Links und Tabellenzellen; nichts verrutscht; mit
-      „Streaming-Animation“ aus nur das Grau); nie erscheint eine
+      „Streaming-Animation“ aus nur das Grau, mit „Pures HTML“ läuft das
+      Band weiter und kein Satz verschwindet); nie erscheint eine
       Markenfarbe, die wieder verschwindet. Danach: die übrigen Sätze gleiten
       zurück in die Tinte, bevor ihre Marken kommen; nur der korrigierte Satz
       läuft in einem farblosen Licht neu ein, der Text darunter gleitet,
@@ -321,8 +322,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       abgeschnittener Name und nie „…“ in dieser Zeile; die Namen zeigt die
       aufgeklappte Aktivität. Hat nur ein Teil der Prüfer geprüft, steht
       auf jeder Breite „Teilweise geprüft“, nie „Geprüft“; passt das
-      Ergebnis dahinter nicht ganz (360 und 320 px), steht „Teilweise geprüft“ allein. Blieb die Korrektur ohne Ergebnis,
-      steht dort nur „2 Anmerkungen offen“ (kein „Korrektur nicht möglich“),
+      Ergebnis dahinter nicht ganz (360 und 320 px), steht „Teilweise geprüft“ allein. Ließ der Agent
+      Sätze mit Begründung stehen, endet der Kopf mit „2 Sätze beibehalten“; blieb die Korrektur
+      ohne Ergebnis, ruhig mit „nicht verfeinert“ (kein „Korrektur nicht möglich“),
       die aufgeklappte Aktivität nennt den Schritt. Schafft der
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei
       einem Teil der Prüfer „teilweise geprüft von … · …“, nach Stopp „Prüfung
@@ -338,7 +340,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       an Notes ist die der offenen Anmerkungen plus die der verbesserten Sätze.
       Scheitert der Durchgang (Kontingent fast leer,
       Zeitüberschreitung): Schimmer weg, alle Marken, im Kopf ruhig „… ·
-      Korrektur nicht möglich“, in Notes „Korrektur nicht möglich · N
+      nicht verfeinert“, in Notes „Nicht verfeinert · N
       Anmerkungen offen“, in der Aktivität „Anmerkungen der Prüfer
       nicht durchgegangen“. Zweiter Tab, Reload und abgelaufener Nachlauf
       zeigen nie einen endlosen Schimmer.
@@ -1518,7 +1520,9 @@ Server.
       Wort für Wort in der richtigen Reihenfolge, dann erscheinen über der
       Antwort, bündig mit ihr, die Logos und „Prüft die Antwort“ → „wurde
       1887 eröffnet“ wird rot markiert, „Fehler gefunden“ → zu 1889
-      korrigiert → „das meistbesuchte Bauwerk der Welt“ wird unterpunktet,
+      korrigiert → „das meistbesuchte Bauwerk der Welt“ wird unterpunktet
+      (die Punkte blenden ruhig ein, ohne Flackern, eine durchgehende Linie,
+      keine Punkte hinter dem letzten Wort einer Zeile),
       „Korrigiert und geprüft“, kurze Pause, von vorn. Bei „Nur die Antwort“
       wird nichts markiert, nur das Jahr still korrigiert; bei „Alles“ ticken
       in derselben Zeile die Arbeitsschritte, und die korrigierte Aussage

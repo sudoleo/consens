@@ -155,3 +155,17 @@ def test_the_setting_reaches_the_page_before_its_first_paint():
     assert 'bindSettingSwitch("rawDisplaySwitch", "raw_display", false)' in (STATIC / "app-ui.js").read_text(
         encoding="utf-8"
     )
+
+
+def test_a_sentence_being_refined_keeps_its_band():
+    """A sentence the agent is still refining has clear letters that its band
+    of ink draws (agent-chat.css): with the band reverted it vanished until
+    its new version came. Raw HTML keeps the band running, as a spinner."""
+    raw = RAW.read_text(encoding="utf-8")
+    body = next(body for selector, body in rules(raw) if ".cx-claim.is-agent-checking:not(.is-still)" in selector)
+    assert re.search(r"background-image:\s*var\(--checking-band\)\s*!important", body)
+    assert re.search(r"animation-iteration-count:\s*1,\s*infinite\s*!important", body)
+    chat = strip_comments((STATIC / "css" / "agent-chat.css").read_text(encoding="utf-8"))
+    sweep = next(body for selector, body in rules(chat) if selector.endswith(".cx-claim.is-agent-checking:not(.is-still)"))
+    assert re.search(r"--checking-band:\s*linear-gradient\(", sweep)
+    assert re.search(r"background-image:\s*var\(--checking-band\)", sweep)

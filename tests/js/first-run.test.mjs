@@ -57,6 +57,12 @@ describe("the dialog", () => {
     expect([...stage.querySelectorAll(".first-run-claim > .first-run-year > span")].map(year => [year.className, year.textContent]))
       .toEqual([["is-old", "1887"], ["is-new", "1889"]]);
     expect(stage.querySelector(".first-run-mark").textContent).toBe("the most visited monument in the world");
+    // Its dots fade in apart from its words (first-run.css): each word
+    // carries its text for them, each space is a span of its own.
+    expect([...stage.querySelectorAll(".first-run-mark > *")].map(part => part.dataset.dots ?? part.className))
+      .toEqual(["the", "first-run-gap", "most", "first-run-gap", "visited", "first-run-gap", "monument",
+        "first-run-gap", "in", "first-run-gap", "the", "first-run-gap", "world"]);
+    expect(stage.querySelectorAll(".first-run-answer > .first-run-gap, .first-run-claim [data-dots]")).toHaveLength(0);
     expect(stage.querySelectorAll(".first-run-reviewers img")).toHaveLength(3);
   });
 
