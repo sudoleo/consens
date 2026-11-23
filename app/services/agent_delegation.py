@@ -2565,6 +2565,11 @@ class DelegationLoop(AgentLoop):
             worker.cancellation.cancel()
             if worker.state not in {"completed", "failed", "stopped"}:
                 self._terminal(worker, "stopped", "Run ended.")
+            # A task it was stopped before taking: nobody takes it now, and
+            # the delegate call that waits for it (_helper_report) returns.
+            with self.condition:
+                worker.inbox.clear()
+                self.condition.notify_all()
 
     def _helper_step(self, worker, messages, registry, *, allow_tools):
         """One step of ``worker`` while it holds one of the run's slots. A 429

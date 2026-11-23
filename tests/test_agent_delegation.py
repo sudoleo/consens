@@ -760,3 +760,37 @@ def test_a_read_started_beside_that_breaks_after_the_repeat_guard_ended_the_batc
         list(loop.run())
     results = tool_results(loop.messages)
     assert results == {"read_0": {"error": CALL_AT_LIMIT}, "read_1": {"error": CALL_AT_LIMIT}}
+
+
+def test_a_helper_stopped_before_it_took_its_task_does_not_keep_the_agent_waiting(store):
+    class Completion(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .001}, model)
+            if self.step_id == "completion:0":
+                self.tool_calls = [call("delegate", {"task": "Check 2 + 3"}, "call")]
+                self.finish_reason = "tool_calls"
+                return
+            self.text, self.finish_reason = "5", "stop"
+            yield {"type": "delta", "text": self.text}
+    loop = make_loop(store, Completion)
+    # No time is left when the call begins, and the helper's thread gets
+    # going only after the agent has stopped it.
+    loop.answer_time_left = lambda: 0
+    work = loop._work
+    def late(worker):
+        for _ in range(500):
+            if worker.cancellation.cancelled:
+                break
+            threading.Event().wait(.01)
+        work(worker)
+    loop._work = late
+    run = threading.Thread(target=lambda: list(loop.run()), daemon=True)
+    run.start()
+    run.join(10)
+    waiting = run.is_alive()
+    loop.cancellation.cancel()
+    run.join(10)
+    assert not waiting
+    result = tool_results(loop.messages)["call"]
+    assert result["status"] == "stopped" and "No time was left" in result["reason"]
+    assert loop.completion.text == "5"
