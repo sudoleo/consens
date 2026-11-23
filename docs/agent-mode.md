@@ -4267,6 +4267,46 @@ Hinweis an die nächste Nachricht),
 `workspace-view.test.mjs` (Agent-Tab der Einstellungen), `test_user_settings.py` und
 `test_prompt_config.py`.
 
+### App im eigenen Browser (seit 2026-11-23)
+
+Was der Agent baut und was einen eigenen Server braucht, öffnet der Nutzer in
+seinem eigenen Browser, auch am Handy: `vm_show_app` legt eine Karte unter
+die Zeile des Laufs, „Open“ öffnet die App in einem neuen Tab unter einer
+eigenen Adresse, solange ihr Hintergrundprozess läuft. Der Nutzer testet
+dort, sagt dem Agenten im Chat, was sich ändern soll, und sieht die Änderung,
+sobald der Dev-Server neu lädt. Technik, Messwerte und Tests stehen in
+`docs/codebase-map.md` („App im eigenen Browser“).
+
+Entscheidungen (Max, 2026-11-23: „Triff die Designentscheidungen, die am
+klügsten sind“):
+
+- **Eigene Site statt consens.io.** Code eines Agenten läuft nie unter
+  consens.io, auch nicht unter einer Subdomain. Der Host ist die
+  onrender.com-Adresse des Dienstes (`AGENT_APP_HOST`), die Browser als
+  eigene Site behandeln; eine gekaufte Domain braucht es erst für mehrere
+  Apps gleichzeitig.
+- **Kein neuer Weg in die VM.** Der Token des Anbieters geht weiter nur an
+  dessen API. Die App kommt über einen Befehl auf der Exec-API, wie die
+  Live-Ansicht.
+- **Die Zeit zählt der Prozess.** Eine App wird nur bedient, solange ein
+  Hintergrundprozess des Agenten läuft; dessen Laufzeit ist schon
+  Arbeitsplatz-Zeit. Das Öffnen kostet nichts dazu, und ein offen gelassener
+  Tab hält die VM nicht wach. Kein eigenes Pro-Gate: Die Tageszeit des
+  Arbeitsplatzes ist die Grenze (20 Minuten ohne Pro, 2 Stunden mit).
+- **Die App glaubt, sie läuft lokal.** `Host` und `Origin` heißen
+  `localhost:<port>`, damit Dev-Server ohne Einstellung antworten.
+- **Neustart über den Agenten.** Ist der Prozess zu Ende, schickt „Start
+  again“ dem Agenten eine Nachricht. Nur er weiß, was die App zum Start
+  braucht (Abhängigkeiten, Build, Umgebung); ein blindes Wiederholen des
+  Befehls scheitert genau dann, wenn es darauf ankommt.
+- **Fakten statt Regeln im Prompt.** Der Agent erfährt die Karte aus der
+  Beschreibung des Werkzeugs und aus seinem Ergebnis, kein neuer Block im
+  Systemprompt.
+
+Einrichtung: `AGENT_APP_HOST=typeonai.onrender.com` am Dienst setzen. Ab dann
+antwortet diese Adresse nur noch für Apps (und `/health/…`), nicht mehr als
+zweite Fassung von consens.io.
+
 ### Wo der Browser angemeldet ist (seit 2026-11-02)
 
 Max sagte dem Agenten bis dahin „merk dir, dass du bei WhatsApp eingeloggt

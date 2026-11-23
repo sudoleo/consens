@@ -79,7 +79,8 @@ TOOL_DATA = {
     # A helper's report (DelegationLoop.delegate): model output.
     "delegate": "agent",
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
-    "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm", "vm_render_office": "vm",
+    "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_show_app": "vm",
+    "vm_view_image": "vm", "vm_render_office": "vm",
     "vm_install_packages": "vm", "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
     # Pages of the open web, in the user's signed-in browser; ask_user brings
     # the page back with it once the user handed the browser back (agent_ask.py).

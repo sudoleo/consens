@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -135,8 +136,9 @@ def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(mo
     """One VM: the agent's tools and the browser's in one
     folder, one version, which the network rules are part of."""
     tools = agent_workspace.tool_files()
-    assert set(tools) == {"agent-run", "nouserns.py", "setup.sh", "browser.py", "cdp.py", "display.sh", "harden.sh",
-                          "install.sh", "openbox-menu.xml", "openbox-rc.xml", "policy.json", "relay.py", "xsocket.py"}
+    assert set(tools) == {"agent-run", "nouserns.py", "setup.sh", "app_tunnel.py", "browser.py", "cdp.py",
+                          "display.sh", "harden.sh", "install.sh", "openbox-menu.xml", "openbox-rc.xml",
+                          "policy.json", "relay.py", "xsocket.py"}
     assert all(b"\r\n" not in data for data in tools.values())
     assert agent_workspace.VERSION == agent_workspace._version() and len(agent_workspace.VERSION) == 16
     monkeypatch.setattr(agent_vm, "RULES", [{"domain": "*", "action": "allow"}])
@@ -144,8 +146,10 @@ def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(mo
     # The browser's installation, its helper and the relay name the same marker.
     marker = "setup-done-2"
     assert all(marker in tools[name].decode() for name in ("install.sh", "browser.py", "relay.py"))
-    # Nothing of the two-VM layout's tunnel is left.
-    assert not [name for name, data in tools.items() if b"tunnel.py" in data and name != "setup.sh"]
+    # Nothing of the two-VM layout's tunnel is left (its tunnel.py; the way
+    # to an app in the user's browser is app_tunnel.py, another tool).
+    assert not [name for name, data in tools.items()
+                if re.search(rb"(?<![A-Za-z_])tunnel\.py", data) and name != "setup.sh"]
 
 
 def test_the_agent_runs_as_its_own_user_without_the_providers_socket():

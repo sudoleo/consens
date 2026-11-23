@@ -52,6 +52,7 @@
     vm_start_process: ['Background process', 'Starting a background process…', 'Started a background process'],
     vm_process_output: ['Background process', 'Reading a background process…', 'Read a background process'],
     vm_stop_process: ['Background process', 'Stopping a background process…', 'Stopped a background process'],
+    vm_show_app: ['App', 'Showing an app…', 'Showed an app'],
     vm_view_image: ['Picture', 'Looking at a picture…', 'Looked at a picture'],
     vm_save_picture: ['Picture', 'Saving a picture…', 'Saved a picture'],
     vm_render_office: ['PDF', 'Making a PDF…', 'Made a PDF'],
@@ -741,7 +742,8 @@
   // installation by its packages: it takes up to a minute, and a line about
   // the workspace itself reads as a workspace that takes that long to start.
   const calmTools = { vm_exec: 'Working in the workspace…', vm_start_process: 'Working in the workspace…',
-    vm_process_output: 'Working in the workspace…', vm_stop_process: 'Working in the workspace…' };
+    vm_process_output: 'Working in the workspace…', vm_stop_process: 'Working in the workspace…',
+    vm_show_app: 'Working in the workspace…' };
   const calmFiles = { vm_read_file: 'Reading “{file}”…', vm_write_file: 'Writing “{file}”…',
     vm_edit_file: 'Editing “{file}”…', vm_share_file: 'Sharing “{file}”…' };
   const calmBrowser = { read: 'Reading the page…', text: 'Reading the page…', find: 'Reading the page…',
@@ -1001,7 +1003,7 @@
   // through App.t (the line is data-i18n-skip).
   const vmTools = new Set(['vm_exec', 'vm_read_file', 'vm_write_file', 'vm_edit_file', 'vm_share_file',
     'github_import', 'vm_start_process', 'vm_process_output', 'vm_stop_process', 'vm_view_image',
-    'vm_save_picture', 'vm_render_office', 'vm_install_packages', 'browser', 'request_domain']);
+    'vm_save_picture', 'vm_render_office', 'vm_install_packages', 'browser', 'request_domain', 'vm_show_app']);
   const vmVerbs = { vm_read_file: ['Reading the file', 'Read the file'],
     vm_write_file: ['Writing the file', 'Wrote the file'], vm_edit_file: ['Editing the file', 'Edited the file'],
     vm_share_file: ['Sharing the file', 'Shared the file'],
@@ -1009,6 +1011,7 @@
     vm_start_process: ['Starting in the background', 'Started in the background'],
     vm_process_output: ['Reading the output of process', 'Read the output of process'],
     vm_stop_process: ['Stopping process', 'Stopped process'],
+    vm_show_app: ['Showing the app on port', 'Showed the app on port'],
     vm_view_image: ['Looking at the picture', 'Looked at the picture'],
     vm_save_picture: ['Saving the picture as', 'Saved the picture as'],
     vm_render_office: ['Making a PDF of', 'Made a PDF of'],
@@ -1044,6 +1047,7 @@
     if (['vm_exec', 'vm_start_process'].includes(item.name)) return item.command;
     if (item.name === 'vm_install_packages') return Array.isArray(item.packages) ? item.packages.join(' ') : '';
     if (item.name === 'request_domain') return item.domain;
+    if (item.name === 'vm_show_app') return Number.isInteger(item.app_port) ? String(item.app_port) : item.process;
     if (item.name === 'browser') {
       if (item.action === 'open') return item.title || hostOf(item.url) || item.url;
       return item.action === 'download' ? item.url || item.downloads?.[0] || item.title
@@ -1301,6 +1305,102 @@
     open.textContent = App.t('Open');
     open.setAttribute('aria-label', App.t('Open the browser'));
   }
+  // An app the agent serves in the workspace (vm_show_app,
+  // agent_vm_processes.py): a card that opens it in the user's own browser,
+  // in a tab of its own at the app's address (agent_apps.py). The app's
+  // process counts the workspace's time and ends by itself (ends_at); from
+  // then on the card asks the agent for a new start instead ("Start again"
+  // sends that as the user's next message, agent-chat.js restartApp), since
+  // only the agent knows what the app needs to come up.
+  const showsApp = item => item?.name === 'vm_show_app' && item.status === 'succeeded' && item.app_shown === true
+    && Number.isInteger(item.app_port) && typeof item.process === 'string';
+  function appCard(className) {
+    const card = document.createElement('div');
+    card.className = `${className} agent-page-card agent-app-card`;
+    card.dataset.i18nSkip = '';
+    const body = document.createElement('div'); body.className = 'agent-page-body';
+    const info = document.createElement('div'); info.className = 'agent-page-info';
+    const text = document.createElement('div'); text.className = 'agent-page-text';
+    const title = document.createElement('span'); title.className = 'agent-page-title'; title.translate = false;
+    const meta = document.createElement('span'); meta.className = 'agent-page-meta';
+    text.append(title, meta);
+    const open = document.createElement('button'); open.type = 'button'; open.className = 'agent-page-open';
+    open.addEventListener('click', () => {
+      if (appEnded(card, card._item)) window.dispatchEvent(new CustomEvent('consensio:app-restart'));
+      else openApp(card);
+    });
+    info.append(text, open);
+    body.append(info);
+    card.append(body);
+    return card;
+  }
+  // Ended: the server said so at the last click (`_ended` holds that
+  // process), or its own limit has passed.
+  const appEnded = (card, item) => !item || card._ended === item.process
+    || (Number.isFinite(item.ends_at) && Date.now() >= item.ends_at);
+  function updateApp(card, item) {
+    card._item = item;
+    const [title, meta] = card.querySelector('.agent-page-text').children;
+    const open = card.querySelector('.agent-page-open');
+    const ended = appEnded(card, item);
+    title.textContent = String(item.app_title || App.t('App on port {port}', { port: item.app_port }));
+    meta.textContent = card._error || (ended ? App.t('Ended in the workspace')
+      : Number.isFinite(item.ends_at)
+        ? App.t('Runs in your workspace until {time}', { time: App.format.time(item.ends_at) })
+        : App.t('Runs in your workspace'));
+    open.textContent = card._opening ? App.t('Opening…') : ended ? App.t('Start again') : App.t('Open');
+    open.disabled = Boolean(card._opening);
+    card.dataset.state = ended ? 'ended' : 'running';
+    if (card._error) card.dataset.outcome = 'failed'; else delete card.dataset.outcome;
+    // Its limit passes while the card stands: it says so then, without a click.
+    clearTimeout(card._endTimer);
+    if (!ended && Number.isFinite(item.ends_at)) {
+      card._endTimer = setTimeout(() => updateApp(card, card._item),
+        Math.min(item.ends_at - Date.now() + 500, 0x7fffffff));
+    }
+  }
+  async function openApp(card) {
+    const item = card._item;
+    if (!item || card._opening) return;
+    // The tab opens within the click: one opened after the server's answer
+    // is a pop-up the browser blocks. It learns nothing of this page
+    // (opener) before it goes to the app's address.
+    const tab = window.open('about:blank', '_blank');
+    card._opening = true; card._error = '';
+    updateApp(card, item);
+    try {
+      if (!tab) throw new Error('Your browser blocked the new tab. Allow pop-ups for consens.io and try again.');
+      const user = window.auth?.currentUser;
+      if (!user) throw new Error('Log in first.');
+      const response = await fetch('/agent/workspace/app', { method: 'POST',
+        headers: { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ process: item.process, port: item.app_port, path: item.app_path || '/' }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || data.detail || 'Try again.');
+      if (data.running !== true || typeof data.url !== 'string') {
+        card._ended = item.process;
+        tab.close();
+      } else {
+        tab.opener = null;
+        tab.location.replace(data.url);
+      }
+    } catch (error) {
+      tab?.close();
+      card._error = App.t(String(error?.message || 'Try again.'));
+    } finally {
+      card._opening = false;
+      updateApp(card, card._item);
+    }
+  }
+  function pinApp(view, item) {
+    if (!view.pinCard?.classList.contains('agent-app-card')) {
+      view.pinCard = appCard('agent-page-pinned');
+      view.pin.replaceChildren(view.pinCard);
+      view.pin.hidden = false;
+      if (view.running) reveal(view.pinCard);
+    }
+    updateApp(view.pinCard, item);
+  }
   // The page the agent opened for the user, so it does not fold away with
   // the earlier steps while the browser shows it: one card under the run's
   // line, changed in place when the agent opens another for them, still
@@ -1312,8 +1412,12 @@
   // the newest picture a later step on it brought
   // (agent_browser.PREVIEW_SECONDS), with the title and address that step's
   // page had.
+  // An app the agent showed (pinApp) stands there the same way: whichever
+  // of the two came last.
   function pinPage(view, tools) {
-    const at = tools.findLastIndex(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
+    const at = tools.findLastIndex(item => showsApp(item)
+      || (opensPage(item) && !['failed', 'cancelled'].includes(item.status)));
+    if (at >= 0 && showsApp(tools[at])) { pinApp(view, tools[at]); return; }
     if (at < 0 || !showsPage(tools[at])) {
       view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return;
     }
@@ -1322,7 +1426,7 @@
     for (let index = tools.length - 1; index > at && !now; index -= 1) {
       if (tools[index].name === 'browser' && pagePicture(tools[index])) now = tools[index];
     }
-    if (!view.pinCard) {
+    if (!view.pinCard || view.pinCard.classList.contains('agent-app-card')) {
       view.pinCard = pageCard('agent-page-pinned');
       view.pin.replaceChildren(view.pinCard);
       view.pin.hidden = false;

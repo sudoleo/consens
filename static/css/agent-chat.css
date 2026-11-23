@@ -1346,6 +1346,10 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
 }
 @media (pointer: coarse) { .agent-page-open { min-height: 36px; } }
 .agent-page-open:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.agent-page-open:disabled { color: var(--ink-3); cursor: default; }
+/* An app the agent serves (agent-activity.js appCard): the same card without
+   a picture. What it says of a failed opening may take two lines. */
+.agent-app-card[data-outcome="failed"] .agent-page-meta { white-space: normal; }
 /* The page the browser shows, pinned under the run's line (agent-activity.js
    pinPage): it stays while the lines below fold, the answer comes and after
    it; the open timeline holds it in its order instead. The card as in the

@@ -502,3 +502,104 @@ def test_a_process_another_look_gave_back_meanwhile_is_not_given_back_again(stor
     assert results(later)[0]["status"] == "exited"
     # Only the stop's own second: nothing given back twice.
     assert agent_vm_time.used(store.db, UID) == 1800 + 2 + 1
+
+
+# --- An app on a card (vm_show_app) -------------------------------------------
+
+def app_line(state, started="-", reserved="-", answer="-", chat="-"):
+    return [("stdout", f"consens-app {state} {started} {reserved} {answer} {chat}\n".encode())]
+
+
+def test_the_app_tool_comes_with_a_host_for_apps(monkeypatch):
+    def names():
+        return [tool.name for tool in agent_vm_processes.ProcessTools(None).tools()]
+    monkeypatch.delenv("AGENT_APP_HOST", raising=False)
+    assert "vm_show_app" not in names() and len(names()) == 3
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    assert "vm_show_app" in names() and len(names()) == 4
+
+
+def test_an_app_goes_on_a_card_once_its_process_runs_and_its_port_answers(store, fake_vm, monkeypatch):
+    from app.services.agent_vm_processes import APP_TRIES, app_command
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    started = 1795400000
+    fake_vm.commands[app_command(process_dir(PID), 3000, APP_TRIES)] = (
+        app_line("running", started, 1800, 200, "chat-1"), 0, 1.0)
+    script = Agent([[("vm_show_app", {"id": PID, "port": 3000, "path": "/app", "title": "Todo   app"})]])
+    loop = vm_loop(store, script)
+    events = list(loop.run())
+    assert "vm_show_app" in script.offered[0]
+    shown = results(loop)[0]
+    assert (shown["shown_as"], shown["id"], shown["port"], shown["path"]) == ("app", PID, 3000, "/app")
+    # When it ends by itself, in the workspace's own time (UTC).
+    assert f"until {time.strftime('%H:%M', time.gmtime(started + 1800))} UTC" in shown["note"]
+    assert "own browser" in shown["note"] and "start it again" in shown["note"]
+    # What the card is drawn from (agent-activity.js appCard).
+    done = [event for event in tool_events(events, "vm_show_app") if event.get("status") == "succeeded"][-1]
+    assert done["app_shown"] is True and done["process"] == PID
+    assert (done["app_port"], done["app_path"], done["app_title"]) == (3000, "/app", "Todo app")
+    assert done["ends_at"] == (started + 1800) * 1000
+
+
+def test_an_app_that_does_not_run_or_does_not_answer_gets_no_card(store, fake_vm, monkeypatch):
+    from app.services.agent_vm_processes import APP_TRIES, app_command
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    fake_vm.commands[app_command(process_dir(PID), 3000, APP_TRIES)] = (app_line("running", 1, 1800), 0, 1.0)
+    fake_vm.commands[app_command(process_dir("0000ffff"), 3000, APP_TRIES)] = (app_line(0, 1, 1800), 0, 1.0)
+    fake_vm.commands[app_command(process_dir("ffffffff"), 3000, APP_TRIES)] = ([], 5, .1)
+    script = Agent([[("vm_show_app", {"id": PID, "port": 3000})], [("vm_show_app", {"id": "0000ffff", "port": 3000})],
+                    [("vm_show_app", {"id": "ffffffff", "port": 3000})], [("vm_show_app", {"id": PID, "port": 80})]])
+    loop = vm_loop(store, script)
+    events = list(loop.run())
+    silent, ended, missing, low = results(loop)
+    assert "Nothing answers on port 3000" in silent["error"] and "vm_process_output" in silent["error"]
+    assert "does not run any more" in ended["error"] and "vm_start_process" in ended["error"]
+    assert "No background process ffffffff" in missing["error"]
+    assert "error" in low
+    assert not any(event.get("app_shown") for event in tool_events(events, "vm_show_app"))
+
+
+def test_the_apps_check_asks_the_port_of_a_running_process(shell, tmp_path):
+    """app_command in a real bash, against a real server: the state, when the
+    process ends, what the port answered and the chat that started it."""
+    import http.server
+    import socket
+    import threading
+    from app.services.agent_vm_processes import app_command, parse_app
+    if not shutil.which("curl"):
+        pytest.skip("no curl")
+    run, root = shell
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
+    server.RequestHandlerClass.log_message = lambda *args: None
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    with socket.socket() as free:
+        free.bind(("127.0.0.1", 0))
+        closed = free.getsockname()[1]
+    try:
+        directory = prepare(root, "33333333", "sleep 30", tmp_path.as_posix())
+        Path(directory, "chat").write_text("chat-1", newline="\n")
+        Path(directory, "reserve").write_text("1800 2026-11-23", newline="\n")
+        code, _ = run(start_command(directory, "consens-33333333", wait=0, root=root))
+        assert code == 0 and wait_for(f"{directory}/started")
+        started = int(Path(directory, "started").read_text().strip())
+        # Any HTTP answer counts: the server here says 501 to a GET.
+        code, text = run(app_command(directory, server.server_address[1], 3))
+        assert code == 0 and parse_app(text) == ("running", started + 1800, 501, "chat-1")
+        # A port nothing listens on, and the look without asking the port (the user's click).
+        assert parse_app(run(app_command(directory, closed, 1))[1])[2] is None
+        assert parse_app(run(app_command(directory, closed))[1])[:2] == ("running", started + 1800)
+        run(stop_command(directory, "consens-33333333"))
+        state, _, answer, _ = parse_app(run(app_command(directory, server.server_address[1], 3))[1])
+        assert state == "stopped" and answer is None
+        assert run(app_command(f"{root}/00000000", 3000))[0] == 5
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a_line_that_is_not_the_apps_is_not_read():
+    from app.services.agent_vm_processes import parse_app
+    assert parse_app("consens-app 137 10 60 - -") == (137, 70, None, "")
+    for line in ("", "consens-process running 4", "consens-app running 1 2 20 chat", "consens-app running x 2 200 c"):
+        with pytest.raises(ValueError):
+            parse_app(line)

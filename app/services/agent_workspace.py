@@ -122,8 +122,9 @@ CONTROL_REFRESH_SECONDS = 30
 # (agent-run, setup.sh) and the browser's (browser.py and cdp.py, its
 # installation, start and rules: harden.sh with policy.json and openbox's two
 # files hold whoever steers Chrome, workspace_guard.py; the live view's
-# relay).
-TOOL_FILES = {"workbench": ("agent-run", "nouserns.py", "setup.sh"),
+# relay) and the way from the user's own browser to an app the agent serves
+# (app_tunnel.py, agent_app_tunnel.py).
+TOOL_FILES = {"workbench": ("agent-run", "nouserns.py", "setup.sh", "app_tunnel.py"),
               "browser": ("browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh", "openbox-menu.xml",
                           "openbox-rc.xml", "policy.json", "relay.py", "xsocket.py")}
 SETUP_SECONDS = 180

@@ -253,6 +253,49 @@ def reset_workspace_browser(request: Request):
     return JSONResponse({"status": "reset"}, headers=NO_STORE)
 
 
+class OpenApp(Strict):
+    # The card's app (agent-activity.js appCard): the process that serves it and where.
+    process: str = Field(pattern=r"^[a-f0-9]{8}$")
+    port: int = Field(ge=1024, le=65535)
+    path: str = Field(default="/", max_length=2000)
+
+
+@router.post("/agent/workspace/app")
+@limiter.limit("30/minute")
+def open_workspace_app(request: Request, payload: OpenApp):
+    """An app the agent serves in the workspace, for the user's own browser
+    (agent_apps.py): where its process runs, the address a new tab opens,
+    good for agent_apps.OPEN_SECONDS, on the service's host for apps.
+    ``{"running": false}`` once the process has ended: the card then offers
+    to ask the agent for a new start. The process counts the VM's time
+    (agent_vm_processes.py), so opening its app costs none."""
+    from app.services import agent_app_tunnel, agent_apps, agent_vm_processes
+    uid = owner(request)
+    if not agent_apps.host():
+        raise HTTPException(status_code=404, detail="Apps are not available here.")
+    guard = workspace_guard.status(uid)
+    if guard.closed:
+        return JSONResponse({"error": workspace_guard.user_text(guard), "code": "guarded"}, status_code=403)
+    try:
+        vm = _backend()
+        try:
+            name = agent_workspace.open_workspace(vm, uid, db=db_firestore)
+            running, ends, chat = agent_vm_processes.app_state(vm, name, payload.process, payload.port)
+        finally:
+            vm.close()
+    except agent_vm.VMUnavailable as exc:
+        logging.warning("Agent workspace app unavailable category=%s", safe_exception(exc))
+        return JSONResponse({"error": "The workspace is not reachable right now. Try again.",
+                             "code": "vm_unavailable"}, status_code=503)
+    if not running:
+        return JSONResponse({"running": False}, headers=NO_STORE)
+    # Its next request opens the tunnel again (a tab left on an app that had ended).
+    agent_app_tunnel.expect(uid)
+    token = agent_apps.issue_open(uid, payload.port, payload.path, agent_apps.app_key(uid, chat, payload.port))
+    return JSONResponse({"running": True, "url": agent_apps.open_url(token),
+                         **({"ends_at": ends * 1000} if ends else {})}, headers=NO_STORE)
+
+
 class SignIn(Strict):
     site: str = Field(min_length=1, max_length=300)
 

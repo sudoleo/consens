@@ -198,7 +198,10 @@ is the agent's server on the same computer (from 2026-10-29 to 2026-11-04 a
 tunnel, `agent_tunnel.py`, between two VMs), and `POST
 /agent/chats/{chat}/requests/{request}/secret` (`routers/agent.py`) writes a
 key the agent asked for with `ask_user` `secret` to `~/.secrets/<name>` in the
-workspace, never into the chat (`agent_secrets.py`).
+workspace, never into the chat (`agent_secrets.py`). Since 2026-11-23 `POST
+/agent/workspace/app` (`{process, port, path}`) answers the address that opens
+an app the agent serves there in the user's own browser, on the service's
+host for apps (`AGENT_APP_HOST`; "App im eigenen Browser" below).
 One view and one terminal per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429; since 2026-10-30 the first state carries `left_seconds`, the day's VM time left, and every end is logged with its code and side and counted anonymously in `ops_metrics/workspace-view-{day}`); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
 since 2026-10-27, `AGENT_VM_ACCESS=all` (or the older `pro`) for every account
 since 2026-10-31) on a server with a VM provider.
@@ -11220,6 +11223,7 @@ app/core/
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   html_page.py               Eine vom Agenten geteilte HTML-Datei als Seite im Chat (seit 2026-11-23): welche Datei (refusal, loads), die Sandbox-Header jeder Antwort unter /agent/pages/ (HEADERS, POLICY) und das Dokument um die Datei (document); ohne schwere Importe, von security.py, i18n_middleware.py, agent_vm_tools.py und dem Datei-Router gelesen
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
+  app_host.py                Der Host für Apps aus Arbeitsplätzen (AGENT_APP_HOST, seit 2026-11-23): AppHostMiddleware gibt jede Anfrage an diesen Host an agent_app_proxy.app, an allem vorbei, was consens.io ist; nur /health/ antwortet auf jedem Host
   network_block.py           Äußerste Middleware: 403 für die Cloud-Netze der Crawler-Welle (BLOCKED_NETWORKS), /api/v1/ bleibt offen
   rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt; IPv6 zählt je /64, address_key, wie request_limits.client_of) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
   not_found.py               HTML-404 für Seiten-Navigationen (wants_html_page, not_found_page)
@@ -11274,9 +11278,12 @@ app/services/
   workspace_guard.py         Sicherheitsregeln des Arbeitsplatzes auf dem Server (seit 2026-10-30): note_visit/note_browser_call/note_view_bytes/note_net/note_policy (nie blockierend, ein Thread zählt je Konto in einer Transaktion), classify (Cloudflares Security- und Family-Resolver: malware/adult/clean, Cache 24 h), Spur workspace_trail/{uid}_{tag} (Hosts, Stunden, Bytes; 31 Tage, cleanup_expired_trails), Wächter workspace_guard/{uid} (open/closed bis morgen/locked), RULES/judge/decide (je Website, nur Nutzerverhalten sperrt, zweites Schließen in 7 Tagen sperrt, Admins nur gemeldet), _shut (seit 2026-11-04 mit _end_agent_processes), NET_ARGV/parse_net/counts (Netzzähler am Nachrichtenende), status (Cache 20 s, Lesefehler schließt nie), unlock mit baseline, Telegram ohne Konto; Details docs/agent-mode.md „Sicherheitsregeln des Arbeitsplatzes“
   workspace_vm/              Läuft auf dem Rechner des Arbeitsplatzes (LF per .gitattributes; workbench/ und browser/ in einem Ordner /home/sprite/.consens/workspace, eine VERSION). workbench/: agent-run (jeder Befehl des Agenten: Mount-Namespace ohne api.sock/Checkpoints/Logs, seit 2026-11-04 mit eigenem /tmp aus /var/lib/consens/agent-tmp, oom_score_adj 800 und nice 10, dem seccomp-Filter aus nouserns.py, setpriv auf den Nutzer agent mit no-new-privs, timeout), nouserns.py (seit 2026-11-04: seccomp-Filter, clone/unshare mit CLONE_NEWUSER und setns EPERM, clone3 ENOSYS, x32 gesperrt; nur Standardbibliothek, Exit 125 ohne Filter), setup.sh (Nutzer agent ohne sudo, /home/sprite 750, /tmp des Agenten, Umzug aus dem alten Home, einmal je Rechner (Marke /var/lib/consens/one-computer) Browser, Bildschirm, Tunnel und Gateway früherer Bauweisen samt Prozessen des Agenten weg, Xvfb/x11vnc entfernt, ripgrep, poppler-utils und Chrome (ohne Googles apt-Quelle), Laufzeit-Shims vorbereitet; beendet seit 2026-10-29 das alte pause.py und taut seine cgroups auf). tunnel.py (localhost-Brücke zwischen den zwei VMs) gab es von 2026-10-29 bis 2026-11-04. office/ (seit 2026-11-01, Konverter-Sprite consens-office, agent_office.py): setup.sh (LibreOffice Impress/Writer/Calc ohne Recommends, Office-Schriften, poppler-utils, python3-pil, Nutzer office0–office2 ohne sudo/Home/Shell, erst dpkg --configure -a, danach apt-get clean, Marke VERSION zuletzt), convert.sh (cd /, eine Datei von stdin, einer von drei Plätzen per flock auf /run/consens-office/slotN.lock, Platz vorher und nachher geräumt (kill -1 als officeN, Dateien), seit 2026-11-01 abends auch jeder gerade freie Platz (clean_free, Lock kurz gehalten; `convert.sh clean` nur das), jeder Befehl eines Platzes mit prlimit --as 2 GB (Umwandlung braucht 0,5–0,6 GB, die VM hat 8 GB ohne Swap; ihre cgroup nimmt keine eigenen Grenzen an), LibreOffice als officeN in einem Ordner nur dieser Umwandlung mit eigenem Profil, Seitenzahl als officeN geschrieben, pdfinfo/pdftoppm, tar auf stdout; Exit 2 Typ, 3 kein PDF, 4 alle Plätze belegt, 5 Zeitlimit; Schrittlimits unter RUN_SECONDS; live geprüft 2026-11-01), sheet.py (Übersicht: Folien zwei, Hochformat drei Spalten, Seitennummern, höchstens 1568 px). browser/: browser.py (das eine Programm des Werkzeugs browser: JSON rein und raus, Playwright über CDP, Seite als Text mit Refs, Hauptinhalt zuerst, find mit denselben Refs, Seitenkopf mit „Cookies saved for this site: yes|no“ aus den Cookies und ab zwei Tabs „Tab n of m“ (tab_line, seit 2026-11-17); read endet mit dem, was seine Liste auslässt (Text, Bilder, Canvas, Videos: SNAPSHOT_JS unlisted, unlisted_line, seit 2026-11-17); click/drag an x,y seit 2026-10-30 mit Element und Box unter jedem Punkt und den Änderungen danach, nächste zuerst, auf Canvas/Frame/Video mit Bildvergleich um den Punkt: HIT_JS, look_at, hit_report; jede Aktion auf der Seite vorn seit 2026-10-30 mit dieser Beobachtung (eine Ref in einem Frame dort), Warten auf die Ruhe der Seite statt 2 s networkidle (quiet, Traffic, QUIET_JS; Navigation lädt wie bisher, loaded), danach Kopf und nur die seit dem letzten Blick geänderten Zeilen (after_text, changes/outline mit Frames und Überlagerung, last-look.json; ganze Liste nach Navigation, bei read und wenn mehr als die Hälfte neu ist; scroll nennt die Lage und listet zuerst, was im Blick ist, IN_VIEW_JS), Dialoge einer Seite seit 2026-11-10 je Aufruf beantwortet und in der Antwort genannt (answer_dialog, ASKED, asked_text: alert/beforeunload OK, confirm/prompt Abbrechen außer accept_dialog), upload auf einem Knopf oder an x,y über die abgefangene Dateiauswahl (FILE_FIELD_JS, opened_chooser, CHOOSER_SECONDS), scroll mit ref oder x,y im Kasten, der dort scrollt (BOX_SCROLL_JS, sonst die Seite), und „in view“ nur, was abschneidende Kästen zeigen (IN_VIEW_JS), Fehler mit der letzten aussagekräftigen Call-Log-Zeile und der Seite (on_failure, failure_text; veraltete Ref mit ganzer Liste, StaleRef), download nur Name/Bytes/Content-Type, 0 Byte refused; Server-Aktion rest kürzt den Wach-Hold auf REST_FOR; read seit 2026-10-30 mit dem, was über der Seite liegt, zuerst und den Elementen von Frames unter ihrer Zeile (with_frames; die Aktion read liest alle Frames, das Lesen nach einer Aktion nur Frames über der Seite, find keine; element sucht einen Frame-Ref nur in dem Frame, aus dem er stammt, remember_frames/frame-refs.json, nie in einem der eigenen VM); seit 2026-10-30 hält ein residenter Helfer (`--serve`, Unix-Socket ~/.consens/browser/serve.sock mit 0600, serve.lock, SERVE_IDLE, VERSION = Hash der Datei) Playwrights Treiber, verbindet sich mit Chrome nur je Aufruf (ready/disconnect, KEPT; verbunden lenkt Playwright Downloads um und beantwortet Dialoge), ein Aufruf ohne Helfer läuft selbst und startet einen; `free` (sonst beschäftigt: Aufruf läuft nach 1 s selbst), `took` und erst auf `go` des Aufrufs gehandelt, der Helfer verbindet mit einem Neustart wie ein Aufruf ohne ihn (connect), ein Aufruf wartet höchstens READY_SECONDS 35 s auf `took`, `declined`/`stale` = Aufruf läuft selbst, nie zweimal, ein Aufruf, der vor seiner Antwort endet, beendet Helfer und Aktion: through_server/exchange/serve_one/serve), display.sh (seit 2026-11-02 Xtigervnc als Bildschirm und VNC-Server in einem, nur auf dem Unix-Socket vnc.sock (0600), ohne TCP, ohne Zwischenablage, schickt ohne Anfrage höchstens 30 Bilder/s; seit 2026-11-04 mit X-Cookie (xauthority, 0600, je Start neu), Chrome nur auf einem X-Server, der seine Sockets selbst hält (x_ours: xsocket.py fragt per sock_diag, wem die Stream-Sockets auf @/tmp/.X11-unix/X1 gehören; die fds des nicht dumpbaren Xtigervnc von Ubuntu 26.04 sind dem eigenen Nutzer verschlossen), pgrep/pkill nur für den eigenen Nutzer, Chrome über cdp.py ohne Debug-Port; eine VM von vorher räumt Xvfb/x11vnc/openbox, nie unter --keep; openbox, Chrome mit dauerhaftem Profil und Software-WebGL (SwiftShader, seit 2026-10-28; ein Chrome ohne startet einmal neu)), cdp.py (seit 2026-11-04: startet Chrome mit --remote-debugging-pipe, bietet CDP als WebSocket und /json/list auf cdp.sock (0600), eine Browser-Session je Verbindung, IDs und Sessions getrennt, Ende einer Verbindung löst ihre Session; nur Standardbibliothek), install.sh (bis 2026-11-04 setup.sh; einmalige Installation von Bildschirm, openbox, Schriften und Playwright, Chrome wo es fehlt, Marke setup-done-2 auch in browser.py/relay.py), relay.py (Live-Ansicht: Zustände auf stderr, dann VNC zwischen stdin/stdout; Ziele über cdp.sock; nur Standardbibliothek), xsocket.py (seit 2026-11-04: Exit 0, wenn jeder Stream-Socket auf X' abstraktem Namen dem gegebenen Nutzer gehört und es einen gibt; sock_diag mit UNIX_DIAG_UID, nur Standardbibliothek); browser.py liest seit 2026-10-29 keine Seite der eigenen VM (own_computer), localhost seit 2026-11-04 nur auf Ports, auf denen der Nutzer des Agenten lauscht (agent_ports, /proc/net/tcp)
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image/vm_save_picture/vm_render_office (model_picture seit 2026-11-01: jedes Bild ans Modell – vm_view_image, Browser-Screenshot, Office-Übersicht, find_pictures – geht über picture_message höchstens PICTURE_SIDE = 1568 px lang und etwa PICTURE_SENT_BYTES = 400 KB groß, sonst neu als WebP; Screenshots (1280×800) behalten ihre Pixel für click an x,y; nicht dekodierbar → wie bisher roh; vm_save_picture seit 2026-11-01, nur wo image_tools existiert: Bild aus find_pictures/search_pictures per ID über WebImageTools.picture_file (holt einen Suchtreffer erst jetzt) als .jpg/.png/.webp nach Dateiendung (agent_web_images.saved_as) in die Werkbank, Ergebnis mit Größe, picture und page, keine VM-Zeit; vm_render_office seit 2026-11-01: Office-Datei der Werkbank über agent_office.render als PDF daneben unter ihrem ganzen Namen (deck.pptx.pdf), Übersicht der ersten Seiten wie vm_view_image mit OVERVIEW_INTRO (beginnt mit agent_compaction.PICTURE_OPEN, geht mit OVERVIEW_GONE), 30/h je Konto erst nach dem Lesen, keine VM-Zeit; vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; nur wo das Konto die VM hat (routers/agent.py vm_allowed), nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge in den input-Ordner des Chats, am Ende die Netzzähler für workspace_guard (_note_net, seit 2026-11-04); bis 2026-11-04 Netzregeln mit den Domains des Chats), vm_install_packages (apt als root für den Agenten ohne sudo, seit 2026-10-27; seit 2026-11-04 mit --no-remove und nur Namen, die apt kennt), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge; OpenWorkspaceArgs/OPEN_WORKSPACE für den Arbeitsplatz auf Abruf (seit 2026-10-29, DelegationLoop._open_workspace)
+  agent_apps.py              Eine App des Agenten im eigenen Browser des Nutzers (seit 2026-11-23): host() (AGENT_APP_HOST), der Token der Öffnungsadresse (issue_open/read_open, 60 s) und die Sitzung im Cookie __Host-consens_app (issue_session/read_session, 1 h), beide Fernet unter eigenen Schlüsseln; app_key, start_path, open_url
+  agent_app_tunnel.py        Der Weg zur App im Arbeitsplatz: je Konto ein Befehl (workspace_vm/workbench/app_tunnel.py) über die Exec-API des Anbieters, dessen stdin/stdout viele Verbindungen als Rahmen tragen (Tunnel, Stream, tunnel_for, expect, close_all); bedient nur, solange ein Hintergrundprozess läuft, zählt seine Bytes für workspace_guard
+  agent_app_proxy.py         Was der App-Host antwortet: /__consens/open (Token gegen Cookie, Clear-Site-Data bei einer anderen App), danach jede Anfrage (h11) und jeder WebSocket (websockets, Sans-I/O) durch den Tunnel, mit localhost:<port> als Host und Origin; eigene Hinweisseiten per _t
   agent_pages.py             Die Adresse einer Seite im Chat (seit 2026-11-23): issue/read eines Tokens aus Konto, Chat und Datei, mit Fernet verschlüsselt und signiert (eigener Schlüssel aus CHAT_CURSOR_SECRET bzw. WATCH_UNSUBSCRIBE_SECRET, sonst ein Geheimnis des Prozesses), gültig TOKEN_SECONDS=300; routers/agent_files.py open_page/show_page
   agent_office.py            Ein Office-Konverter für alle Konten (seit 2026-11-01): Sprite consens-office des Betreibers mit LibreOffice, Werkzeuge workspace_vm/office/* mit VERSION (prepare einmal pro Prozess, Setup als root, Marke zuletzt), Netz nur Ubuntus Spiegel (RULES); render(data, extension) schickt die Bytes per stdin an convert.sh und liest ein tar (in.pdf, pages.png, pages.txt) → Rendered; OfficeRefused (Datei, Exit 2/3/5) vs. OfficeUnavailable (Konverter); höchstens PARALLEL=3 zugleich (Warten schaut nach Stop), 20 MB, LibreOffice 90 s, Server wartet RUN_SECONDS=165; mit weniger als MIN_SECONDS=85 s Antwortzeit startet keine Umwandlung (OfficeUnavailable "no time", vm_render_office meldet VM_NO_TIME und zählt keinen Render der Stunde; bis 2026-11-03 bekam LibreOffice 1 s und die Datei galt als schuld); Setup mit eigener Cancellation, nach Fehlschlag SETUP_RETRY_SECONDS=600 aus; _forget nach Provider-Ausfall/Exit 127; nach Stop, Zeitüberschreitung oder Verbindungsverlust `sweep` (`convert.sh clean`) im Hintergrund nach SWEEP_DELAY_SECONDS: Live-Probe 2026-11-01, der Provider beendet convert.sh, LibreOffice läuft als officeN mit der Datei weiter, die Falle des Skripts läuft nie; `render(seconds=…)` bleibt in der Restzeit der Antwort; ersetzt LibreOffice pro Werkbank (Speicher je Konto)
-  agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min), die Aktivität des Starts trägt `ends_at` (seit 2026-11-17: „Running in the background until 14:30“); seit 2026-11-01 nennt die Datei chat den startenden Chat, delete_for_chat (chat_command) stoppt und löscht seine Prozesse mit ihm
+  agent_vm_processes.py      vm_show_app (seit 2026-11-23, nur mit AGENT_APP_HOST: Karte für eine App, deren Prozess läuft und deren Port antwortet; app_command, parse_app, app_state, LOCAL_HOSTS) und vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min), die Aktivität des Starts trägt `ends_at` (seit 2026-11-17: „Running in the background until 14:30“); seit 2026-11-01 nennt die Datei chat den startenden Chat, delete_for_chat (chat_command) stoppt und löscht seine Prozesse mit ihm
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import (öffentliche Repos auch ohne App), prepare_pull_request (seit 2026-10-29 nur angeboten, wenn die App eingerichtet ist; sonst auch AGENT_GITHUB_IMPORT_PROMPT statt AGENT_GITHUB_PROMPT; Vorschlag am Turn agent_pull_request; seit 2026-10-27 Diff im Backend aus den Bytes der Datei-API gegen Tree und Blobs des Import-Commits von GitHub, die VM nennt nur die Pfade) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
   agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Zusammenfassungen (seit 2026-11-03, wie Claude Code/Codex): HISTORY_SUMMARY_*/history_keep für den Chatverlauf, run_summary_due/run_tail für die eigenen Schritte eines Laufs (über min(100k Token, 60 % Fenster, bei langen Läufen dem Ende bei 80 % abzüglich Antwort), nicht vor einer Antwort an Zeit-/Schritt-/Kontingentgrenze, die noch passt, solange der Lauf selbst mindestens die Hälfte ausmacht; Nutzernachrichten des Laufs bleiben wörtlich davor, run_state hängt Plan und gestartete Hintergrundprozesse an), summary_message/summary_text/is_summary (nie Nutzertext, im Arbeitsprotokoll Daten des Agenten). Bilder (older_pictures, seit 2026-10-30): gesammelt auf die neuesten 3, sobald die sichtbaren mehr wiegen als PICTURES_SHOWN_CHARS (Base64) oder mehr als 30 sind, und mit jeder Kompaktierung, nie die des aktuellen Batches; Ersatztext nach Herkunft (picture_gone). Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns, seit 2026-10-27 jedes abgebrochenen und seit 2026-11-18 jedes Turns mit Werkzeugaufrufen (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
@@ -14353,6 +14360,126 @@ geteilt wird eine Seite nicht.
   Höhe, an die Fensterhöhe gebunden bleibt im Startmaß, eine Änderung von
   selbst wartet auf den Nutzer, Bedienung, Bühne, Download, nach Neuladen
   wieder; die laufende App antwortet unter dem Pfad mit der Sandbox).
+
+### App im eigenen Browser (seit 2026-11-23)
+
+Max: Was einen eigenen Server braucht (ein Dev-Server, eine API, Skripte von
+außen), soll er „live testen“ können, während er es mit dem Agenten
+entwickelt, in seinem eigenen Browser und am Handy, nicht als Bild aus dem
+Browser des Arbeitsplatzes. Die Seite im Chat (oben) kann das bewusst nicht:
+Sie ist eine Datei ohne Netz. `vm_show_app` legt deshalb eine Karte unter die
+Zeile des Laufs, deren „Open“ die App in einem eigenen Tab öffnet, unter
+einer eigenen Adresse, solange ihr Hintergrundprozess läuft.
+
+- **Eigene Adresse, eigene Site** (`app/services/agent_apps.py`,
+  `AGENT_APP_HOST`): Code, den ein Agent schreibt, darf nie unter consens.io
+  laufen (ein Pfad oder eine Subdomain läse die Anmeldung im Browserspeicher
+  oder bekäme das Sitzungs-Cookie mit). Der Host für Apps ist der zweite
+  Hostname des Dienstes, `typeonai.onrender.com`: `onrender.com` steht auf
+  der Public-Suffix-Liste, jede Adresse darunter ist für Browser eine eigene
+  Site, und es braucht keine gekaufte Domain. Ohne `AGENT_APP_HOST` gibt es
+  weder Werkzeug noch Karte noch Host. Eine Vorschau je Browser: Alle Apps
+  teilen den einen Host. Mehrere gleichzeitig bräuchten eine eigene
+  Wildcard-Domain (nicht gebaut).
+- **Der Host** (`app/core/app_host.py`, `AppHostMiddleware`, in `main.py`
+  direkt innerhalb von `NetworkBlockMiddleware`): Eine Anfrage an den
+  App-Host erreicht nie consens.ios Routen, Seiten oder Middlewares
+  (Sicherheits-Header, deutsche Seiten, Auslieferung), sondern nur
+  `agent_app_proxy.app`. Ausnahme `/health/…`, das auf jedem Host antwortet.
+- **Öffnen** (`routers/agent_workspace.py` `POST /agent/workspace/app`,
+  angemeldet, `{process, port, path}`): prüft Konto, Arbeitsplatz und
+  Sicherheitsregeln, sieht im Arbeitsplatz nach dem Prozess
+  (`agent_vm_processes.app_state`) und antwortet `{running: true, url,
+  ends_at}` oder `{running: false}`. Die Adresse trägt einen Token
+  (`issue_open`: Konto, Port, Startpfad, App-Schlüssel; Fernet unter eigenem
+  Schlüssel aus dem Server-Geheimnis, gültig `OPEN_SECONDS` = 60 s).
+  `/__consens/open` auf dem App-Host (`agent_app_proxy.open_session`) tauscht
+  ihn gegen das Cookie `__Host-consens_app` (HttpOnly, Secure, SameSite=Lax,
+  `SESSION_SECONDS` = 1 h) und leitet auf den Startpfad. War im Browser
+  vorher eine andere App offen (`app_key`: Konto, Chat des Prozesses, Port),
+  kommt davor eine Antwort mit `Clear-Site-Data: "cache", "cookies",
+  "storage"`: Unter dem einen Host würde sonst der Service Worker oder ein
+  gecachtes Skript der letzten App für die nächste antworten. Dieselbe App
+  noch einmal behält ihren Speicher. `Cross-Origin-Opener-Policy:
+  same-origin` trennt den Tab von dem, der ihn öffnete.
+- **Der Weg zur App** (`app/services/agent_app_tunnel.py`,
+  `workspace_vm/workbench/app_tunnel.py`): Der Token des Anbieters geht nur an
+  `api.sprites.dev`, nie an eine Adresse der VM, also kein Zugriff über die
+  private Sprite-URL. Stattdessen läuft je Konto ein Befehl über die
+  Exec-API, dessen stdin und stdout Rahmen tragen (Art 1 Byte, Verbindung
+  4 Byte, Länge 4 Byte, Nutzlast): viele Verbindungen zugleich über einen
+  Socket. Der Befehl verbindet sich zum Port auf dem Loopback der VM.
+  Gemessen an einer Test-Sprite (2026-11-23, von einem Rechner in
+  Deutschland): erste Anfrage 0,45 s samt Aufbau, danach Median 32 ms, 30
+  Anfragen gleichzeitig in 0,09 s, 2 MB in 0,16 s, WebSocket-Echo 16 ms.
+- **Zeit zählt der Prozess, nicht die Vorschau:** `app_tunnel.py` bedient
+  nur, solange ein Hintergrundprozess des Agenten läuft (Ordner mit lebender
+  pid ohne exit_code), dessen ganze Laufzeit schon als Arbeitsplatz-Zeit
+  gebucht ist (`agent_vm_processes.py`). Ohne einen meldet er `BYE idle` und
+  endet, ebenso nach `QUIET_SECONDS` (120 s) ohne Verbindung. Der Server
+  merkt sich „idle“ je Konto (`_idle`) und beantwortet weitere Anfragen ohne
+  die VM, bis die App aus dem Chat neu geöffnet wird (`expect`): Ein offen
+  gelassener Tab, der weiter fragt, hielte die VM sonst ungezählt wach.
+- **Was die App sieht** (`app/services/agent_app_proxy.py`): einen Browser
+  auf ihrem eigenen Rechner. `Host` und `Origin` heißen `localhost:<port>`
+  (Vites `allowedHosts` und Frameworks, die Origin gegen Host prüfen,
+  antworten), nichts von Render oder Cloudflare (keine IP, kein
+  `x-forwarded-*`, `cf-*`), nie das Sitzungs-Cookie. Zurück: eine
+  Weiterleitung auf `http://localhost:<port>/…` wird ein Pfad, `Domain=` an
+  einem Cookie fällt weg, ein Cookie mit dem Namen der Sitzung wird nicht
+  gesetzt, `X-Robots-Tag: noindex` an jeder Antwort. HTTP über `h11` (eine
+  Verbindung je Anfrage, Körper gestreamt in beide Richtungen), WebSockets
+  über das Sans-I/O-Protokoll von `websockets` (Subprotokoll, Text, Binär,
+  Close-Code). Eigene Seiten des Moduls (keine Sitzung, App beendet, Port
+  antwortet nicht, Arbeitsplatz nicht erreichbar) gehen an der
+  I18n-Middleware vorbei und schreiben ihre Sätze per `_t`
+  (`scripts/i18n.py` `SERVER_MARKED`).
+- **Sicherheitsregeln:** Ein geschlossener Arbeitsplatz öffnet keine App und
+  beendet einen offenen Tunnel binnen `GUARD_SECONDS`. Die getragenen Bytes
+  zählen wie die der Live-Ansicht (`workspace_guard.note_view_bytes`), weil
+  sie über die Exec-API laufen und in den Netzzählern der VM fehlen.
+- **`vm_show_app`** (`agent_vm_processes.ProcessTools.show`, nur mit
+  `AGENT_APP_HOST`): `{id, port, path?, title?}`. Die Karte gibt es nur, wenn
+  der Prozess läuft und der Port antwortet (`app_command`, bis `APP_TRIES`
+  Versuche im Sekundenabstand), sonst sagt der Fehler dem Agenten, was fehlt.
+  Aktivität: `app_shown`, `app_port`, `app_path`, `app_title`, `process`,
+  `ends_at`.
+- **„localhost“ auf einer Sprite** (Probe 2026-11-23): `/etc/hosts` nennt
+  `fdf::1` vor `127.0.0.1`. Ein Server, der sich an den Namen bindet (Nodes
+  Dev-Server), lauscht nur auf `fdf::1`; curl, das „localhost“ selbst als
+  Loopback kennt, bekam auf keinem der drei Namen eine Antwort. Prüfung
+  (`LOCAL_HOSTS`: `getent ahosts localhost`, dann beide Loopbacks) und
+  Tunnel (`local_addresses`) fragen deshalb alle drei. Der Browser des
+  Arbeitsplatzes erreicht so einen Server unter `localhost:<port>` nicht
+  (Chrome kennt den Namen ebenfalls nur als Loopback); das ist nicht
+  geändert.
+- **Name des Skripts:** `setup.sh` entfernt auf einer neuen VM die Dateien
+  älterer Aufbauten beim Namen, darunter `tunnel.py` (der Tunnel zwischen
+  zwei VMs, 2026-10-29 bis 11-04). Das Skript heißt deshalb `app_tunnel.py`;
+  `tests/test_agent_app_proxy.py` hält fest, dass kein Werkzeug so heißt wie
+  eine entfernte Datei.
+- **Im Browser** (`agent-activity.js` `showsApp`, `appCard`, `updateApp`,
+  `openApp`, `pinApp`): die Karte am Platz der Seitenkarte unter der Zeile
+  des Laufs (`pinPage` zeigt, was zuletzt kam), ohne Bild. Der Tab öffnet im
+  Klick selbst (`about:blank`, sonst blockt der Browser ihn als Pop-up),
+  bekommt `opener = null` und geht nach der Antwort des Servers auf die
+  Adresse. Ist der Prozess zu Ende (`ends_at` vorbei oder `running: false`),
+  heißt der Knopf „Start again“ und löst `consensio:app-restart` aus:
+  `agent-chat.js` `restartApp` schickt „Start the app again.“ als nächste
+  Nachricht, weil nur der Agent weiß, was die App zum Start braucht.
+- **Grenzen:** eine App je Browser zugleich; kein öffentliches Teilen; der
+  Neustart kostet eine Nachricht an den Agenten; consens.io selbst ließe
+  sich so nur mit einem Test-Projekt statt der Prod-Schlüssel entwickeln.
+  Noch nicht in Prod geprüft: `AGENT_APP_HOST` setzen, Deploy, ein echter
+  Lauf mit Vite/Next am Handy.
+- Tests: `tests/test_agent_app_proxy.py` (die ganze Strecke mit dem echten
+  `app_tunnel.py` als Prozess, einem Web- und einem WebSocket-Server:
+  Token und Sitzung, Host-Trennung, Kopfzeilen, Körper in beide Richtungen,
+  Weiterleitung und Cookies, toter Port, beendeter Prozess ohne neues Wecken,
+  Sicherheitsregeln, Zählung), `tests/test_agent_vm_processes.py`
+  (`vm_show_app`, `app_command` in echter bash),
+  `tests/test_agent_workspace_view.py` (`/agent/workspace/app`),
+  `tests/js/agent-app-card.test.mjs`.
 
 ## Agent-Laufoberfläche: Rendering, Aktivität, Composer (2026-09-30)
 

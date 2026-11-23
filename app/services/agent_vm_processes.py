@@ -1,5 +1,7 @@
 """Background processes in the agent's VM: a dev server, a long test run
-(vm_start_process, vm_process_output, vm_stop_process).
+(vm_start_process, vm_process_output, vm_stop_process), and the app one of
+them serves on a card for the user's own browser (vm_show_app, where the
+service has a host for apps: agent_apps.py).
 
 A process started with ``&`` in vm_exec stops when the VM pauses, which it
 does after a few idle seconds, so between two of the agent's steps. A
@@ -103,6 +105,23 @@ api -X DELETE "http://sprite/v1/tasks/$task"
 
 PROCESSES_NOTE = ("It runs in the background: read its output with vm_process_output and end it with "
                   "vm_stop_process; it ends by itself after max_seconds.")
+# vm_show_app: how often the port is asked, a second apart (a dev server
+# takes a few to listen), and the first line of the check's output:
+# "consens-app <state> <started> <reserved> <answer> <chat>", each "-" where unknown.
+APP_TRIES = 10
+# The addresses a server "on localhost" may listen on, one a line: what the
+# name means on this computer first, then both loopbacks. On a Sprite the
+# name is fdf::1 before 127.0.0.1 (its /etc/hosts, test Sprite 2026-11-23),
+# and a server bound to the name (Node's dev servers) listens on fdf::1
+# only: curl, which knows "localhost" as the loopbacks by itself, got no
+# answer from it on any of the three names. app_tunnel.py asks the same.
+LOCAL_HOSTS = ("(getent ahosts localhost 2>/dev/null | cut -d' ' -f1; echo 127.0.0.1; echo ::1) "
+               "| awk '!seen[$0]++'")
+APP_LINE =re.compile(r"^consens-app (running|lost|stopped|-?\d+) (-|\d+) (-|\d+) (-|\d{3}) (-|[A-Za-z0-9_-]{1,100})$")
+APP_NOTE = ("The app shows a card with your answer: Open there shows this app in the user's own browser, on their "
+            "phone too, at an address only they can open, live while this process runs{until}. It is no link you "
+            "can write and not the shared browser. What you change shows there as your server reloads it; once "
+            "the process has ended, the card lets them ask you to start it again.")
 
 
 class VmStartProcessArgs(BaseModel):
@@ -124,6 +143,14 @@ class VmProcessOutputArgs(BaseModel):
 class VmStopProcessArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=ID)
+
+
+class VmShowAppArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=ID, description="The background process that serves it (vm_start_process).")
+    port: int = Field(ge=1024, le=65535, description="The port it listens on, on localhost.")
+    path: str = Field(default="/", max_length=500, description="Where it opens: a path of the app, default /.")
+    title: str = Field(default="", max_length=60, description="What the card calls it, in a few words.")
 
 
 def new_id():
@@ -244,6 +271,61 @@ def list_command(root=PROCESSES_DIR, chat=""):
             "done; true")
 
 
+def app_command(directory, port, tries=0):
+    """Prints APP_LINE for the process folder: its state, its start and the
+    seconds it may run, what answered on ``port`` (the HTTP status, asked up
+    to ``tries`` times a second apart) and the chat that started it. The
+    port is asked wherever a server "on localhost" may listen (LOCAL_HOSTS)."""
+    d = shlex.quote(directory)
+    ask = (f"hosts=$({LOCAL_HOSTS}); for _ in $(seq {int(tries)}); do for host in $hosts; do "
+           "case \"$host\" in *:*) host=\"[$host]\";; esac; "
+           f"status=$(curl -g -s -o /dev/null -m 3 -w '%{{http_code}}' \"http://$host:{int(port)}/\" 2>/dev/null); "
+           "case \"$status\" in [1-5][0-9][0-9]) answer=$status; break 2;; esac; done; sleep 1; done; "
+           if tries else ":; ")
+    return (f"dir={d}; [ -d \"$dir\" ] || exit 5; " + state_command() +
+            "started=$(head -c 20 \"$dir/started\" 2>/dev/null | tr -cd '0-9'); "
+            "reserved=$(head -c 40 \"$dir/reserve\" 2>/dev/null | cut -d' ' -f1 | tr -cd '0-9'); "
+            "chat=$(head -c 100 \"$dir/chat\" 2>/dev/null | tr -cd 'A-Za-z0-9_-'); answer=-; "
+            "if [ \"$code\" = running ]; then " + ask + "fi; "
+            "printf 'consens-app %s %s %s %s %s\\n' \"$code\" \"${started:--}\" \"${reserved:--}\" \"$answer\" "
+            "\"${chat:--}\"")
+
+
+def parse_app(text):
+    """``(state, ends, answer, chat)`` of app_command's output: the state as
+    parse_status gives it, when the process ends by itself (seconds since
+    the epoch, or None), the HTTP status the port answered with (or None)
+    and the chat that started the process ("" when unknown)."""
+    match = APP_LINE.match(text.strip().partition("\n")[0].strip())
+    if not match:
+        raise ValueError("The process status could not be read.")
+    state, started, reserved, answer, chat = match.groups()
+    ends = int(started) + int(reserved) if started != "-" and reserved != "-" else None
+    return (state if state in {"running", "lost", "stopped"} else int(state), ends,
+            None if answer == "-" else int(answer), "" if chat == "-" else chat)
+
+
+def app_state(vm, name, process_id, port):
+    """The same look for the user's click on the card
+    (routers/agent_workspace.py), as the server's own step: ``(running,
+    ends, chat)``; a process that is gone is not running."""
+    from app.services.llm.provider_runtime import ProviderCancellation
+    out = bytearray()
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) < 400:
+            out.extend(chunk)
+    outcome = vm.exec(name, app_command(process_dir(process_id), port), cwd=agent_vm.SERVER_HOME,
+                      timeout=SETTLE_SECONDS + 30, on_output=keep, cancellation=ProviderCancellation(), agent=False)
+    if outcome.exit_code != 0:
+        return False, None, ""
+    try:
+        state, ends, _, chat = parse_app(out.decode("utf-8", "replace"))
+    except ValueError:
+        return False, None, ""
+    return state == "running", ends, chat
+
+
 def task_name(process_id):
     return f"consens-{process_id}"
 
@@ -358,9 +440,19 @@ class ProcessTools:
         # The processes this message started: their time comes off its own
         # charge (VMSession.reserved) when they end before it does.
         self.started = set()
+        # The apps this message put on a card (show): when each one's process ends by itself.
+        self.shown = {}
 
     def tools(self):
+        from app.services import agent_apps
         return [
+            # Only where the service has a host for apps (agent_apps.host).
+            *([ReadOnlyTool("vm_show_app", "Give the user a web app that one of your background processes serves in "
+                            "the workspace, such as a dev server: a card with your answer opens it in their own "
+                            "browser, on their phone too, live while the process runs. For what needs its server; "
+                            "one HTML file that needs nothing from outside itself runs in the chat with vm_share_file.",
+                            VmShowAppArgs, self.show, activity=self._activity, reports=True)]
+              if agent_apps.host() else []),
             ReadOnlyTool("vm_start_process", "Start a command in the background in your workspace, such as a dev server or "
                          "a long test run (at most three at once). Returns its id and first output.",
                          VmStartProcessArgs, self.start, activity=self._activity, reports=True),
@@ -518,7 +610,39 @@ class ProcessTools:
         report({"output": result.pop("_view"), "process": args.id})
         return self.vm.session.announce(result)
 
+    def show(self, args, *, cancellation, report=None):
+        """vm_show_app: the card only for a process that runs and a port
+        that answers, so the user never opens one that shows nothing."""
+        from app.services import agent_apps
+        self.vm._start(cancellation, change=False)
+        code, text = self._run(app_command(process_dir(args.id), args.port, APP_TRIES), cancellation,
+                               APP_TRIES * 8 + SETTLE_SECONDS + 30, idempotent=True)
+        if code == 5:
+            raise ValueError(f"No background process {args.id}. List them with vm_process_output without an id.")
+        state, ends, answer, _ = parse_app(text)
+        if state != "running":
+            raise ValueError(f"Process {args.id} does not run any more: an app is served by a running background "
+                             "process. Start it with vm_start_process, then show it.")
+        if answer is None:
+            raise ValueError(f"Nothing answers on port {args.port} of the workspace. Read the process's output "
+                             "(vm_process_output) for the port it listens on and whether it is up, then show it.")
+        self.shown[args.id] = ends
+        until = f", until {time.strftime('%H:%M', time.gmtime(ends))} UTC" if ends else ""
+        return self.vm.session.announce({"shown_as": "app", "id": args.id, "port": args.port,
+                                         "path": agent_apps.start_path(args.path),
+                                         "note": APP_NOTE.format(until=until)})
+
     def _activity(self, args, result):
+        if isinstance(args, VmShowAppArgs):
+            from app.services import agent_apps
+            fields = {"process": args.id, "app_port": args.port, "app_path": agent_apps.start_path(args.path)}
+            if args.title.strip():
+                fields["app_title"] = " ".join(args.title.split())
+            if isinstance(result, dict) and result.get("shown_as") == "app":
+                fields["app_shown"] = True
+                if self.shown.get(args.id):
+                    fields["ends_at"] = self.shown[args.id] * 1000
+            return {**fields, **self.vm._outcome(result)}
         fields = {"command": args.command} if isinstance(args, VmStartProcessArgs) else {"process": args.id or ""}
         if isinstance(result, dict):
             if "id" in result:

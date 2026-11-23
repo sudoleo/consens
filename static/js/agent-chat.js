@@ -1343,6 +1343,20 @@
     handback = null;
     sendHandback();
   }
+  // "Start again" on the card of an app whose process has ended
+  // (agent-activity.js appCard): the user's next message in the chat on
+  // screen asks the agent for it, unless a message runs there already.
+  function restartApp() {
+    if (!looksAgent()) return;
+    const context = registry.visible();
+    if (context && registry.isExecuting(context.runId)) return;
+    const basis = registry.getSelectedConversationBasis();
+    if (!basis?.chatId || basis.continuationUnavailable) return;
+    return send(null, { retry: {
+      question: App.t("Start the app again."), basis, chatId: basis.chatId, bookmarkId: basis.bookmarkId,
+      fileIds: [], attachmentMeta: [], googleSelection: null, googleDataConsent: App.agentGoogle?.consent?.() === true,
+    } });
+  }
   function sendHandback() {
     const basis = registry.getSelectedConversationBasis();
     if (!basis?.chatId || basis.continuationUnavailable) return;
@@ -3392,6 +3406,7 @@
   // the agent's browser card offers the other way.
   window.addEventListener("consensio:workspace-holder", () => renderHold());
   window.addEventListener("consensio:workspace-handback", continueAfterHandback);
+  window.addEventListener("consensio:app-restart", restartApp);
   window.addEventListener("consensio:run-registry-change", settleHandback);
   window.addEventListener("resize", fitHold);
   window.visualViewport?.addEventListener?.("resize", fitHold);

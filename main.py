@@ -42,6 +42,7 @@ from app.core.background_tasks import (
 )
 from app.core.concurrency import apply_worker_thread_budget
 from app.core.request_limits import RequestBodyLimitMiddleware
+from app.core.app_host import AppHostMiddleware
 from app.core.network_block import NetworkBlockMiddleware
 from app.core.static_delivery import StaticDeliveryMiddleware
 from app.core.i18n_middleware import I18nMiddleware
@@ -278,6 +279,10 @@ async def lifespan(app: FastAPI):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        # The commands that carry users' apps (agent_app_tunnel.py) hold
+        # their workspaces awake: they end with the process.
+        from app.services import agent_app_tunnel
+        await agent_app_tunnel.close_all()
 
 app = FastAPI(
     title="consens.io API",
@@ -312,6 +317,9 @@ app.add_middleware(I18nMiddleware)
 # Long-lived caching for content-hashed static/dist bundles and gzip for static
 # text and HTML. Server-Sent Events are never compressed or held.
 app.add_middleware(StaticDeliveryMiddleware)
+# The host of the workspaces' apps (app/core/app_host.py): outside everything
+# that is consens.io's, so an app's answer passes none of it.
+app.add_middleware(AppHostMiddleware)
 # Outermost: a refused network costs no work at all.
 app.add_middleware(NetworkBlockMiddleware)
 

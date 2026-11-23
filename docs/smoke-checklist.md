@@ -1528,6 +1528,22 @@ Server.
       `Content-Security-Policy: sandbox allow-scripts; …`; der Download der
       Datei kommt als `application/octet-stream`.
 
+## App im eigenen Browser (seit 2026-11-23)
+- [ ] Mit `AGENT_APP_HOST`: Agent mit Arbeitsplatz, „Bau mir eine kleine
+      Vite-App und zeig sie mir“ → er startet den Dev-Server mit
+      `vm_start_process` und ruft `vm_show_app`; unter der Zeile des Laufs
+      steht die Karte mit „Runs in your workspace until …“ und „Open“.
+- [ ] „Open“ öffnet einen neuen Tab auf dem App-Host, die App lädt mit ihren
+      Skripten; die Adresszeile zeigt nach dem Öffnen keinen Token mehr.
+- [ ] Im Chat eine Änderung verlangen („mach die Überschrift rot“) → der Tab
+      zeigt sie ohne Neuladen von Hand (WebSocket des Dev-Servers).
+- [ ] Dieselbe Karte am Handy öffnen.
+- [ ] Prozess stoppen lassen, Tab neu laden → Hinweisseite „The app is not
+      running“; die Karte zeigt nach einem Klick „Ended in the workspace“ und
+      „Start again“, das dem Agenten „Start the app again.“ schickt.
+- [ ] `https://<AGENT_APP_HOST>/app` ohne Sitzung zeigt die Hinweisseite,
+      nicht consens.io; `/health/maintenance` antwortet.
+
 ## Vorschau neben dem Chat (seit 2026-11-01)
 - [ ] Agent baut in der VM eine PPTX (python-pptx) und teilt sie mit
       `vm_share_file` → unter der Antwort steht die erste Folie als Miniatur,

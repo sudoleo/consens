@@ -819,3 +819,52 @@ def test_the_views_counters_are_one_anonymous_merge_per_day(monkeypatch):
     monkeypatch.setattr(workspace_router, "_metrics_on", lambda: True)
     monkeypatch.setattr(workspace_router, "db_firestore", None)
     workspace_router._count("view", "opened")
+
+
+# --- An app on a card, in the user's own browser (open_workspace_app) --------------
+
+
+def test_an_apps_card_gets_its_address_only_while_its_process_runs(view_api, fake_vm, monkeypatch):
+    """The click on the card asks the server where the app's process stands:
+    running, it answers the address a new tab opens, on the service's host
+    for apps and good for a minute; ended or gone, it says so and wakes
+    nothing more. Only for the account's own workspace."""
+    from app.services import agent_app_tunnel, agent_apps, agent_vm_processes
+    client, store, _, _ = view_api
+    body = {"process": "abcd1234", "port": 3000, "path": "/app?x=1"}
+    monkeypatch.delenv("AGENT_APP_HOST", raising=False)
+    assert client.post("/agent/workspace/app", json=body, headers=AUTH).status_code == 404
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    check = agent_vm_processes.app_command(agent_vm_processes.process_dir("abcd1234"), 3000)
+    fake_vm.commands[check] = ([("stdout", b"consens-app running 1795400000 1800 - chat-1\n")], 0, .1)
+    # A tab left open on the app after it had ended is answered without the VM; a new opening lifts that.
+    agent_app_tunnel._idle.add(UID)
+    answer = client.post("/agent/workspace/app", json=body, headers=AUTH)
+    assert answer.status_code == 200 and answer.headers["cache-control"] == "private, no-store"
+    opened = answer.json()
+    assert opened["running"] is True and opened["ends_at"] == 1795401800 * 1000
+    assert UID not in agent_app_tunnel._idle
+    prefix = "https://apps.example.com" + agent_apps.OPEN_PATH + "?t="
+    assert opened["url"].startswith(prefix)
+    session, path = agent_apps.read_open(opened["url"][len(prefix):])
+    assert (session.uid, session.port, path) == (UID, 3000, "/app?x=1")
+    # Which app it is: the chat that started the process, as the workspace says it.
+    assert session.key == agent_apps.app_key(UID, "chat-1", 3000)
+    # Ended, or its folder gone with its chat: nothing to open.
+    fake_vm.commands[check] = ([("stdout", b"consens-app 0 1795400000 1800 - chat-1\n")], 0, .1)
+    assert client.post("/agent/workspace/app", json=body, headers=AUTH).json() == {"running": False}
+    fake_vm.commands[check] = ([], 5, .1)
+    assert client.post("/agent/workspace/app", json=body, headers=AUTH).json() == {"running": False}
+    # Another account has no workspace here; a port no app may listen on is no request.
+    assert client.post("/agent/workspace/app", json=body, headers={"Authorization": "Bearer other"}).status_code == 403
+    assert client.post("/agent/workspace/app", json={**body, "port": 80}, headers=AUTH).status_code == 422
+    assert client.post("/agent/workspace/app", json={**body, "process": "../x"}, headers=AUTH).status_code == 422
+
+
+def test_a_closed_workspace_opens_no_app(view_api, fake_vm, monkeypatch):
+    from app.services import workspace_guard
+    client, _, _, _ = view_api
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    monkeypatch.setattr(workspace_guard, "status", lambda uid: workspace_guard.Status(state="closed"))
+    answer = client.post("/agent/workspace/app", json={"process": "abcd1234", "port": 3000}, headers=AUTH)
+    assert answer.status_code == 403 and answer.json()["code"] == "guarded"
