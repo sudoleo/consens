@@ -1407,7 +1407,9 @@ sie ein Download und das Ergebnis nennt den Grund (`docs/codebase-map.md`
 „Seite im Chat“). Seitdem sagt der Prompt zum Browser nur noch, dass dort
 läuft, was einen eigenen Server braucht: Auf die Bitte um ein interaktives
 Diagramm hatte der Agent die Seite auf localhost gestartet und im Browser des
-Arbeitsplatzes geöffnet, wo der Nutzer erst hingehen musste. Eine
+Arbeitsplatzes geöffnet, wo der Nutzer erst hingehen musste. Der Prompt nennt
+auch die Größe des Platzes der Seite, und `AGENT_WORKSPACE_CLOSED_PROMPT`
+zählt sie zu dem, wofür der Arbeitsplatz da ist. Eine
 Datei verlinkt er nicht; ein Markdown-Bild mit Dateinamen oder VM-Pfad blendet
 die Antwort als nicht ladbaren Verweis aus. Ausgeliefert wird eine Datei
 nur über die angemeldete Download-Route (`Content-Disposition: attachment`,

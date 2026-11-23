@@ -180,6 +180,20 @@ def test_the_document_holds_the_file_as_text_of_one_attribute():
     assert frame.srcdoc == hostile + '\n' + html_page._STAY and "preventDefault" in html_page._STAY
 
 
+def test_the_prompt_names_the_place_the_app_gives_a_page():
+    """The agent builds for a frame it cannot see: the size its prompt
+    names is the stylesheet's, the answer's column and the page's field."""
+    import re
+    from pathlib import Path
+
+    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    css = Path(__file__).resolve().parents[1] / 'static' / 'css'
+    field = re.search(r'\.agent-page-stage \{([^}]*)\}', (css / 'agent-workspace.css').read_text(encoding='utf-8')).group(1)
+    assert 'aspect-ratio: 16 / 10' in field and 'min-height: 420px' in field and 'max-height: 600px' in field
+    assert '--app-container-width: 704px' in (css / 'layout.css').read_text(encoding='utf-8')
+    assert "up to about 700 px and a phone's width on a phone, and 420 to 600 px high" in AGENT_VM_PROMPT
+
+
 def test_a_shared_answer_and_a_mail_carry_no_page():
     """A page runs for the account in its chat and nowhere else: what is
     published or mailed is built without the chat's files and names neither

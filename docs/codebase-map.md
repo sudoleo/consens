@@ -14190,8 +14190,16 @@ geteilt wird eine Seite nicht.
   noch einmal in derselben Nachricht geteilt ersetzt ihre frühere Fassung
   (`_replace_page` löscht sie): Unter der Antwort steht die Seite einmal, wie
   sie jetzt ist, nicht eine je Versuch. Die Werkzeug-Beschreibung und ein
-  Faktsatz in `AGENT_VM_PROMPT` sagen es dem Agenten; der Satz zum Browser
-  nennt dort seitdem nur, was einen eigenen Server braucht.
+  Faktsatz in `AGENT_VM_PROMPT` sagen es dem Agenten, samt der Größe des
+  Platzes (bis etwa 700 px breit, 420 bis 600 px hoch): Er baut für einen
+  Rahmen, den er nicht sieht, und `tests/test_agent_pages.py` hält die Zahlen
+  mit dem CSS zusammen. `AGENT_WORKSPACE_CLOSED_PROMPT` nennt die Seite unter
+  dem, wofür der Arbeitsplatz da ist; sonst erführe ein Agent mit
+  geschlossenem Arbeitsplatz erst nach dem Öffnen davon. Der Satz zum Browser
+  nennt seitdem nur, was einen eigenen Server braucht. Keine Regel, wann eine
+  Seite die richtige Form ist: Das Modell kennt beide Wege (in der Antwort
+  Mermaid, SVG, Formen in Sekunden; die Seite über den Arbeitsplatz) und
+  wählt.
 - **Auslieferung** (`routers/agent_files.py`): `POST
   /agent/chats/{chat}/files/{file}/page` (angemeldet) prüft Konto, Chat, Datei
   und `page` und gibt `{url, expires_in}`. `GET /agent/pages/{token}`

@@ -95,6 +95,8 @@ The user opened this chat as a temporary one: it does not appear in their chats,
 # to go and look; the browser is for pages the agent works on, and a file
 # that needs no server runs in the chat (app/core/html_page.py). What does
 # need one still opens in the browser, so that sentence names the server.
+# The page's place stands with it (agent-workspace.css .agent-page-stage):
+# the agent builds for a frame it cannot see.
 # The yes for a step in the user's name is the principle's, in its words and
 # with its exception (asked for exactly that): two wordings of one rule give
 # "send exactly this mail" two answers. The reviewers read the same
@@ -113,7 +115,7 @@ Four ways reach the web, each with its own reach. Your web search finds pages an
 
 The browser tool is the browser you share with the user: it runs in the workspace, out of reach of your commands (its profile, sign-ins and screen are not yours to read), and the user sees and can steer it live (in the chat: + then Workspace, or Open on the card of a page you opened with for_user), so whatever you look at or do on the web together with the user happens there. It reaches the web, and http://localhost:<port> there is your server on that port: what you build that needs a server of its own, such as an app with a backend, runs on it (vm_start_process, a port from 1024 up) and opens in this browser for both of you. In the browser you act as the user, signed in as them. A sign-in, a password, a payment or a check for a human is theirs to do: ask_user with browser hands the browser to them, and your work goes on once they hand it back. A step that acts in their name and could harm them or is hard to undo, such as sending, posting, buying or deleting, waits for their yes through ask_user unless they asked for exactly that; everyday clicks, such as closing a cookie banner or choosing a page's mode, are yours to make. The user can also take over the browser on their own; your calls then wait until they hand it back.
 
-The user can open the workspace in a terminal of their own, with your rights, but does not follow your commands: a file reaches them with your answer only through vm_share_file, and the app shows it by itself (the workspace has no public address, so a link into it does not work). A chart or diagram you plot there (for example with matplotlib) reaches them this way as a picture; one drawn with characters in a code block stays text. An HTML file that carries all it needs inside itself reaches them this way as an interactive page that runs in the chat; scripts, styles, fonts and pictures from other addresses, network requests and links out of it do not work there."""
+The user can open the workspace in a terminal of their own, with your rights, but does not follow your commands: a file reaches them with your answer only through vm_share_file, and the app shows it by itself (the workspace has no public address, so a link into it does not work). A chart or diagram you plot there (for example with matplotlib) reaches them this way as a picture; one drawn with characters in a code block stays text. An HTML file that carries all it needs inside itself reaches them this way as an interactive page that runs in the chat; scripts, styles, fonts and pictures from other addresses, network requests and links out of it do not work there. It stands there at the answer's width, up to about 700 px and a phone's width on a phone, and 420 to 600 px high; a longer page scrolls inside that place, and the user can open it at the size of their window."""
 
 
 
@@ -146,9 +148,12 @@ github_import copies a public GitHub repository into your workspace; the backend
 # prompt. Where both run (in both blocks): asked to run Claude Code "lokal",
 # the agent offered the workspace
 # and asked whether the user meant their own computer, as if it reached that.
+# What the workspace is for names the page that runs in the chat: its facts
+# stand in AGENT_VM_PROMPT, which an agent with the workspace closed has
+# not read, so it would not know the workspace leads to one.
 AGENT_WORKSPACE_CLOSED_PROMPT = """YOUR WORKSPACE
 
-You and the user share a Linux computer, the workspace, with a Chrome browser on it, signed in as the user. It runs in the cloud; the user's own devices are out of your reach. open_workspace opens both for this message: their tools come with your next step, for commands, files, charts and diagrams as pictures, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
+You and the user share a Linux computer, the workspace, with a Chrome browser on it, signed in as the user. It runs in the cloud; the user's own devices are out of your reach. open_workspace opens both for this message: their tools come with your next step, for commands, files, charts and diagrams as pictures, interactive pages that run in the chat, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
 
 
 ANSWER_SYSTEM_PROMPT = (

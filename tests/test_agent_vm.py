@@ -1714,10 +1714,12 @@ def test_a_shared_html_file_runs_in_the_chat_when_all_it_needs_is_inside_it(stor
     assert "page" not in public_file(files.get(UID, chat_id, page["file"]["id"]), for_model=True)
     shared = [file["name"] for event in events if event.get("type") == "resources" for file in event["files"]]
     assert shared == ["Benchmark.html", "index.html", "notes.html.txt", "index.html"]
-    # The agent knows where a page it builds shows: a fact of the workspace.
-    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    # The agent knows where a page it builds shows: a fact of the workspace,
+    # named among what the workspace is for while it is still closed.
+    from app.services.prompt_defaults import AGENT_VM_PROMPT, AGENT_WORKSPACE_CLOSED_PROMPT
     assert "as an interactive page that runs in the chat" in AGENT_VM_PROMPT
     assert "network requests and links out of it do not work there" in AGENT_VM_PROMPT
+    assert "interactive pages that run in the chat" in AGENT_WORKSPACE_CLOSED_PROMPT
 
 
 def test_a_shared_office_file_brings_the_pdf_the_app_previews_it_by(store, fake_vm, tmp_path, monkeypatch):
