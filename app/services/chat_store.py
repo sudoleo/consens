@@ -241,6 +241,15 @@ class ChatQuotaExceeded(ChatStoreError):
         self.error_code = error_code
 
 
+class ChatWorkspaceWaiting(ChatStoreError):
+    """A deleted chat is gone from the database while its part in the
+    workspace waits on its job; ``category``: the provider's failure."""
+
+    def __init__(self, category: str):
+        super().__init__(category)
+        self.category = category
+
+
 def normalize_title(value: object) -> str:
     text = _collapse_whitespace(value)
     if len(text) > CHAT_TITLE_MAX_LENGTH:
@@ -1491,20 +1500,23 @@ class ChatStore:
                 # tombstoned by request_chat_deletion. Drop the stale job.
                 job_ref.delete()
                 return True
-            self._purge_chat(uid, chat_id)
+            self._purge_chat(uid, chat_id, job_ref=job_ref)
             job_ref.delete()
             return True
+        except ChatWorkspaceWaiting as exc:
+            category = exc.category
+            logging.warning("chat deletion waits for the workspace category=%s", category)
         except Exception as exc:
             category = safe_exception(exc)
             logging.warning("chat deletion job failed category=%s", category)
-            try:
-                self._record_deletion_failure(job_ref, category, now=now)
-            except Exception as record_exc:
-                logging.error(
-                    "chat deletion job failure could not be recorded category=%s",
-                    safe_exception(record_exc),
-                )
-            return False
+        try:
+            self._record_deletion_failure(job_ref, category, now=now)
+        except Exception as record_exc:
+            logging.error(
+                "chat deletion job failure could not be recorded category=%s",
+                safe_exception(record_exc),
+            )
+        return False
 
     def _record_deletion_failure(self, job_ref, category: str, *, now=None) -> None:
         now = now or datetime.now(timezone.utc)
@@ -1527,38 +1539,61 @@ class ChatStore:
             "updated_at": now,
         })
 
-    def _purge_chat(self, uid: str, chat_id: str) -> None:
+    def _purge_chat(self, uid: str, chat_id: str, *, job_ref=None) -> None:
+        """The cascade. With the chat's deletion job (``job_ref``) a failing
+        workspace part does not hold back the rest: a stuck VM can refuse for
+        days, and the chat's words go now. The job keeps what that part needs
+        (``workspace_part``) and retries it alone (ChatWorkspaceWaiting).
+        Without a job (account deletion) a failure stops the cascade."""
         from app.services import agent_watches
         from app.services.agent_files import AgentFiles
-        from app.services.agent_vm import delete_chat_vm
         # Its Watch runs in it (agent_watches.py): gone first, so no run starts in a chat that is leaving.
         agent_watches.delete_for_chat(self.db, uid, chat_id)
         AgentFiles(self.db).cleanup_chat(uid, chat_id)
-        # The chat's Agent VM holds its files and the agent's work: deleted
-        # first, and a provider failure keeps the deletion job retrying. No
-        # checkpoint from before may bring its folder back to the workspace.
         snapshot = self._chat_ref(uid, chat_id).get()
-        if snapshot.exists:
-            record = (snapshot.to_dict() or {}).get("agent_vm")
-            delete_chat_vm(uid, chat_id, record, store=self)
-            if isinstance(record, dict) and record.get("workspace"):
-                from app.services import agent_workspace
-                if (snapshot.to_dict() or {}).get("temporary") is True:
-                    # Only the checkpoints of its lifetime (its own take none).
-                    agent_workspace.close_restore_gap(self, uid, record.get("created_at"))
-                else:
-                    agent_workspace.raise_restore_floor(self, uid)
+        chat = (snapshot.to_dict() or {}) if snapshot.exists else None
+        if chat is not None:
+            part = _workspace_part(chat)
+        else:
+            part = (job_ref.get().to_dict() or {}).get("workspace_part") if job_ref is not None else None
+        waiting = None
+        try:
+            self._delete_workspace_part(uid, chat_id, part)
+        except Exception as exc:
+            if job_ref is None:
+                raise
+            # On the job before the chat document, the record's only other home, goes.
+            job_ref.update({"workspace_part": part})
+            waiting = ChatWorkspaceWaiting(safe_exception(exc))
         # Before the turns go: they name the receipts whose texts go too.
         # Only Agent runs have such receipts (a chat document already gone,
         # in a resumed cascade, may have been one).
-        if not snapshot.exists or (snapshot.to_dict() or {}).get("execution_mode") == "agent":
+        if chat is None or chat.get("execution_mode") == "agent":
             turn_ids = [ref.id for ref in _child_documents(self._chat_ref(uid, chat_id).collection("turns"))]
             self._scrub_run_receipts(uid, chat_id, turn_ids)
         self._delete_chat_tree(self._chat_ref(uid, chat_id))
-        if snapshot.exists and (snapshot.to_dict() or {}).get("temporary") is True:
+        if chat is not None and chat.get("temporary") is True:
             # Its deadline goes with it; one left by a cascade resumed after
             # the chat document was gone ends at its sweep (expire_temporary_chats).
             self._temporary_ref(uid, chat_id).delete()
+        if waiting is not None:
+            raise waiting
+
+    def _delete_workspace_part(self, uid: str, chat_id: str, part) -> None:
+        """The chat's folder in the workspace with its processes, and its own
+        VM from before (agent_vm.delete_chat_vm). Raises when the provider
+        fails. No checkpoint from before may bring the folder back."""
+        if not isinstance(part, dict):
+            return
+        from app.services.agent_vm import delete_chat_vm
+        delete_chat_vm(uid, chat_id, part, store=self)
+        if part.get("workspace"):
+            from app.services import agent_workspace
+            if part.get("temporary") is True:
+                # Only the checkpoints of its lifetime (its own take none).
+                agent_workspace.close_restore_gap(self, uid, part.get("created_at"))
+            else:
+                agent_workspace.raise_restore_floor(self, uid)
 
     def _deletion_job_ref(self, uid: str, chat_id: str):
         key = hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:40]
@@ -1712,6 +1747,19 @@ def read_together(refs, transaction=None, *, db=None):
     unique = list({ref.path: ref for ref in refs}.values())
     found = {snapshot.reference.path: snapshot for snapshot in get_all(unique)}
     return [found[ref.path] for ref in refs]
+
+
+def _workspace_part(chat: dict) -> dict | None:
+    """What deleting the chat's part in the workspace needs from its record
+    (``agent_vm``), small enough to outlive the chat on its job: the names
+    (the folder's carries title words, as the folder itself still does) and
+    when it first claimed the workspace."""
+    record = chat.get("agent_vm")
+    if not isinstance(record, dict):
+        return None
+    part = {key: record[key] for key in ("name", "workspace", "folder", "created_at") if key in record}
+    part["temporary"] = chat.get("temporary") is True
+    return part
 
 
 def _new_deletion_job(uid: str, chat_id: str, now: datetime) -> dict:

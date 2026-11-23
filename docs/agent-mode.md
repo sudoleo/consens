@@ -4213,7 +4213,10 @@ blieb stehen (Sicherheitsaudit 2026-10-27). Den Ordner löscht seit dem Umbau
 der Agenten-Nutzer (vorher `prepare`, falls die Werkbank noch die alte
 Version hat; eine Werkbank, die es nicht gibt, wird dafür nicht angelegt),
 dazu den alten Ort `/home/sprite/chats/<chat>` über die Datei-API. Scheitert
-der Anbieter, bleibt der Lösch-Job und versucht es erneut. Ein Chat ohne VM
+der Anbieter, geht der Chat trotzdem aus der Datenbank, denn eine
+festgefahrene VM kann tagelang ablehnen: der Lösch-Job merkt sich die Namen
+(`workspace_part`) und versucht nur noch Ordner und VM erneut; die Untergrenze
+für Restore steigt erst, wenn sie weg sind. Ein Chat ohne VM
 fragt den Anbieter nie. Die Kontolöschung löscht Werkbank und Browser-VM über
 die Namen aus der UID (`agent_workspace.delete_for_account`), erst danach den
 Datensatz; vorher endete sie bei fehlendem Datensatz, und den räumte ein

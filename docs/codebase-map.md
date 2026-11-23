@@ -11334,8 +11334,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
     des Kontos (`workspace: true`, `used_at`, `restores_seen`,
     `agent_workspace.claim`). `_purge_chat` löscht zuerst den Ordner des Chats im
     Arbeitsplatz samt seinen Hintergrundprozessen und seine alte eigene VM über den Namen aus dem Chat
-    (`agent_vm.delete_chat_vm`, ein Fehler hält den Lösch-Job) und setzt
-    `restore_floor` am Arbeitsplatz (`agent_workspace.raise_restore_floor`). Create und das Setzen von `status=deleting` erhöhen bzw.
+    (`agent_vm.delete_chat_vm`) und setzt
+    `restore_floor` am Arbeitsplatz (`agent_workspace.raise_restore_floor`).
+    Scheitert der Anbieter (eine festgefahrene VM lehnt mitunter tagelang ab),
+    löscht die Kaskade den Chat trotzdem: der Lösch-Job merkt sich vorher
+    `workspace_part` und versucht danach nur noch diesen Teil
+    (`ChatWorkspaceWaiting`, Log „chat deletion waits for the workspace“).
+    Ohne Job (Kontolöschung) bricht sie ab und der Bereich wiederholt sich. Create und das Setzen von `status=deleting` erhöhen bzw.
     verringern ihn in derselben Transaktion. Erst danach löscht die idempotente
     Kaskade Turns, Modellantworten, Context-Versionen und zuletzt den Chat.
     Bei erreichtem Limit (`MAX_CHATS_PER_OWNER`, 403 `chat_limit_reached`)
@@ -11714,7 +11719,10 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Einzelchat-Löschaufträge (`uid`, `chat_id`, `status`, `attempts`,
   `last_error`-Kategorie, `next_attempt_at`), angelegt atomar mit dem
   `deleting`-Tombstone, gelöscht nach vollständiger Kaskade bzw. mit
-  `delete_all_chats` bei der Kontolöschung. Keine Inhalte.
+  `delete_all_chats` bei der Kontolöschung. Steht nur noch der Teil im
+  Arbeitsplatz aus, trägt er `workspace_part` (VM- und Ordnername,
+  `workspace`, `created_at`, `temporary`); der Ordnername enthält Wörter des
+  Titels wie der Ordner selbst. Sonst keine Inhalte.
 - `temporary_chats/{sha256(uid:chat)[:40]}` — seit 2026-11-01 der Löschtermin
   eines temporären Chats (`uid`, `chat_id`, `expires_at`, `updated_at`;
   `TEMPORARY_CHAT_TTL` = 23 h nach Anlage bzw. jeder Nachricht (versprochen 24 h, stündlicher Loop), in deren

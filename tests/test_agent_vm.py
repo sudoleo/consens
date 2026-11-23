@@ -2106,13 +2106,38 @@ def test_a_chat_with_its_own_vm_from_before_deletes_that_vm(store, fake_vm):
     assert legacy not in fake_vm.vms and ("delete", legacy) in fake_vm.calls
 
 
-def test_a_failed_vm_deletion_keeps_the_chats_deletion_job_retrying(store, fake_vm):
+def test_a_failed_vm_deletion_takes_the_chats_words_now_and_its_folder_later(store, fake_vm, caplog):
+    """A stuck VM can refuse for days: the chat goes from the database now,
+    and its job retries the folder alone (workspace_part)."""
+    loop = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "a"})]]))
+    list(loop.run())
+    fake_vm.fail.add("delete_path")
+    assert store.delete_chat(UID, loop.chat_id) is False
+    assert not [key for key in store.db.documents if loop.chat_id in key]
+    job = store._deletion_job_ref(UID, loop.chat_id).get().to_dict()
+    assert job["workspace_part"] == {"name": NAME, "workspace": True, "folder": agent_vm.chat_folder(
+        "Question one", loop.chat_id), "created_at": job["workspace_part"]["created_at"], "temporary": False}
+    assert job["attempts"] == 1 and job["last_error"] == "VMUnavailable"
+    assert "chat deletion waits for the workspace category=VMUnavailable" in caplog.text
+    assert workspace_files(fake_vm) == {f"{chat_path(loop.chat_id)}/notes.txt": b"a"}
+    assert "restore_floor" not in agent_workspace.record(store.db, UID)
+
+    fake_vm.fail.discard("delete_path")
+    assert store.run_chat_deletion(UID, loop.chat_id)
+    assert workspace_files(fake_vm) == {}
+    assert not store._deletion_job_ref(UID, loop.chat_id).get().exists
+    # No checkpoint from before may bring the folder back (restorable).
+    assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
+
+
+def test_a_failed_vm_deletion_without_a_job_keeps_the_chat(store, fake_vm):
+    """The account's deletion retries its area itself and writes no job:
+    nothing of the chat is gone yet."""
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(loop.run())
     fake_vm.fail.add("delete_path")
     with pytest.raises(VMUnavailable):
-        store._purge_chat(UID, loop.chat_id)
-    # Nothing of the chat is gone yet: the job retries all of it.
+        store.delete_chat(UID, loop.chat_id, allow_account_deletion=True)
     assert store._chat_ref(UID, loop.chat_id).get().exists
 
 

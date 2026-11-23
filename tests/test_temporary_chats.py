@@ -350,6 +350,32 @@ def test_leaving_it_closes_only_its_own_lifetime_to_restore(store, monkeypatch):
     assert not agent_workspace.restorable(agent_workspace.record(store.db, UID), turn_vm(before))
 
 
+def test_a_stuck_workspace_leaves_only_its_folder_waiting_and_closes_the_gap_later(store, monkeypatch):
+    """Leaving it while the workspace refuses: the chat and its deadline go
+    now; its job remembers when it claimed the workspace, for the gap once
+    the folder is gone."""
+    from datetime import datetime, timezone
+    from app.services import agent_vm, agent_workspace
+    from test_agent_vm import FakeVM
+    fake = FakeVM()
+    monkeypatch.setattr(agent_vm, "backend", fake.backend)
+    name = agent_vm.workspace_name(UID)
+    agent_workspace.ref(store.db, UID).set({"name": name})
+    fake.vms[name] = {"files": {}, "checkpoints": []}
+    chat_id = store.create_chat(UID, execution_mode="agent", temporary=True)["id"]
+    lived = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    store._chat_ref(UID, chat_id).update({"agent_vm": {"name": name, "workspace": True, "created_at": lived}})
+    fake.fail.add("delete_path")
+    assert store.delete_chat(UID, chat_id) is False
+    assert not store._chat_ref(UID, chat_id).get().exists
+    assert not store._temporary_ref(UID, chat_id).get().exists
+    assert "restore_gaps" not in agent_workspace.record(store.db, UID)
+    fake.fail.discard("delete_path")
+    assert store.run_chat_deletion(UID, chat_id)
+    record = agent_workspace.record(store.db, UID)
+    assert "restore_floor" not in record and record["restore_gaps"][0]["from"] == datetime.fromisoformat(lived)
+
+
 def test_a_run_that_outlives_its_deleted_chat_leaves_no_texts_on_its_receipt(store):
     """Leaving a temporary chat mid-run deletes it at once; the run stops a
     few seconds later (its watcher). What it wrote to its receipt meanwhile
