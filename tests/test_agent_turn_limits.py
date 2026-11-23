@@ -290,13 +290,15 @@ def test_repeatable_tools_are_not_counted_as_identical_calls(store):
     # and sharing a file again after it changed is a new file for the user.
     # Reading a background process's output again is waiting for it, and
     # rendering the same deck again after an edit is checking the edit.
+    # Showing the same app again is asking its port again, which did not
+    # answer while the server was still coming up.
     # The same plan between work steps says where the agent stands; refusing
     # it would end a long VM run at its fourth unchanged plan.
     assert agent_delegation.REPEATABLE_TOOLS == {"vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
-                                                 "vm_process_output", "vm_stop_process", "vm_view_image",
-                                                 "vm_render_office", "vm_install_packages", "update_plan",
-                                                 "browser"}
+                                                 "vm_process_output", "vm_stop_process", "vm_show_app",
+                                                 "vm_view_image", "vm_render_office", "vm_install_packages",
+                                                 "update_plan", "browser"}
     plan = {"id": "p", "type": "function", "function": {"name": "update_plan", "arguments": json.dumps(
         {"items": [{"content": "Run the tests", "status": "in_progress"}]})}}
     assert all(loop._identical_call(plan) is None for _ in range(5))
