@@ -1401,10 +1401,18 @@ Präsentation, ein Word- oder Excel-Dokument wandelt der Server seit 2026-11-01
 dabei auf dem gemeinsamen Konverter (`agent_office.py`, oder nimmt das PDF
 eines `vm_render_office` derselben Nachricht) in ein PDF, das die App als
 Vorschau zeigt (`docs/codebase-map.md` „Vorschau neben dem Chat“). Eine
+HTML-Datei, die nichts von außerhalb braucht, läuft seit 2026-11-23 unter der
+Antwort als Seite (`shown_as: "page"`); braucht sie etwas von außen, bleibt
+sie ein Download und das Ergebnis nennt den Grund (`docs/codebase-map.md`
+„Seite im Chat“). Seitdem sagt der Prompt zum Browser nur noch, dass dort
+läuft, was einen eigenen Server braucht: Auf die Bitte um ein interaktives
+Diagramm hatte der Agent die Seite auf localhost gestartet und im Browser des
+Arbeitsplatzes geöffnet, wo der Nutzer erst hingehen musste. Eine
 Datei verlinkt er nicht; ein Markdown-Bild mit Dateinamen oder VM-Pfad blendet
-die Antwort als nicht ladbaren Verweis aus. Ausgeliefert wird
+die Antwort als nicht ladbaren Verweis aus. Ausgeliefert wird eine Datei
 nur über die angemeldete Download-Route (`Content-Disposition: attachment`,
-`nosniff`); die VM hat keine öffentliche Adresse, und der Prompt verbietet
+`nosniff`), eine Seite zusätzlich über ihre eigene Route in ihrer Sandbox; die
+VM hat keine öffentliche Adresse, und der Prompt verbietet
 Links auf VM-Dateien. Dieselbe Datei zweimal geteilt bleibt ein Eintrag. Der Prompt `AGENT_VM_PROMPT` (prompt_defaults.py, im Admin als
 „Agent: Linux VM“) steht vor dem Memory-Block, damit der Systemprompt im Chat
 cachebar bleibt. Ausgaben an das Modell behalten je Strom das Ende

@@ -254,12 +254,14 @@ def public_file(data, *, for_model=False):
     if isinstance(data.get("preview"), dict) and not for_model:
         file["preview"] = {"mime": data["preview"].get("mime", ""), "size": data["preview"].get("size", 0)}
     # A picture's size, for the place the app keeps for it (picture_size,
-    # app/core/svg.py), and an SVG the app draws as a picture from its bytes
-    # (agent_vm_tools.share).
+    # app/core/svg.py), an SVG the app draws as a picture from its bytes and
+    # an HTML file it runs as a page (agent_vm_tools.share).
     if not for_model:
         file.update({key: data[key] for key in ("width", "height") if isinstance(data.get(key), int)})
         if data.get("picture") == "svg":
             file["picture"] = "svg"
+        if data.get("page") == "html":
+            file["page"] = "html"
     if file.get("warnings"):
         warnings = [_warning(data, w, for_model=for_model) for w in file["warnings"]]
         file["warnings"] = [w for w in warnings if w]

@@ -292,6 +292,49 @@ describe("composer attachment tray", () => {
     await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
   });
 
+  // A page the agent shared (agent-workspace.js pageCard) opens larger on
+  // the stage: the same sandboxed frame, never the preview beside the chat,
+  // which would show its source.
+  it("runs a page the agent shared on the stage, in its frame, with its file to download", async () => {
+    const { window, document } = boot();
+    const page = { fileId: "e".repeat(32), name: "benchmark.html", mime: "text/html", size: 4200, title: "benchmark.html", htmlPage: true };
+    const file = new window.Blob(["<p>page</p>"], { type: "application/octet-stream" });
+    window.App.fileViewer = { previews: () => true, describe: () => ({ label: "HTML" }), open: vi.fn() };
+    window.App.agentWorkspace = {
+      pageAddress: vi.fn(async () => ({ url: "/agent/pages/address-1", until: Date.now() + 290000 })),
+      pageFrame: (name, className) => {
+        const frame = document.createElement("iframe");
+        frame.className = className; frame.setAttribute("sandbox", "allow-scripts"); frame.setAttribute("aria-label", name);
+        return frame;
+      },
+      openFile: vi.fn(async () => ({ blob: file, mime: "application/octet-stream" })), removeFile: vi.fn(),
+    };
+    const saved = [];
+    window.HTMLAnchorElement.prototype.click = function () { saved.push([this.download, this.href]); };
+    const body = document.getElementById("attachmentViewerBody");
+    window.App.attachments.openStored(page);
+    expect(document.getElementById("attachmentViewerModal").classList.contains("is-stage")).toBe(true);
+    expect(document.getElementById("attachmentViewerTitle").textContent).toBe("benchmark.html");
+    expect(window.App.fileViewer.open).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(body.querySelector("iframe")).not.toBeNull());
+    const frame = body.querySelector("iframe");
+    expect([frame.getAttribute("sandbox"), frame.getAttribute("src"), frame.getAttribute("aria-label"), frame.className])
+      .toEqual(["allow-scripts", "/agent/pages/address-1", "benchmark.html", "attachment-viewer-frame"]);
+    expect(window.App.agentWorkspace.pageAddress).toHaveBeenCalledWith(page.fileId);
+    // The file is fetched when it is asked for, not to show the page.
+    expect(window.App.agentWorkspace.openFile).not.toHaveBeenCalled();
+    const actions = [...body.querySelectorAll(".attachment-viewer-actions button")];
+    expect(actions.map(button => button.textContent)).toEqual(["Download", "Remove from chat"]);
+    actions[0].click();
+    await vi.waitFor(() => expect(saved).toEqual([["benchmark.html", "blob:preview"]]));
+    expect(window.App.agentWorkspace.openFile).toHaveBeenCalledWith(page.fileId);
+    // One that cannot load says why, in the dialog.
+    window.App.agentWorkspace.pageAddress = vi.fn(async () => { throw new Error("The file has expired or is no longer available."); });
+    window.App.attachments.openStored(page);
+    await vi.waitFor(() => expect(body.textContent).toContain("The file has expired or is no longer available."));
+    expect(body.querySelector("iframe")).toBeNull();
+  });
+
   // An SVG the agent shared is served as a download (agent_vm_tools.share).
   it("shows an SVG the agent shared as the picture diagram-render.js draws of it, with its download", async () => {
     const { window, document } = boot();

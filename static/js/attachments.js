@@ -421,6 +421,8 @@
 
     // Download and removal for a stored Agent file. Removal asks once more
     // inline: it is permanent and the agent loses access to the file.
+    // Without `blob` (a page that runs in a frame, showStoredPage) the file
+    // is fetched when it is asked for.
     function storedFileActions(att, blob) {
       const row = document.createElement("div");
       row.className = "attachment-viewer-actions";
@@ -429,12 +431,11 @@
       download.className = "attachment-viewer-action";
       download.textContent = "Download";
       download.addEventListener("click", function () {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = att.name;
-        link.click();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+        Promise.resolve(blob || window.App.agentWorkspace.openFile(att.fileId).then(function (file) { return file.blob; }))
+          .then(function (data) { saveBlob(data, att.name); })
+          .catch(function (failure) {
+            window.App?.showPopup?.(window.App.userError(failure, { fallback: "The file request failed. Try again." }));
+          });
       });
       const remove = document.createElement("button");
       remove.type = "button";
@@ -607,6 +608,30 @@
       });
     }
 
+    // A page the agent shared (agent-workspace.js pageCard), on the stage:
+    // the same frame as under its answer, at the window's size, loaded from
+    // an address of its own.
+    function showStoredPage(att) {
+      const token = viewerToken;
+      const loading = document.createElement("p");
+      loading.className = "attachment-viewer-loading";
+      loading.textContent = "Loading preview…";
+      viewerBody.appendChild(loading);
+      window.App.agentWorkspace.pageAddress(att.fileId).then(function (address) {
+        if (token !== viewerToken) return;
+        viewerBody.innerHTML = "";
+        const frame = window.App.agentWorkspace.pageFrame(att.name, "attachment-viewer-frame");
+        frame.src = address.url;
+        viewerBody.appendChild(frame);
+        viewerBody.appendChild(storedFileActions(att, null));
+      }).catch(function (failure) {
+        if (token !== viewerToken) return;
+        viewerBody.innerHTML = "";
+        viewerBody.appendChild(viewerNotice(chipIconLabel(att.mime),
+          window.App.userError(failure, { fallback: "This file couldn’t be loaded. Try again." })));
+      });
+    }
+
     function saveBlob(blob, name) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -660,7 +685,8 @@
 
     function openAttachmentViewer(att) {
       if (!viewerOverlay || !viewerBody) return;
-      if (!att?.gallery && openInFileViewer(att)) {
+      const runs = Boolean(att?.htmlPage && att.fileId && window.App?.agentWorkspace?.pageAddress);
+      if (!att?.gallery && !runs && openInFileViewer(att)) {
         if (viewerOverlay.hasAttribute("open")) closeAttachmentViewer();
         return;
       }
@@ -672,9 +698,11 @@
       showGalleryPlace(att);
       const mime = String(att.mime || "");
       setStage(Boolean(att.fileId || att.data) && !att.previewOnly
-        && (mime.indexOf("image/") === 0 || mime === "application/pdf" || att.picture === "svg"));
+        && (mime.indexOf("image/") === 0 || mime === "application/pdf" || att.picture === "svg" || runs));
 
-      if (att.fileId && window.App?.agentWorkspace?.openFile) {
+      if (runs) {
+        showStoredPage(att);
+      } else if (att.fileId && window.App?.agentWorkspace?.openFile) {
         showStoredAttachment(att);
       } else if (att.previewOnly || !att.data) {
         const notice = document.createElement("div");

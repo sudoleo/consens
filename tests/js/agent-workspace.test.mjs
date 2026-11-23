@@ -193,6 +193,116 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // An HTML file that needs nothing from outside itself (agent_vm_tools.share
+  // marks it `page`): the server confines it (app/core/html_page.py); here
+  // its frame, its place and its address.
+  describe('a page the agent shared', () => {
+    const PAGE = { id: 'e'.repeat(32), name: 'benchmark.html', mime: 'text/html', size: 4200, status: 'ready', kind: 'vm_file',
+      page: 'html', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', origin: { source: 'vm', path: '/x/benchmark.html' } };
+    const SITE = { ...PAGE, id: 'f'.repeat(32), name: 'site.html', page: undefined };
+    function watching(window) {
+      const watched = [];
+      window.IntersectionObserver = class {
+        constructor(callback) { this.callback = callback; this.targets = new Set(); watched.push(this); }
+        observe(target) { this.targets.add(target); }
+        unobserve(target) { this.targets.delete(target); }
+        disconnect() { this.targets.clear(); }
+      };
+      return watched;
+    }
+    const asked = window => window.fetch.mock.calls.filter(([url]) => url.endsWith('/page'));
+
+    it('runs under the answer in a sandboxed frame that loads once it comes near, and stays as it is', async () => {
+      const files = [PAGE, SITE];
+      const { window, document, dom } = boot({ files });
+      const watched = watching(window);
+      let issued = 0;
+      window.fetch = vi.fn(async url => url.endsWith(`/files/${PAGE.id}/page`)
+        ? { ok: true, json: async () => ({ url: `/agent/pages/address-${++issued}`, expires_in: 300 }) } : reply(files));
+      window.App.attachments = { openStored: vi.fn() };
+      const body = document.getElementById('agentAnswerBody');
+      await window.App.agentWorkspace.refresh(CHAT);
+      // Between the pictures' place and the other files, above the evidence row.
+      const pages = body.nextElementSibling.nextElementSibling, rows = pages.nextElementSibling;
+      expect(body.nextElementSibling.className).toBe('agent-answer-pictures');
+      expect([pages.className, pages.hidden]).toEqual(['agent-answer-pages', false]);
+      expect(rows.classList.contains('agent-answer-documents')).toBe(true);
+      expect(window.App.answerTail(body)).toBe(rows);
+      // An HTML file the server did not mark stays a file to download.
+      expect([...rows.querySelectorAll('.agent-file-row .agent-file-name')].map(el => el.textContent)).toEqual(['site.html']);
+      const figure = pages.querySelector('.agent-page'), stage = figure.querySelector('.agent-page-stage');
+      const frame = stage.querySelector('iframe');
+      // Its script runs, in an origin of its own: nothing else is allowed.
+      expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+      expect([frame.getAttribute('aria-label'), frame.getAttribute('referrerpolicy')]).toEqual(['benchmark.html', 'no-referrer']);
+      // No title: the app draws a title as a tooltip, over the page in use.
+      expect(frame.hasAttribute('title')).toBe(false);
+      // Its place waits; nothing is asked for before it comes near the screen.
+      expect([stage.classList.contains('is-loading'), frame.hasAttribute('src'), asked(window).length]).toEqual([true, false, 0]);
+      const [observer] = watched;
+      expect(observer.targets.has(figure)).toBe(true);
+      observer.callback([{ target: figure, isIntersecting: true }]);
+      await vi.waitFor(() => expect(frame.getAttribute('src')).toBe('/agent/pages/address-1'));
+      // The address is asked for signed in; the frame itself sends no sign-in.
+      expect(asked(window)[0][1]).toMatchObject({ method: 'POST', headers: { Authorization: 'Bearer token' } });
+      expect(stage.classList.contains('is-loading')).toBe(true);
+      frame.dispatchEvent(new window.Event('load'));
+      expect(stage.classList.contains('is-loading')).toBe(false);
+      expect(figure.querySelector('.agent-files-icon-btn:not(.agent-page-open)').getAttribute('aria-label')).toBe('Download benchmark.html');
+      // The list refreshes, a removal is asked and withdrawn: the frame is
+      // the same one and is not put in again (a frame put in again loads again).
+      await window.App.agentWorkspace.refresh(CHAT, true);
+      [...figure.querySelectorAll('[role=menuitem]')].find(item => item.textContent === 'Remove…').click();
+      expect(figure.querySelector('.agent-files-confirm').textContent).toContain('Remove benchmark.html?');
+      figure.querySelector('.agent-files-ghost').click();
+      expect(figure.querySelector('.agent-files-confirm')).toBeNull();
+      expect([pages.querySelector('iframe'), frame.getAttribute('src'), asked(window).length]).toEqual([frame, '/agent/pages/address-1', 1]);
+      // Larger: the viewer's stage, with the file's own address there.
+      figure.querySelector('.agent-page-open').click();
+      expect(figure.querySelector('.agent-page-open').getAttribute('aria-label')).toBe('Open benchmark.html larger');
+      expect(window.App.attachments.openStored).toHaveBeenCalledWith({ fileId: PAGE.id, name: 'benchmark.html',
+        mime: 'text/html', size: 4200, title: 'benchmark.html', htmlPage: true });
+      // The frame loads again when its answer moves in the page. Within its
+      // address's time that load found the page; past it, it gets a new one.
+      frame.dispatchEvent(new window.Event('load'));
+      expect(asked(window)).toHaveLength(1);
+      const now = window.Date.now;
+      window.Date.now = () => now() + 400_000;
+      frame.dispatchEvent(new window.Event('load'));
+      window.Date.now = now;
+      await vi.waitFor(() => expect(frame.getAttribute('src')).toBe('/agent/pages/address-2'));
+      // Another turn on screen: the page goes with its answer.
+      const plain = '7'.repeat(32);
+      window.App.runRegistry.getSelectedConversationBasis = () => ({ chatId: CHAT, turnId: plain, currentTurn: { id: plain } });
+      window.App.agentWorkspace.refresh(CHAT);
+      expect([pages.hidden, pages.childElementCount]).toEqual([true, 0]);
+      expect(window.App.answerTail(body)).toBe(body);
+      dom.window.close();
+    });
+
+    it('says so in its place when it cannot load, takes no address but the app’s own, and tries again', async () => {
+      const { window, document, dom } = boot({ files: [PAGE] });
+      const answers = [{ ok: false, status: 503, json: async () => ({ detail: 'Private file storage is not available right now.' }) },
+        { ok: true, json: async () => ({ url: 'https://elsewhere.example/agent/pages/x', expires_in: 300 }) },
+        { ok: true, json: async () => ({ url: '/agent/pages/address-3', expires_in: 300 }) }];
+      window.fetch = vi.fn(async url => url.endsWith('/page') ? answers.shift() : reply([PAGE]));
+      await window.App.agentWorkspace.refresh(CHAT);
+      const stage = document.querySelector('.agent-page-stage'), frame = stage.querySelector('iframe');
+      for (const attempt of [1, 2]) {
+        await vi.waitFor(() => expect(stage.classList.contains('is-failed')).toBe(true));
+        expect(stage.querySelector('.agent-page-failed span').textContent).toBe('Page couldn’t load');
+        expect([frame.hasAttribute('src'), asked(window).length]).toEqual([false, attempt]);
+        // The file itself is still there to download.
+        expect(document.querySelector('.agent-page .agent-files-icon-btn:not(.agent-page-open)').disabled).toBe(false);
+        stage.querySelector('.agent-page-failed button').click();
+        expect([stage.classList.contains('is-failed'), stage.classList.contains('is-loading')]).toEqual([false, true]);
+      }
+      await vi.waitFor(() => expect(frame.getAttribute('src')).toBe('/agent/pages/address-3'));
+      expect(stage.querySelector('.agent-page-failed')).toBeNull();
+      dom.window.close();
+    });
+  });
+
   it('describes Gmail imports of the turn by subject and sender instead of message IDs', async () => {
     const { window, document, dom } = boot({ files: [MAIL, { ...MAIL, id: 'e'.repeat(32), origin_subject: undefined, origin_from: undefined,
       origin: { message_id: 'ff', part_id: '1' } }, { ...MAIL, id: '9'.repeat(32), name: 'older.pdf', turn_id: TURN_ONE }] });

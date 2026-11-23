@@ -22,8 +22,8 @@ HTML before gzip):
 * ``/i18n/<lang>.<hash>.js`` is that browser dictionary plus
   ``static/js/i18n.js``.
 
-API routes, ``/static``, Firebase's auth helpers (``/__/``) and the admin pass
-through untouched.
+API routes, ``/static``, Firebase's auth helpers (``/__/``), the admin and a
+page the agent shared (``/agent/pages/``) pass through untouched.
 """
 
 from __future__ import annotations
@@ -34,14 +34,16 @@ from urllib.parse import parse_qsl, quote, urlencode
 
 from starlette.datastructures import Headers, MutableHeaders
 
-from app.core import i18n
+from app.core import html_page, i18n
 from app.core.observability import call_on_path
 from app.core.site import OAUTH_CALLBACK_PATHS, SITE_URL
 
 
 # The OAuth callbacks write their own language under their own strict policy
-# (no extra script).
-PASS_THROUGH = ("/static/", "/__/", "/api/", "/admin", "/health", *OAUTH_CALLBACK_PATHS)
+# (no extra script). A page the agent shared is the user's file in a frame of
+# its own (html_page.py): none of its words are the app's, and its policy
+# takes no script from here.
+PASS_THROUGH = ("/static/", "/__/", "/api/", "/admin", "/health", html_page.PATH_PREFIX, *OAUTH_CALLBACK_PATHS)
 COOKIE_MAX_AGE = 365 * 24 * 3600
 BUNDLE_PREFIX = "/i18n/"
 # A longer page goes out in English with the browser dictionary, which

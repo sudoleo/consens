@@ -1669,6 +1669,57 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
         "/tmp/chart.png", f"{D}/notes.txt", "/tmp/chart.png", "/tmp/fake.png", "/tmp/logo.svg"]
 
 
+def test_a_shared_html_file_runs_in_the_chat_when_all_it_needs_is_inside_it(store, fake_vm, tmp_path, monkeypatch):
+    """vm_share_file: an HTML file that needs nothing from outside itself is
+    the turn's page (app/core/html_page.py) and the result says so; one that
+    loads from elsewhere stays a download, and the result names what it
+    loads. Shared again in the message, the file takes its earlier share's
+    place: the answer shows it once, as it is now."""
+    from app.services.agent_files import AgentFiles, FileContext
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    own = '<!doctype html><input type="range"><script>document.title = "ok"</script>'
+    cdn = b'<!doctype html><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><canvas></canvas>'
+    script = Agent([[("vm_share_file", {"path": "chart.html", "name": "Benchmark"}),
+                     ("vm_share_file", {"path": "site/index.html"}), ("vm_share_file", {"path": "notes.html.txt"})],
+                    [("vm_share_file", {"path": "chart.html", "name": "Benchmark"}),
+                     ("vm_write_file", {"path": "site/index.html", "content": own + "<p>inline now</p>"})],
+                    [("vm_share_file", {"path": "site/index.html"})]])
+    loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    D = chat_path(chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"].update({f"{D}/chart.html": own.encode(), f"{D}/site/index.html": cdn,
+                                       f"{D}/notes.html.txt": own.encode()})
+    events = list(loop.run())
+    page, refused, text, again, _, fixed = results(loop)
+    # A title as the name keeps the file's ending, and with it its type.
+    assert page["shown_as"] == "page" and page["file"]["name"] == "Benchmark.html" and page["file"]["mime"] == "text/html"
+    assert page["note"] == agent_vm_tools.PAGE_NOTE and "without the network" in page["note"] and "page" not in page["file"]
+    assert refused["shown_as"] == "download" and refused["file"]["name"] == "index.html"
+    assert "does not run in the chat as a page: it loads https://cdn.jsdelivr.net/npm/chart.js from outside" in refused["note"]
+    # A name makes a file a page, never its content.
+    assert text["shown_as"] == "download" and text["file"]["mime"] == "text/plain" and "page" not in text["note"]
+    assert [again[field] for field in ("file", "shown_as", "note")] == [page[field] for field in ("file", "shown_as", "note")]
+    assert fixed["shown_as"] == "page" and fixed["file"]["id"] != refused["file"]["id"]
+    saved = {file["name"]: file for file in files.list(UID, chat_id)}
+    # The refused share went when the file came again; the page shared twice is there once.
+    assert sorted(saved) == ["Benchmark.html", "index.html", "notes.html.txt"]
+    assert saved["Benchmark.html"]["page"] == "html" and saved["index.html"]["page"] == "html"
+    assert saved["index.html"]["id"] == fixed["file"]["id"] and "page" not in saved["notes.html.txt"]
+    assert "preview" not in saved["Benchmark.html"] and "picture" not in saved["Benchmark.html"]
+    assert saved["Benchmark.html"]["origin"] == {"source": "vm", "path": f"{D}/chart.html"}
+    # The model's own view of a file never says how the app shows it.
+    from app.services.agent_files import public_file
+    assert "page" not in public_file(files.get(UID, chat_id, page["file"]["id"]), for_model=True)
+    shared = [file["name"] for event in events if event.get("type") == "resources" for file in event["files"]]
+    assert shared == ["Benchmark.html", "index.html", "notes.html.txt", "index.html"]
+    # The agent knows where a page it builds shows: a fact of the workspace.
+    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    assert "as an interactive page that runs in the chat" in AGENT_VM_PROMPT
+    assert "network requests and links out of it do not work there" in AGENT_VM_PROMPT
+
+
 def test_a_shared_office_file_brings_the_pdf_the_app_previews_it_by(store, fake_vm, tmp_path, monkeypatch):
     """file-viewer.js: a presentation, document or spreadsheet
     the agent shares goes to the converter all accounts share

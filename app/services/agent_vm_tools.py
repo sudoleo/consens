@@ -53,9 +53,10 @@ search_pictures into the workspace by its id, as the server fetched it
 
 vm_share_file gives the user a file of the VM: it is
 copied into the chat's private file store (AgentFiles, kind ``vm_file``, the
-turn's id) and shown under the answer, a picture as a picture, anything else
-as a download (agent-workspace.js). The VM has no public address; nothing of
-it is ever a link.
+turn's id) and shown under the answer, a picture as a picture, an HTML file
+that needs nothing from outside itself as a page that runs in the chat
+(app/core/html_page.py), anything else as a download (agent-workspace.js).
+The VM has no public address; nothing of it is ever a link.
 
 Every command and file operation of the agent runs as its own user without
 sudo (agent_vm.agent_argv), so its tools reach only what that user may; a
@@ -81,7 +82,7 @@ import time
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core import svg
+from app.core import html_page, svg
 from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
@@ -114,6 +115,13 @@ READ_CHARS = 16_000
 # A shared file goes into the chat's file store, which takes up to 5 MB a file
 # (AgentFiles.save).
 SHARE_BYTES = 5 * 1024 * 1024
+# What vm_share_file says of an HTML file the chat runs as a page, and of
+# one it does not (html_page.refusal gives the reason).
+PAGE_NOTE = ("The app shows it in the chat as a page the user can use, with the file to download beside it. It "
+             "runs there without the network, from what the file itself contains. Do not link it or say where it "
+             "appears.")
+PAGE_REFUSED_NOTE = ("The app shows it with your answer as a download. It does not run in the chat as a page: {reason} "
+                     "Do not link it or say where it appears.")
 # The preview of a shared Office file (_office_preview): a PDF larger than
 # this is no preview worth loading in a browser, and a conversion never
 # takes the answer's last seconds.
@@ -1253,7 +1261,8 @@ class VMTools:
                          VmEditFileArgs, self.edit, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
             ReadOnlyTool("vm_share_file", "Give the user a file from your workspace (up to 5 MB): it appears under your "
-                         "answer, a picture as a picture, any other file as a download.",
+                         "answer, a picture as a picture, an HTML file that needs nothing from outside itself as a "
+                         "page that runs in the chat, any other file as a download.",
                          VmShareFileArgs, self.share, activity=self._path_activity, reports=True),
             # LibreOffice on the converter VM all accounts share (agent_office.py).
             ReadOnlyTool("vm_render_office", "Turn an Office file in your workspace (pptx, docx, xlsx, their older "
@@ -1829,32 +1838,59 @@ class VMTools:
             # (agent_web_images.picture_markdown); f1, f2 … per message.
             if mime.startswith("image/") or drawn:
                 origin["ref"] = f"f{sum(1 for item in self.shared.values() if 'ref' in item) + 1}"
+            # An HTML file runs in the chat as a page when all it needs is
+            # inside it (html_page.py); the result says why another does not.
+            refused = html_page.refusal(raw) if mime == "text/html" else None
+            if mime == "text/html" and refused is None:
+                extra["page"] = "html"
             # A presentation, document or spreadsheet opens in the app's
             # preview as its PDF (agent_office.py, file-viewer.js).
             preview = None
-            if not mime.startswith("image/") and not drawn and mime != "application/pdf":
+            if not mime.startswith("image/") and not drawn and mime not in ("application/pdf", "text/html"):
                 preview = self._office_preview(raw, posixpath.splitext(path)[1][1:].lower(), cancellation)
             # The agent made it: nothing for the store to read out. The bytes
             # are served as a download only (routers/agent_files.py).
             meta = self.files.save(self.loop.uid, self.loop.chat_id, raw=raw, name=name, mime=mime,
                                    extraction={"status": "ready", "parts": [], "warnings": []},
                                    cancellation=cancellation, preview=preview, extra=extra)
+            if mime == "text/html":
+                self._replace_page(path)
             self.shared[key] = {field: meta[field] for field in ("id", "name", "mime", "size")}
             if "ref" in origin:
                 self.shared[key]["ref"] = origin["ref"]
+            if mime == "text/html":
+                self.shared[key]["page"] = refused
             outgoing = getattr(self.loop, "outgoing", None)
             if outgoing is not None:
                 outgoing.put_nowait({"type": "resources", "files": [meta]})
-        file = {field: value for field, value in self.shared[key].items() if field != "ref"}
+        file = {field: value for field, value in self.shared[key].items() if field not in ("ref", "page")}
         ref = self.shared[key].get("ref")
         if ref:
             from app.services.agent_web_images import PLACE_NOTE, picture_markdown
             return self.session.announce({"path": path, "file": file, "shown_as": "picture",
                                           "markdown": picture_markdown(ref, file["name"]),
                                           "note": PLACE_NOTE + " Do not link it."})
+        if "page" in self.shared[key]:
+            refused = self.shared[key]["page"]
+            return self.session.announce({"path": path, "file": file, "shown_as": "download" if refused else "page",
+                                          "note": PAGE_REFUSED_NOTE.format(reason=refused) if refused else PAGE_NOTE})
         return self.session.announce({"path": path, "file": file, "shown_as": "download",
                                       "note": "The app shows it with your answer by itself. Do not embed it as an "
                                               "image, link it or say where it appears."})
+
+    def _replace_page(self, path):
+        """An HTML file shared again in this message takes the place of its
+        earlier share: the answer shows the file as it is now, once, not a
+        page per attempt. An earlier one that stays is no failure of the
+        share."""
+        for key in [key for key, item in self.shared.items() if key[0] == path and "page" in item]:
+            try:
+                self.files.delete(self.loop.uid, self.loop.chat_id, self.shared[key]["id"])
+            except Exception as exc:
+                logging.info("Agent VM share kept an earlier page category=%s %s", safe_exception(exc),
+                             log_tag(self.loop))
+            else:
+                del self.shared[key]
 
     def _office_preview(self, raw, extension, cancellation):
         """The PDF the app previews a shared Office file by (file-viewer.js),

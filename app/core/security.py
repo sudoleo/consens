@@ -11,6 +11,7 @@ import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from google.auth.credentials import AnonymousCredentials
 
+from app.core import html_page
 from app.core.e2e_profile import (
     assert_safe_e2e_environment,
     e2e_test_mode_enabled,
@@ -204,6 +205,13 @@ class CustomSecurityMiddleware:
                 if path in OAUTH_CALLBACK_PATHS:
                     headers.set(b"content-security-policy", route_csp or b"default-src 'none'; frame-ancestors 'none'")
                     headers.set(b"referrer-policy", b"no-referrer")
+                if path.startswith(html_page.PATH_PREFIX):
+                    # A page the agent shared runs in a frame of the chat
+                    # (html_page.py). Its sandbox is set here for the whole
+                    # path, so an error, a limit or a method the route does
+                    # not answer leaves under it as well.
+                    for name, value in html_page.HEADERS.items():
+                        headers.set(name.lower().encode("ascii"), value.encode("ascii"))
                 if sensitive_api_response:
                     # An event stream keeps no-transform (no proxy buffering
                     # or re-encoding), see SSE_HEADERS.

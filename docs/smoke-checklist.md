@@ -1496,6 +1496,28 @@ Server.
       `/ask_glm`, sobald GLM 5.3 das effektive Modell ist.
 - [ ] Bookmark-Attachments werden angezeigt.
 
+## Seite im Chat (seit 2026-11-23)
+- [ ] Agent mit Arbeitsplatz: „Bau mir ein interaktives Diagramm als HTML“ →
+      er teilt eine `.html` mit `vm_share_file`; unter der Antwort läuft die
+      Seite (Regler, Umschalter, Klicks wirken), nicht im Browser des
+      Arbeitsplatzes. Ihr Platz steht schon vor dem Laden in voller Höhe,
+      nichts springt; darunter Name, „Open larger“, Download, ⋯ („Reload page“,
+      „Remove…“).
+- [ ] „Open larger“ zeigt dieselbe Seite fast fensterfüllend; Download dort und
+      unter der Antwort liefert die `.html`; Schließen gibt den Fokus zurück.
+      Tab führt in die Seite hinein und wieder heraus.
+- [ ] Chat neu laden und wieder öffnen: Die Seite ist wieder da. Follow-up
+      senden: Die Seite der vorigen Antwort lädt neu und bleibt bedienbar.
+- [ ] Eine HTML-Datei mit `<script src="https://…">` oder fremden Bildern
+      bleibt ein Download; der Agent nennt den Grund oder teilt eine Fassung,
+      die alles in der Datei trägt (dann steht nur diese eine unter der Antwort).
+- [ ] Hell und dunkel, Handy (Platz 420 px hoch, kein seitliches Scrollen),
+      Deutsch („Größer öffnen“, „Seite neu laden“). Ein Link in der Seite zu
+      einer anderen Adresse tut nichts, die Seite bleibt stehen.
+- [ ] In DevTools: Die Antwort von `/agent/pages/…` trägt
+      `Content-Security-Policy: sandbox allow-scripts; …`; der Download der
+      Datei kommt als `application/octet-stream`.
+
 ## Vorschau neben dem Chat (seit 2026-11-01)
 - [ ] Agent baut in der VM eine PPTX (python-pptx) und teilt sie mit
       `vm_share_file` → unter der Antwort steht die erste Folie als Miniatur,

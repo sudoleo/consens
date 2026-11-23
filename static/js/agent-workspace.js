@@ -29,6 +29,10 @@
 //   viewer and the download get the original (otherwise an opened chat
 //   fetches every picture of every turn at once, up to 5 MB each, as data:
 //   URLs).
+// - A page the agent shared (an HTML file that needs nothing from outside
+//   itself, app/core/html_page.py) runs under the text, between the
+//   pictures and the documents (.agent-answer-pages, pageCard): in a
+//   sandboxed frame the server confines, in a place of fixed size.
 //
 // refresh(chatId, force) is cheap to call on every render: without force it
 // only re-projects the cached list (for example when the turn changes). A
@@ -45,6 +49,7 @@
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     warning: 'M12 4 2.5 20h19zM12 10v4M12 17h.01',
     mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+    expand: 'M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5',
   };
   let chat = '', owner = '', turn = '', data = null, error = '', generation = 0, controller = null;
   let lastStart = -Infinity, timer = null, retryTimer = null, inflight = null, waiting = null, rendered = '';
@@ -65,6 +70,9 @@
   // a page that opened it would run it) and is drawn from its bytes.
   const PICTURE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
   const isPicture = file => PICTURE_MIMES.has(file.mime) || file.picture === 'svg';
+  // An HTML file of the agent's that needs nothing from outside itself runs
+  // under the answer as a page (agent_vm_tools.share, app/core/html_page.py).
+  const isPage = file => file.page === 'html' && file.kind === 'vm_file';
   const openState = { versions: new Set() };
   let confirmKey = '';
 
@@ -500,13 +508,13 @@
     return wrap;
   }
   function answerTail(body) {
-    for (const slot of [body?._documents, body?._pictures]) {
+    for (const slot of [body?._documents, body?._pages, body?._pictures]) {
       if (slot?.isConnected && slot.parentNode === body.parentNode && !slot.hidden) return slot;
     }
     return body;
   }
-  // The answer's documents, right after its pictures' place (which stands
-  // right after the text), so the evidence row follows them.
+  // The answer's documents, right after its pictures' and its pages' places
+  // (which stand right after the text), so the evidence row follows them.
   function documentsSlot(body) {
     const pictures = picturesSlot(body);
     if (!pictures) return null;
@@ -514,8 +522,38 @@
       body._documents = node('div', 'agent-resources agent-answer-documents'); body._documents.hidden = true;
     }
     const slot = body._documents;
-    if (pictures.parentNode && pictures.nextElementSibling !== slot) pictures.after(slot);
+    const before = body._pages?.parentNode && body._pages.parentNode === pictures.parentNode ? body._pages : pictures;
+    if (before.parentNode && before.nextElementSibling !== slot) before.after(slot);
     return slot;
+  }
+  // The answer's pages, between its pictures and its documents. Put there
+  // once: a frame taken out of the page and put back loads again.
+  function pagesSlot(body) {
+    const pictures = picturesSlot(body);
+    if (!pictures) return null;
+    if (!body._pages) { body._pages = node('div', 'agent-answer-pages'); body._pages.hidden = true; }
+    if (pictures.parentNode && body._pages.parentNode !== pictures.parentNode) pictures.after(body._pages);
+    return body._pages;
+  }
+  // Each page keeps its figure for as long as the answer shows it: only one
+  // that is new is put in, only one that is gone is taken out, and a
+  // removal question opens inside the figure (pageCard sync).
+  function fillPages(body, chatId, pages, scope) {
+    if (!body || (!pages.length && !body._pageCards)) return;
+    const cards = body._pageCards ||= new Map();
+    for (const [id, card] of cards) {
+      if (pages.some(file => file.id === id && file.name === card.name) && card.chatId === chatId && card.scope === scope) continue;
+      watcher?.unobserve(card.figure); card.figure.remove(); cards.delete(id);
+    }
+    const slot = pages.length ? pagesSlot(body) : body._pages;
+    if (!slot) return;
+    pages.forEach((file, index) => {
+      let card = cards.get(file.id);
+      if (!card) { card = pageCard(chatId, file, scope); cards.set(file.id, card); }
+      card.sync();
+      if (card.figure.parentNode !== slot) slot.insertBefore(card.figure, slot.children[index] || null);
+    });
+    slot.hidden = !pages.length;
   }
   function fillDocuments(body, cards) {
     if (!body) return;
@@ -768,6 +806,102 @@
     }
     return figure;
   }
+  // The address a frame loads a shared page from, and how long a load under
+  // it finds the page (routers/agent_files.py open_page). A frame cannot
+  // send the sign-in, so the address is asked for, signed in, each time a
+  // page is to load; only this app's own page route ever goes into a frame.
+  async function pageAddress(fileId, chatId = chatOnScreen()) {
+    if (!chatId) throw new Error('Open this chat to see the page.');
+    const response = await request(`/agent/chats/${chatId}/files/${fileId}/page`, { method: 'POST' });
+    const body = await App.readJson(response);
+    const url = String(body?.url || '');
+    if (!/^\/agent\/pages\/[A-Za-z0-9_=-]+$/.test(url)) throw new Error('The page couldn’t load.');
+    return { url, until: Date.now() + Math.max(0, (Number(body.expires_in) || 0) - 10) * 1000 };
+  }
+  // A frame for a page of the agent's: its script runs, in an origin of its
+  // own that reaches nothing of the app; the page's answer sets the same and
+  // more (app/core/html_page.py).
+  function pageFrame(name, className) {
+    const frame = node('iframe', className);
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    // Its name for a screen reader: the file's, the user's word and not the
+    // app's (i18n.js). As a label, not a title: a title is drawn as a
+    // tooltip (tooltip.js), which would lie over the page while it is used.
+    frame.setAttribute('data-i18n-skip', '');
+    frame.setAttribute('aria-label', name);
+    return frame;
+  }
+  // A page the agent shared, running under the answer. Its place has its
+  // size before anything loads (agent-workspace.css): the app cannot look
+  // into the page to measure it, so a longer page scrolls inside. It loads
+  // once it comes near the screen; its name, a larger view (the viewer's
+  // stage, attachments.js), its download and its removal sit in the line
+  // under it. { figure, sync }: sync opens or closes the removal question
+  // without touching the frame.
+  function pageCard(chatId, file, scope) {
+    const key = `${scope}:file:${file.id}`;
+    const figure = node('figure', 'agent-page'); figure.dataset.filesKey = key;
+    figure.setAttribute('data-i18n-ui', '');
+    const stage = node('div', 'agent-page-stage is-loading');
+    const frame = pageFrame(file.name, 'agent-page-frame');
+    stage.append(frame);
+    let until = 0, loads = 0;
+    // One that cannot come says so in its place, with the way to try again.
+    const failed = () => {
+      stage.classList.remove('is-loading');
+      if (stage.classList.contains('is-failed')) return;
+      stage.classList.add('is-failed');
+      const note = node('p', 'agent-page-failed');
+      const retry = node('button', 'text-link', 'Retry'); retry.type = 'button';
+      retry.addEventListener('click', () => reload());
+      note.append(node('span', '', 'Page couldn’t load'), ' · ', retry);
+      stage.append(note);
+    };
+    const load = () => pageAddress(file.id, chatId).then(address => {
+      until = address.until;
+      frame.src = address.url;
+    }).catch(failed);
+    // The page anew, as it was shared: after a failure, after the user
+    // changed what it shows, or when it got stuck ("Reload page" in its menu).
+    const reload = () => {
+      stage.querySelector('.agent-page-failed')?.remove();
+      stage.classList.remove('is-failed'); stage.classList.add('is-loading');
+      loads = 0;
+      load();
+    };
+    frame.addEventListener('load', () => {
+      // An empty frame reports a load of its own when it enters the page.
+      if (!frame.getAttribute('src')) return;
+      stage.classList.remove('is-loading');
+      // The frame loads again when its answer moves in the page (the live
+      // answer joining the history). Past its address's time that load
+      // found nothing: it gets a new address.
+      if (loads++ && Date.now() > until) load();
+    });
+    whenNear(figure, load);
+    const caption = node('figcaption', 'agent-vm-picture-caption');
+    const name = node('span', 'agent-file-name', file.name);
+    name.setAttribute('data-i18n-skip', '');
+    caption.append(name);
+    const open = node('button', 'agent-files-icon-btn agent-page-open'); open.type = 'button';
+    open.setAttribute('aria-label', `Open ${file.name} larger`); open.title = 'Open larger';
+    open.append(icon('expand'));
+    open.addEventListener('click', () => App.attachments?.openStored?.({ fileId: file.id, name: file.name,
+      mime: file.mime, size: file.size, title: file.name, htmlPage: true }));
+    caption.append(open, downloadChip(chatId, file, '', false),
+      overflow(key, `More actions for ${file.name}`, [{ label: 'Reload page', run: reload },
+        { label: 'Remove…', danger: true, run: () => askToRemove(key) }]));
+    figure.append(stage, caption);
+    const sync = () => {
+      const box = [...figure.children].find(child => child.classList.contains('agent-files-confirm'));
+      if (confirmKey !== key) box?.remove();
+      else if (!box) {
+        figure.append(confirmation(key, `Remove ${file.name}? The agent can no longer use it in this chat.`, 'Remove file', [file]));
+      }
+    };
+    return { figure, sync, chatId, scope, name: file.name };
+  }
   function partialNotice(files) {
     const box = node('div', 'agent-resource-notice');
     box.append(icon('warning'));
@@ -794,9 +928,10 @@
     if (resources) { resources.replaceChildren(); resources.hidden = true; }
     // The demo's files stay with its answer until the demo lets them go.
     const body = document.getElementById('agentAnswerBody');
-    if (body !== demoBody) { fillPictures(body, '', [], 'answer'); fillDocuments(body, []); }
+    if (body !== demoBody) { fillPictures(body, '', [], 'answer'); fillPages(body, '', [], 'answer'); fillDocuments(body, []); }
     for (const row of historyRows()) {
-      row.replaceChildren(); row.hidden = true; fillPictures(row._answerBody, '', [], 'turn'); fillDocuments(row._answerBody, []);
+      row.replaceChildren(); row.hidden = true; fillPictures(row._answerBody, '', [], 'turn');
+      fillPages(row._answerBody, '', [], 'turn'); fillDocuments(row._answerBody, []);
     }
     rendered = '';
   }
@@ -805,7 +940,7 @@
   // and the mail attachments it fetched. All of it belongs to the answer:
   // under its text, above its evidence row. Uploads are on the message.
   function turnResources(box, chatId, files, turnId, scope, live, body) {
-    if (!turnId) { fillPictures(body, chatId, [], scope); fillDocuments(body, []); return; }
+    if (!turnId) { fillPictures(body, chatId, [], scope); fillPages(body, chatId, [], scope); fillDocuments(body, []); return; }
     const own = [];
     for (const group of groupDocuments(files)) {
       const mine = group.list.filter(version => version.turn === turnId);
@@ -822,7 +957,12 @@
       for (const file of shown) gallery.append(pictureCard(chatId, file, scope));
       own.push(gallery);
     }
-    const rows = [...shared.filter(file => !shown.includes(file)),
+    // A page runs under the text, each in the figure it keeps; a turn
+    // without an answer text shows it with its other files.
+    const pages = shared.filter(file => isPage(file) && available(file));
+    if (body) fillPages(body, chatId, pages, scope);
+    else for (const file of pages) { const card = pageCard(chatId, file, scope); card.sync(); own.push(card.figure); }
+    const rows = [...shared.filter(file => !shown.includes(file) && !pages.includes(file)),
       ...files.filter(file => file.kind === 'mail_attachment' && file.turn_id === turnId)];
     if (rows.length) {
       const list = node('div', 'agent-files-list');
@@ -835,7 +975,10 @@
     row.replaceChildren();
     const turnId = row.dataset.agentTurnResources;
     if (chat && data) turnResources(row, chat, data.files || [], turnId, `turn:${turnId}`, false, row._answerBody);
-    else { fillPictures(row._answerBody, chat, [], `turn:${turnId}`); fillDocuments(row._answerBody, []); }
+    else {
+      fillPictures(row._answerBody, chat, [], `turn:${turnId}`); fillPages(row._answerBody, chat, [], `turn:${turnId}`);
+      fillDocuments(row._answerBody, []);
+    }
     row.hidden = !row.childElementCount;
   }
   function project() {
@@ -1072,6 +1215,7 @@
   window.addEventListener('consensio:auth-state', () => {
     reset(); chat = ''; owner = ''; openState.versions.clear(); hideAll();
   });
-  App.agentWorkspace = { refresh, upload, request, button, download, openFile, openPreview, removeFile, renderTurnResources, demo };
+  App.agentWorkspace = { refresh, upload, request, button, download, openFile, openPreview, pageAddress, pageFrame,
+    removeFile, renderTurnResources, demo };
   App.answerTail = answerTail;
 })();

@@ -10,8 +10,14 @@ The same ``?preview=1`` is what the app's document preview shows
 its workspace answers with its PDF from the converter all accounts share
 (agent_office.py, agent_vm_tools._office_preview), a Word file the user sent
 with the text read from it (its paragraphs, plain text), a PDF with itself.
+
+An HTML file the agent shared runs in the chat as a page (app/core/html_page.py):
+the browser asks for its address, signed in, and a frame loads it from
+``show_page``, the only route that answers a file of a chat as a document.
+Every other answer here is bytes to save or one of the fixed preview types.
 """
 import io
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
@@ -21,10 +27,14 @@ from urllib.parse import quote
 
 from app.api.routers.agent import require_agent_access
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
+from app.core import html_page
 from app.core.entitlements import entitlements_for, normalize_tier
+from app.core.observability import safe_exception
 from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
+from app.services import agent_pages
 from app.services.agent_files import UPLOAD_QUOTAS, AgentFiles, FileUnavailable, StorageNotConfigured
+from app.services.chat_store import ChatNotFound
 
 router = APIRouter()
 
@@ -130,6 +140,9 @@ def _preview(mime, raw):
 
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+# Types a browser opens as a document and runs. A stored file of one goes
+# out as bytes to save, whatever asks for its address.
+DOCUMENT_MIMES = frozenset({"text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml"})
 INLINE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"}
 
 
@@ -162,8 +175,54 @@ def download_file(request: Request, chat_id: str, file_id: str, preview: bool = 
     smaller = _preview(meta["mime"], raw) if preview else None
     if smaller is not None:
         return Response(smaller, media_type="image/webp", headers=INLINE)
-    return Response(raw, media_type=meta["mime"], headers={"Cache-Control": "private, no-store",
+    return Response(raw, media_type=download_type(meta["mime"]), headers={"Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff", "Content-Disposition": "attachment; filename*=UTF-8''" + quote(meta["name"], safe="")})
+
+
+def download_type(mime):
+    """The type a stored file is downloaded as: its own, unless a browser
+    would open that as a document."""
+    kind = str(mime or "").split(";", 1)[0].strip().lower()
+    return "application/octet-stream" if kind in DOCUMENT_MIMES or kind.endswith("+xml") else mime
+
+
+@router.post("/agent/chats/{chat_id}/files/{file_id}/page")
+@limiter.limit("60/minute")
+def open_page(request: Request, chat_id: str, file_id: str):
+    """The address a frame in the chat loads a shared page from, for the
+    account that owns the chat (agent_pages.py)."""
+    uid, files = service(request)
+    known = invoke(lambda: files.get(uid, chat_id, file_id), uid)
+    if known.get("page") != "html":
+        raise HTTPException(404, "This file is not shown as a page.")
+    return JSONResponse({"url": html_page.PATH_PREFIX + agent_pages.issue(uid, chat_id, file_id),
+                         "expires_in": agent_pages.TOKEN_SECONDS}, headers={"Cache-Control": "private, no-store"})
+
+
+def _no_page(status):
+    return Response(b"", status_code=status, media_type="text/plain; charset=utf-8", headers=html_page.HEADERS)
+
+
+@router.get(html_page.PATH_PREFIX + "{token}")
+@limiter.limit("120/minute")
+def show_page(request: Request, token: str):
+    """A shared page as the document a frame runs (html_page.document). The
+    address is the whole permission, so every answer, a refusal too, carries
+    html_page.HEADERS; the security middleware sets them for this path again,
+    over whatever answers in the route's place."""
+    try:
+        uid, chat_id, file_id = agent_pages.read(token)
+        meta, raw = AgentFiles(db_firestore).download(uid, chat_id, file_id)
+        source = html_page.text(raw) if meta.get("page") == "html" and len(raw) <= html_page.MAX_BYTES else None
+    except (agent_pages.InvalidToken, FileUnavailable, ChatNotFound):
+        return _no_page(404)
+    except Exception as exc:
+        logging.error("agent page failed category=%s", safe_exception(exc))
+        return _no_page(503)
+    if source is None:
+        return _no_page(404)
+    return Response(html_page.document(source, meta.get("name")), media_type=html_page.CONTENT_TYPE,
+                    headers=html_page.HEADERS)
 
 
 @router.delete("/agent/chats/{chat_id}/files/{file_id}")

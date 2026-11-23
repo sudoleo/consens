@@ -8099,7 +8099,9 @@ ohne Größe behalten das 16:10-Feld; ein Bild, das die Antwort beim Schreiben
 erreicht, blendet ein), über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
 dem Antwort-Body; `App.answerTail(body)` sagt agent-review.js, watch.js,
 share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffnet
-`App.attachments.openStored`), andere als Dateizeile. **Im Text statt darunter
+`App.attachments.openStored`), eine HTML-Datei, die nichts von außerhalb
+braucht, seit 2026-11-23 als Seite, die unter der Antwort läuft (siehe „Seite
+im Chat“ unter Agent-Dateien), andere als Dateizeile. **Im Text statt darunter
 (seit 2026-10-31, Max: „Bilder sollten in den Text eingebaut werden“):**
 `show_image` und `vm_share_file` (bei einem Bild) antworten mit `markdown`
 `![Unterschrift](picture:p2)` (`agent_web_images.picture_markdown`, `PLACE_NOTE`;
@@ -11216,6 +11218,7 @@ app/core/
   entitlements.py            Die drei Kontostufen free/plus/pro: normalize_tier + Entitlements
   site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
+  html_page.py               Eine vom Agenten geteilte HTML-Datei als Seite im Chat (seit 2026-11-23): welche Datei (refusal, loads), die Sandbox-Header jeder Antwort unter /agent/pages/ (HEADERS, POLICY) und das Dokument um die Datei (document); ohne schwere Importe, von security.py, i18n_middleware.py, agent_vm_tools.py und dem Datei-Router gelesen
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   network_block.py           Äußerste Middleware: 403 für die Cloud-Netze der Crawler-Welle (BLOCKED_NETWORKS), /api/v1/ bleibt offen
   rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt; IPv6 zählt je /64, address_key, wie request_limits.client_of) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
@@ -11271,6 +11274,7 @@ app/services/
   workspace_guard.py         Sicherheitsregeln des Arbeitsplatzes auf dem Server (seit 2026-10-30): note_visit/note_browser_call/note_view_bytes/note_net/note_policy (nie blockierend, ein Thread zählt je Konto in einer Transaktion), classify (Cloudflares Security- und Family-Resolver: malware/adult/clean, Cache 24 h), Spur workspace_trail/{uid}_{tag} (Hosts, Stunden, Bytes; 31 Tage, cleanup_expired_trails), Wächter workspace_guard/{uid} (open/closed bis morgen/locked), RULES/judge/decide (je Website, nur Nutzerverhalten sperrt, zweites Schließen in 7 Tagen sperrt, Admins nur gemeldet), _shut (seit 2026-11-04 mit _end_agent_processes), NET_ARGV/parse_net/counts (Netzzähler am Nachrichtenende), status (Cache 20 s, Lesefehler schließt nie), unlock mit baseline, Telegram ohne Konto; Details docs/agent-mode.md „Sicherheitsregeln des Arbeitsplatzes“
   workspace_vm/              Läuft auf dem Rechner des Arbeitsplatzes (LF per .gitattributes; workbench/ und browser/ in einem Ordner /home/sprite/.consens/workspace, eine VERSION). workbench/: agent-run (jeder Befehl des Agenten: Mount-Namespace ohne api.sock/Checkpoints/Logs, seit 2026-11-04 mit eigenem /tmp aus /var/lib/consens/agent-tmp, oom_score_adj 800 und nice 10, dem seccomp-Filter aus nouserns.py, setpriv auf den Nutzer agent mit no-new-privs, timeout), nouserns.py (seit 2026-11-04: seccomp-Filter, clone/unshare mit CLONE_NEWUSER und setns EPERM, clone3 ENOSYS, x32 gesperrt; nur Standardbibliothek, Exit 125 ohne Filter), setup.sh (Nutzer agent ohne sudo, /home/sprite 750, /tmp des Agenten, Umzug aus dem alten Home, einmal je Rechner (Marke /var/lib/consens/one-computer) Browser, Bildschirm, Tunnel und Gateway früherer Bauweisen samt Prozessen des Agenten weg, Xvfb/x11vnc entfernt, ripgrep, poppler-utils und Chrome (ohne Googles apt-Quelle), Laufzeit-Shims vorbereitet; beendet seit 2026-10-29 das alte pause.py und taut seine cgroups auf). tunnel.py (localhost-Brücke zwischen den zwei VMs) gab es von 2026-10-29 bis 2026-11-04. office/ (seit 2026-11-01, Konverter-Sprite consens-office, agent_office.py): setup.sh (LibreOffice Impress/Writer/Calc ohne Recommends, Office-Schriften, poppler-utils, python3-pil, Nutzer office0–office2 ohne sudo/Home/Shell, erst dpkg --configure -a, danach apt-get clean, Marke VERSION zuletzt), convert.sh (cd /, eine Datei von stdin, einer von drei Plätzen per flock auf /run/consens-office/slotN.lock, Platz vorher und nachher geräumt (kill -1 als officeN, Dateien), seit 2026-11-01 abends auch jeder gerade freie Platz (clean_free, Lock kurz gehalten; `convert.sh clean` nur das), jeder Befehl eines Platzes mit prlimit --as 2 GB (Umwandlung braucht 0,5–0,6 GB, die VM hat 8 GB ohne Swap; ihre cgroup nimmt keine eigenen Grenzen an), LibreOffice als officeN in einem Ordner nur dieser Umwandlung mit eigenem Profil, Seitenzahl als officeN geschrieben, pdfinfo/pdftoppm, tar auf stdout; Exit 2 Typ, 3 kein PDF, 4 alle Plätze belegt, 5 Zeitlimit; Schrittlimits unter RUN_SECONDS; live geprüft 2026-11-01), sheet.py (Übersicht: Folien zwei, Hochformat drei Spalten, Seitennummern, höchstens 1568 px). browser/: browser.py (das eine Programm des Werkzeugs browser: JSON rein und raus, Playwright über CDP, Seite als Text mit Refs, Hauptinhalt zuerst, find mit denselben Refs, Seitenkopf mit „Cookies saved for this site: yes|no“ aus den Cookies und ab zwei Tabs „Tab n of m“ (tab_line, seit 2026-11-17); read endet mit dem, was seine Liste auslässt (Text, Bilder, Canvas, Videos: SNAPSHOT_JS unlisted, unlisted_line, seit 2026-11-17); click/drag an x,y seit 2026-10-30 mit Element und Box unter jedem Punkt und den Änderungen danach, nächste zuerst, auf Canvas/Frame/Video mit Bildvergleich um den Punkt: HIT_JS, look_at, hit_report; jede Aktion auf der Seite vorn seit 2026-10-30 mit dieser Beobachtung (eine Ref in einem Frame dort), Warten auf die Ruhe der Seite statt 2 s networkidle (quiet, Traffic, QUIET_JS; Navigation lädt wie bisher, loaded), danach Kopf und nur die seit dem letzten Blick geänderten Zeilen (after_text, changes/outline mit Frames und Überlagerung, last-look.json; ganze Liste nach Navigation, bei read und wenn mehr als die Hälfte neu ist; scroll nennt die Lage und listet zuerst, was im Blick ist, IN_VIEW_JS), Dialoge einer Seite seit 2026-11-10 je Aufruf beantwortet und in der Antwort genannt (answer_dialog, ASKED, asked_text: alert/beforeunload OK, confirm/prompt Abbrechen außer accept_dialog), upload auf einem Knopf oder an x,y über die abgefangene Dateiauswahl (FILE_FIELD_JS, opened_chooser, CHOOSER_SECONDS), scroll mit ref oder x,y im Kasten, der dort scrollt (BOX_SCROLL_JS, sonst die Seite), und „in view“ nur, was abschneidende Kästen zeigen (IN_VIEW_JS), Fehler mit der letzten aussagekräftigen Call-Log-Zeile und der Seite (on_failure, failure_text; veraltete Ref mit ganzer Liste, StaleRef), download nur Name/Bytes/Content-Type, 0 Byte refused; Server-Aktion rest kürzt den Wach-Hold auf REST_FOR; read seit 2026-10-30 mit dem, was über der Seite liegt, zuerst und den Elementen von Frames unter ihrer Zeile (with_frames; die Aktion read liest alle Frames, das Lesen nach einer Aktion nur Frames über der Seite, find keine; element sucht einen Frame-Ref nur in dem Frame, aus dem er stammt, remember_frames/frame-refs.json, nie in einem der eigenen VM); seit 2026-10-30 hält ein residenter Helfer (`--serve`, Unix-Socket ~/.consens/browser/serve.sock mit 0600, serve.lock, SERVE_IDLE, VERSION = Hash der Datei) Playwrights Treiber, verbindet sich mit Chrome nur je Aufruf (ready/disconnect, KEPT; verbunden lenkt Playwright Downloads um und beantwortet Dialoge), ein Aufruf ohne Helfer läuft selbst und startet einen; `free` (sonst beschäftigt: Aufruf läuft nach 1 s selbst), `took` und erst auf `go` des Aufrufs gehandelt, der Helfer verbindet mit einem Neustart wie ein Aufruf ohne ihn (connect), ein Aufruf wartet höchstens READY_SECONDS 35 s auf `took`, `declined`/`stale` = Aufruf läuft selbst, nie zweimal, ein Aufruf, der vor seiner Antwort endet, beendet Helfer und Aktion: through_server/exchange/serve_one/serve), display.sh (seit 2026-11-02 Xtigervnc als Bildschirm und VNC-Server in einem, nur auf dem Unix-Socket vnc.sock (0600), ohne TCP, ohne Zwischenablage, schickt ohne Anfrage höchstens 30 Bilder/s; seit 2026-11-04 mit X-Cookie (xauthority, 0600, je Start neu), Chrome nur auf einem X-Server, der seine Sockets selbst hält (x_ours: xsocket.py fragt per sock_diag, wem die Stream-Sockets auf @/tmp/.X11-unix/X1 gehören; die fds des nicht dumpbaren Xtigervnc von Ubuntu 26.04 sind dem eigenen Nutzer verschlossen), pgrep/pkill nur für den eigenen Nutzer, Chrome über cdp.py ohne Debug-Port; eine VM von vorher räumt Xvfb/x11vnc/openbox, nie unter --keep; openbox, Chrome mit dauerhaftem Profil und Software-WebGL (SwiftShader, seit 2026-10-28; ein Chrome ohne startet einmal neu)), cdp.py (seit 2026-11-04: startet Chrome mit --remote-debugging-pipe, bietet CDP als WebSocket und /json/list auf cdp.sock (0600), eine Browser-Session je Verbindung, IDs und Sessions getrennt, Ende einer Verbindung löst ihre Session; nur Standardbibliothek), install.sh (bis 2026-11-04 setup.sh; einmalige Installation von Bildschirm, openbox, Schriften und Playwright, Chrome wo es fehlt, Marke setup-done-2 auch in browser.py/relay.py), relay.py (Live-Ansicht: Zustände auf stderr, dann VNC zwischen stdin/stdout; Ziele über cdp.sock; nur Standardbibliothek), xsocket.py (seit 2026-11-04: Exit 0, wenn jeder Stream-Socket auf X' abstraktem Namen dem gegebenen Nutzer gehört und es einen gibt; sock_diag mit UNIX_DIAG_UID, nur Standardbibliothek); browser.py liest seit 2026-10-29 keine Seite der eigenen VM (own_computer), localhost seit 2026-11-04 nur auf Ports, auf denen der Nutzer des Agenten lauscht (agent_ports, /proc/net/tcp)
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image/vm_save_picture/vm_render_office (model_picture seit 2026-11-01: jedes Bild ans Modell – vm_view_image, Browser-Screenshot, Office-Übersicht, find_pictures – geht über picture_message höchstens PICTURE_SIDE = 1568 px lang und etwa PICTURE_SENT_BYTES = 400 KB groß, sonst neu als WebP; Screenshots (1280×800) behalten ihre Pixel für click an x,y; nicht dekodierbar → wie bisher roh; vm_save_picture seit 2026-11-01, nur wo image_tools existiert: Bild aus find_pictures/search_pictures per ID über WebImageTools.picture_file (holt einen Suchtreffer erst jetzt) als .jpg/.png/.webp nach Dateiendung (agent_web_images.saved_as) in die Werkbank, Ergebnis mit Größe, picture und page, keine VM-Zeit; vm_render_office seit 2026-11-01: Office-Datei der Werkbank über agent_office.render als PDF daneben unter ihrem ganzen Namen (deck.pptx.pdf), Übersicht der ersten Seiten wie vm_view_image mit OVERVIEW_INTRO (beginnt mit agent_compaction.PICTURE_OPEN, geht mit OVERVIEW_GONE), 30/h je Konto erst nach dem Lesen, keine VM-Zeit; vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; nur wo das Konto die VM hat (routers/agent.py vm_allowed), nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge in den input-Ordner des Chats, am Ende die Netzzähler für workspace_guard (_note_net, seit 2026-11-04); bis 2026-11-04 Netzregeln mit den Domains des Chats), vm_install_packages (apt als root für den Agenten ohne sudo, seit 2026-10-27; seit 2026-11-04 mit --no-remove und nur Namen, die apt kennt), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge; OpenWorkspaceArgs/OPEN_WORKSPACE für den Arbeitsplatz auf Abruf (seit 2026-10-29, DelegationLoop._open_workspace)
+  agent_pages.py             Die Adresse einer Seite im Chat (seit 2026-11-23): issue/read eines Tokens aus Konto, Chat und Datei, mit Fernet verschlüsselt und signiert (eigener Schlüssel aus CHAT_CURSOR_SECRET bzw. WATCH_UNSUBSCRIBE_SECRET, sonst ein Geheimnis des Prozesses), gültig TOKEN_SECONDS=300; routers/agent_files.py open_page/show_page
   agent_office.py            Ein Office-Konverter für alle Konten (seit 2026-11-01): Sprite consens-office des Betreibers mit LibreOffice, Werkzeuge workspace_vm/office/* mit VERSION (prepare einmal pro Prozess, Setup als root, Marke zuletzt), Netz nur Ubuntus Spiegel (RULES); render(data, extension) schickt die Bytes per stdin an convert.sh und liest ein tar (in.pdf, pages.png, pages.txt) → Rendered; OfficeRefused (Datei, Exit 2/3/5) vs. OfficeUnavailable (Konverter); höchstens PARALLEL=3 zugleich (Warten schaut nach Stop), 20 MB, LibreOffice 90 s, Server wartet RUN_SECONDS=165; mit weniger als MIN_SECONDS=85 s Antwortzeit startet keine Umwandlung (OfficeUnavailable "no time", vm_render_office meldet VM_NO_TIME und zählt keinen Render der Stunde; bis 2026-11-03 bekam LibreOffice 1 s und die Datei galt als schuld); Setup mit eigener Cancellation, nach Fehlschlag SETUP_RETRY_SECONDS=600 aus; _forget nach Provider-Ausfall/Exit 127; nach Stop, Zeitüberschreitung oder Verbindungsverlust `sweep` (`convert.sh clean`) im Hintergrund nach SWEEP_DELAY_SECONDS: Live-Probe 2026-11-01, der Provider beendet convert.sh, LibreOffice läuft als officeN mit der Datei weiter, die Falle des Skripts läuft nie; `render(seconds=…)` bleibt in der Restzeit der Antwort; ersetzt LibreOffice pro Werkbank (Speicher je Konto)
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min), die Aktivität des Starts trägt `ends_at` (seit 2026-11-17: „Running in the background until 14:30“); seit 2026-11-01 nennt die Datei chat den startenden Chat, delete_for_chat (chat_command) stoppt und löscht seine Prozesse mit ihm
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
@@ -13624,7 +13628,12 @@ zählen nicht):
   erhalten. Eine eigene CSP (Nonce) und `Referrer-Policy: no-referrer`
   behalten nur die OAuth-Callbacks (`site.OAUTH_CALLBACK_PATHS`:
   `/agent/google/callback`, `/agent/github/callback`); `OAuthAccessFilter`
-  schwärzt bei beiden die Query (Code, State) im Access-Log.
+  schwärzt bei beiden die Query (Code, State) im Access-Log. Alles unter
+  `/agent/pages/` (eine vom Agenten geteilte Seite, die im Chat läuft) bekommt
+  statt der App-Richtlinie die Sandbox aus `html_page.HEADERS`, bei jedem
+  Status, und `X-Frame-Options: SAMEORIGIN`, damit `/app` (`frame-src 'self'`)
+  sie rahmen kann; siehe „Seite im Chat“. Keine andere Route darf eine Datei
+  eines Nutzers als Dokument (`text/html`, XHTML, SVG, XML) ausliefern.
 - **Static-Caching, zwei Regime.** Für **`/app`** kommt die Marke seit
   2026-08-17 aus dem Dateiinhalt (`app/core/assets.py`); dort gibt es nichts
   mehr zu bumpen, wohl aber nach jeder `static/`-Änderung ein `npm run build`,
@@ -14148,6 +14157,126 @@ andere Worker-Aufrufe hängen ihn weiter ans Ende ihres eigenen Prompts.
 Aufruf weiter einmal, damit eine gelöschte oder abgelaufene Datei sofort
 scheitert. Tool-Daten sind keine
 Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.
+
+### Seite im Chat (seit 2026-11-23)
+
+Max, nachdem der Agent ein interaktives Diagramm auf localhost gestartet und im
+Browser des Arbeitsplatzes geöffnet hatte: „cooler wäre es, die Seite im Chat zu
+sehen“; der Browser ist für Seiten, die der Agent bedient, nicht für das, was er
+dem Nutzer baut. Eine HTML-Datei, die der Agent mit `vm_share_file` teilt und
+die nichts von außerhalb braucht, läuft deshalb unter der Antwort als Seite, mit
+ihrem eigenen Skript. Kein neues Werkzeug und kein Weg in die VM: Es ist die
+Datei im Dateispeicher des Chats, wie sie beim Teilen war. Die Idee vom
+2026-10-30 (Web-Projekte als iframe im Chat) war an einer eigenen Domain
+hängen geblieben; für die private Ansicht braucht es keine, weil die Seite in
+einem eigenen Origin läuft, den die Antwort selbst festlegt. Öffentlich
+geteilt wird eine Seite nicht.
+
+- **Welche Datei** (`app/core/html_page.py`): Name auf `.html`/`.htm`
+  (`file_mime` → `text/html`), höchstens `MAX_BYTES` (2 MB: die Seite lädt
+  bei jedem Erscheinen ganz, nichts wird gecacht), UTF-8, und ihr Markup lädt
+  nichts von außerhalb der Datei (`loads`: `script src`, Stylesheet-`link`,
+  `img`/`source`/`video`/`audio`/`iframe`/`object`/`embed`, SVG-`image`/`use`,
+  `url()`/`@import` in `<style>` und `style`-Attributen, Modul-Importe von einer
+  Adresse). `data:`, `blob:` und `#…` gelten als in der Datei, ein Link
+  (`a href`) ist kein Laden. `refusal` nennt dem Agenten den Grund als Satz
+  mit den ersten drei Adressen. Die Prüfung ist eine Auskunft an den Agenten,
+  nicht der Schutz. Sie liest in einem Durchgang, auch Markup aus lauter
+  Öffnungen (begrenzte Muster, possessive Quantoren, kein `html.parser`).
+- **`agent_vm_tools.share`:** legt `page: "html"` am Dateidatensatz ab (kein
+  Office-Preview für HTML); `public_file` gibt es dem Browser, nie dem Modell.
+  Ergebnis `shown_as: "page"` mit `PAGE_NOTE`, sonst `shown_as: "download"`
+  mit `PAGE_REFUSED_NOTE` und dem Grund. Dieselbe HTML-Datei (derselbe Pfad)
+  noch einmal in derselben Nachricht geteilt ersetzt ihre frühere Fassung
+  (`_replace_page` löscht sie): Unter der Antwort steht die Seite einmal, wie
+  sie jetzt ist, nicht eine je Versuch. Die Werkzeug-Beschreibung und ein
+  Faktsatz in `AGENT_VM_PROMPT` sagen es dem Agenten; der Satz zum Browser
+  nennt dort seitdem nur, was einen eigenen Server braucht.
+- **Auslieferung** (`routers/agent_files.py`): `POST
+  /agent/chats/{chat}/files/{file}/page` (angemeldet) prüft Konto, Chat, Datei
+  und `page` und gibt `{url, expires_in}`. `GET /agent/pages/{token}`
+  (`show_page`) liefert das Dokument ohne Anmeldung, weil ein Rahmen keinen
+  Header mitsendet: Die Adresse ist die Berechtigung. Der Token
+  (`app/services/agent_pages.py`) ist Konto, Chat und Datei, mit Fernet
+  verschlüsselt und signiert, unter einem eigenen Schlüssel aus dem
+  Server-Geheimnis (`CHAT_CURSOR_SECRET`, sonst `WATCH_UNSUBSCRIBE_SECRET`,
+  ohne beide ein Geheimnis des Prozesses), gültig `TOKEN_SECONDS` = 300 s. Die
+  Seite liest aus ihm nichts. Abgelaufen, verändert, für ein anderes Konto,
+  einen anderen Chat, eine andere oder gelöschte Datei oder eine ohne `page`:
+  404 ohne Inhalt.
+- **Was jede Antwort trägt** (`html_page.HEADERS`): `Content-Security-Policy`
+  mit `sandbox allow-scripts` (ein eigener Origin, auch wenn die Adresse
+  direkt geöffnet wird: nichts von Seite, Speicher, Cookies oder Anmeldung der
+  App; keine Top-Navigation, Popups, Formulare, Downloads, Dialoge),
+  `default-src 'none'`, Skript und Stil nur aus der Datei (`'unsafe-eval'` für
+  hineinkopierte Bibliotheken), Bilder und Medien nur `data:`/`blob:`,
+  Schriften nur `data:`, `connect-src 'none'`, `frame-src 'none'`,
+  `form-action 'none'`, `base-uri 'none'`, `frame-ancestors 'self'`; dazu `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: no-referrer`,
+  `Cache-Control: private, no-store`. Die Route setzt sie an jeder Antwort
+  (404 und 503 als leeres `text/plain`), und `CustomSecurityMiddleware` setzt
+  sie für den ganzen Pfad `/agent/pages/` noch einmal, über alles, was an
+  Stelle der Route antwortet (405, 429, Validierungsfehler).
+  `I18nMiddleware` lässt den Pfad durch (`PASS_THROUGH`): keine Übersetzung,
+  kein Wörterbuch-Skript.
+- **Das Dokument** (`html_page.document`): nicht die Datei selbst, sondern ein
+  Dokument der App ohne Skript, dessen einziger Inhalt ein `<iframe
+  sandbox="allow-scripts" srcdoc="…">` mit der Datei als Text eines Attributs
+  ist. Der innere Rahmen erbt Richtlinie und Sandbox des Dokuments. Wohin ein
+  Rahmen gehen darf, bestimmt die Seite um ihn, und dieses Dokument erlaubt
+  keine Rahmenadresse: Die Seite bleibt die Datei. Weißes Blatt
+  (`color-scheme: light`): Eine Seite ohne eigenes Aussehen steht in beiden
+  Themen schwarz auf weiß. Hinter dem Text der Datei stehen ein paar Zeilen
+  Skript (`_STAY`): Ein Klick auf einen Link zu einem anderen Dokument tut
+  nichts, statt den Rahmen leer zu lassen; ein Link innerhalb der Seite
+  (`#…`) geht über `location.hash` dorthin (im Rahmen löst der Browser `#end`
+  gegen die Adresse des Dokuments darum auf), und die eigenen Handler der
+  Seite arbeiten wie geschrieben. Das ist Komfort
+  für den Leser, kein Teil des Schutzes.
+- **Keine andere Route liefert eine Datei des Chats als Dokument:**
+  `download_file` gibt HTML, XHTML, SVG und XML als
+  `application/octet-stream` mit `Content-Disposition: attachment` aus
+  (`download_type`, `DOCUMENT_MIMES`), auch mit `?preview=1`.
+- **Im Browser** (`agent-workspace.js`): `isPage` (`page === "html"`, `kind:
+  vm_file`); `fillPages` hält je Antwort die Figuren (`body._pageCards`) in
+  `.agent-answer-pages` zwischen Bildern und Dateien (`App.answerTail` kennt
+  den Platz). Eine Figur wird nur eingesetzt, wenn sie neu ist, und nie
+  umgehängt, weil ein Rahmen, der aus der Seite genommen wird, neu lädt; die
+  Löschfrage öffnet in der Figur (`sync`). `pageCard`: `<iframe
+  sandbox="allow-scripts" referrerpolicy="no-referrer">` mit dem Dateinamen
+  als `aria-label` (kein `title`: den zeichnet `tooltip.js` als Tooltip, der
+  über der benutzten Seite läge) in `.agent-page-stage`, deren Platz von
+  Anfang an feststeht
+  (Breite der Antwort, 16:10, mindestens 420 px, höchstens 600 px; die App
+  kann nicht in die Seite sehen, eine längere scrollt innen), bis zum Laden
+  im Skelett-Ton. `pageAddress` holt die Adresse erst, wenn der Platz in
+  Sichtnähe kommt (`whenNear`), nimmt nur `/agent/pages/…` an und merkt sich
+  ihre Zeit: Lädt der Rahmen später noch einmal (die Live-Antwort rückt beim
+  Follow-up in den Verlauf, `liveTurn.take`), bekommt er nach Ablauf eine
+  neue. Scheitert es, steht „Page couldn’t load · Retry“ im Platz, der
+  Download bleibt. Die Zeile darunter ist die des Bildes: Name, „Open
+  larger“, Download, ⋯ mit „Reload page“ (die Seite neu, wie sie geteilt
+  wurde) und Entfernen. „Open larger“ öffnet die Bühne des
+  Bildbetrachters (`attachments.js` `openStored` mit `htmlPage`,
+  `showStoredPage`): derselbe Rahmen mit eigener Adresse, der Download holt
+  die Datei erst auf Klick. Gespeicherte und temporäre Chats zeigen die Seite
+  wieder (neue Adresse), gespeichert wird darüber hinaus nichts. Share-Seiten
+  und Watch-Mails enthalten keine Dateien eines Turns, also auch keine Seite.
+- **Grenzen:** keine Bibliotheken per CDN (in die Datei kopieren), keine
+  Netzaufrufe, keine Links nach außen, eine Datei ohne Nachbardateien. Was
+  einen Server braucht, läuft weiter im Browser des Arbeitsplatzes.
+- Tests: `tests/test_agent_pages.py` (Richtlinie, welche Datei, ein
+  Durchgang, Dokument, Token, jede Antwort unter dem Pfad mit Sandbox samt
+  HEAD, Range, 405 und 503, fremdes Konto, andere Datei, abgelaufen, gelöscht,
+  kein Dokument-Typ aus der Download-Route, deutsche Leser unverändert),
+  `tests/test_agent_vm.py` (Teilen: Seite, Ablehnung mit Grund, Ersetzen),
+  `tests/js/agent-workspace.test.mjs`, `tests/js/composer-attachments.test.mjs`,
+  `tests/e2e/test_agent_page_sandbox.py` (echte Route und Middleware im
+  Browser: Eine Seite, die Elternseite, Speicher, Cookies und jeden Netzweg
+  versucht, erreicht nichts, auch direkt geöffnet; Tastatur hinein und
+  heraus), `tests/e2e/test_agent_page_frontend.py` (Platz springt nicht,
+  Bedienung, Bühne, Download, nach Neuladen wieder; die laufende App
+  antwortet unter dem Pfad mit der Sandbox).
 
 ## Agent-Laufoberfläche: Rendering, Aktivität, Composer (2026-09-30)
 
