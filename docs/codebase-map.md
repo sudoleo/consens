@@ -532,7 +532,9 @@ Verlaufsdokumente aus Firestore. Zwei Dinge halten das klein:
 Direkt unter der Sperre liegt `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
 `asset_url()`-URLs mit `?v=<12 hex>` erhalten
-`Cache-Control: public, max-age=31536000, immutable`, ebenso (seit 2026-11-11)
+`Cache-Control: public, max-age=31536000, immutable` (eine `?v=`-Marke nur,
+wenn sie der Hash ist, den `asset_url` der Datei auf dieser Instanz gibt;
+sonst hielte ein Deploy alte Bytes ein Jahr unter der neuen URL), ebenso (seit 2026-11-11)
 jede Datei unter `static/vendor/<paket>/<x.y.z>/`: Der Versionsordner ist ihr
 Beleg, und die ES-Module von Mermaid und pdf.js importieren einander ohne
 `?v=`-Marke (ein Diagramm fragte sonst bei jedem Seitenaufruf 28 Dateien neu
@@ -11941,7 +11943,8 @@ alte Gemini-ADC-JSON ist entfernt.
   auch die Arbeit, nicht nur die Größe: `json_elements_within` zählt vor dem
   Parsen die Werte eines JSON-Bodys (jedes `,` `[` `{` außerhalb seiner
   Strings, höchstens `MAX_JSON_ELEMENTS` = 50.000, sonst 413; linear über
-  `bytes.find/count/replace`, ab 256 KB neben dem Event-Loop), und
+  `bytes.find/count/replace`, ab 256 KB neben dem Event-Loop; ein Body
+  mit Null-Byte, also UTF-16/32, das `json.loads` auch liest, ist 400), und
   `BigBodies` vergibt Plätze für Bodys über 1 MiB, die für die ganze Dauer
   ihrer Anfrage im Speicher liegen: 12 gleichzeitig, 8 je Client
   (`client_of`: `CF-Connecting-IP`, IPv6 nach /64), sonst 429 mit
@@ -13560,8 +13563,8 @@ zählen nicht):
   Für die **öffentlichen Seiten und `admin.html`** seit 2026-10-04 ebenfalls:
   Templates nutzen `{{ asset_url('/static/...') }}`; der Hash umfasst die
   transitiven lokalen `@import`-/ESM-Abhängigkeiten, deren eigene URLs
-  unversioniert bleiben. `StaticDeliveryMiddleware` cacht `?v=<12 hex>`,
-  `static/dist` und Versionsordner unter `static/vendor` ein Jahr
+  unversioniert bleiben. `StaticDeliveryMiddleware` cacht `?v=<12 hex>`
+  (nur den aktuellen Hash der Datei), `static/dist` und Versionsordner unter `static/vendor` ein Jahr
   `immutable`, alles andere unter `/static` ist
   `no-cache` (ETag-Revalidierung). Handgeschriebene `?v=` verbietet
   `tests/test_frontend_resilience.py`; Details in `docs/frontend-build.md`.

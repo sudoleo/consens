@@ -319,10 +319,60 @@ def test_language_redirects_stay_on_this_site(small_catalog, path, query):
     assert "\\" not in location and "\t" not in location, location
 
 
-def test_footer_offers_the_other_language():
-    footer = (ROOT / "templates/partials/public_footer.html").read_text(encoding="utf-8")
-    assert '<a href="?lang=de" hreflang="de" lang="de" translate="no">Deutsch</a>' in footer
-    assert '<a href="?lang=en" hreflang="en" lang="en" translate="no">English</a>' in footer
+def _footer_client(small_catalog):
+    from fastapi import Request
+    from fastapi.templating import Jinja2Templates
+
+    templates = Jinja2Templates(directory=str(ROOT / "templates"))
+    app = FastAPI()
+
+    @app.get("/agent-watch/unsubscribe", response_class=HTMLResponse)
+    def page(request: Request):
+        return templates.TemplateResponse(request=request, name="partials/public_footer.html")
+
+    @app.get("/topics", response_class=HTMLResponse)
+    def cached(request: Request):
+        return templates.TemplateResponse(request=request, name="partials/public_footer.html",
+                                          context={"language_query": [("version", "v1")]})
+
+    app.add_middleware(I18nMiddleware)
+    return TestClient(app, follow_redirects=False)
+
+
+def _switch(text):
+    return re.search(r'<a href="([^"]*)" hreflang="(?:de|en)"', text).group(1).replace("&amp;", "&")
+
+
+def test_footer_offers_the_other_language(small_catalog):
+    client = _footer_client(small_catalog)
+    english = client.get("/agent-watch/unsubscribe", headers={"Accept-Language": "en"})
+    assert '<a href="?lang=de" hreflang="de" lang="de" translate="no">Deutsch</a>' in english.text
+    client.cookies.set("consens_lang", "de")
+    german = client.get("/agent-watch/unsubscribe")
+    assert '<a href="?lang=en" hreflang="en" lang="en" translate="no">English</a>' in german.text
+
+
+def test_the_language_switch_keeps_the_page_query(small_catalog):
+    # An unsubscribe link without its token is a page that says the link no
+    # longer works; a Topic version without ?version= is another answer.
+    client = _footer_client(small_catalog)
+    page = client.get("/agent-watch/unsubscribe?token=a%2Bb/c%3D&lang=en&x=1",
+                      headers={"Accept-Language": "en"})
+    page = client.get(page.headers["location"], headers={"Accept-Language": "en"})
+    href = _switch(page.text)
+    assert href == "?token=a%2Bb%2Fc%3D&x=1&lang=de"
+    switched = client.get("/agent-watch/unsubscribe" + href)
+    assert switched.status_code == 302
+    assert switched.headers["location"] == "/agent-watch/unsubscribe?token=a%2Bb%2Fc%3D&x=1"
+    assert "consens_lang=de" in switched.headers["set-cookie"]
+    back = client.get(switched.headers["location"])
+    assert _switch(back.text) == "?token=a%2Bb%2Fc%3D&x=1&lang=en"
+
+
+def test_a_cached_page_names_the_query_it_is_kept_by(small_catalog):
+    client = _footer_client(small_catalog)
+    page = client.get("/topics?version=v1&ref=%22%3E%3Cb%3E", headers={"Accept-Language": "en"})
+    assert _switch(page.text) == "?version=v1&lang=de"
 
 
 # ---------------------------------------------------------------------------

@@ -230,7 +230,9 @@ Datei **und** aller lokalen Dateien, die sie per `@import url(...)` bzw.
 ES-`import`/`export from`/`import()` transitiv nachlädt. Die verschachtelten
 URLs selbst bleiben unversioniert. `StaticDeliveryMiddleware` liefert:
 
-- `static/dist/<name>.<hash>` und URLs mit `?v=<12 hex>`: ein Jahr `immutable`;
+- `static/dist/<name>.<hash>` und URLs mit `?v=<12 hex>`: ein Jahr `immutable`,
+  eine `?v=`-Marke nur, wenn sie der aktuelle Hash der Datei ist (sonst `no-cache`:
+  beim Deploy fragt die neue Seite womöglich noch die alte Instanz);
 - jede Datei unter `static/vendor/<paket>/<x.y.z>/`: ein Jahr `immutable`. Der
   Versionsordner ist der Beleg (die ES-Module von Mermaid und pdf.js laden
   einander ohne `?v=`). Eine vendorte Datei wird deshalb nie an Ort und

@@ -353,6 +353,8 @@ async def topics_hub(request: Request):
         "entries": entries,
         "description": HUB_DESCRIPTION,
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
+        # Kept in the page cache for every query: the footer passes none on.
+        "language_query": [],
     })
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300"
     # A failed read is not kept: the next visitor tries again.
@@ -626,6 +628,8 @@ async def topic_page(
         "meta_description": meta_description,
         "robots_meta": robots,
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
+        # The page cache keys on the version alone.
+        "language_query": [("version", version)] if version else [],
     })
     response.headers["X-Robots-Tag"] = robots
     # A stored version never changes, but the Topic can be archived and then

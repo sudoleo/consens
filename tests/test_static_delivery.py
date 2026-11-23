@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
 
+from app.core.assets import asset_url
 from app.core.static_delivery import IMMUTABLE_CACHE_CONTROL, StaticDeliveryMiddleware, is_hashed_dist_path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,18 +138,36 @@ def test_hashed_dist_pattern():
 
 def test_static_cache_policy_revalidates_unversioned_and_pins_content_hashes():
     client = TestClient(_app())
+    current = asset_url("/static/css/foundation.css")
+    assert current.startswith("/static/css/foundation.css?v=")
     plain = client.get("/static/css/foundation.css")
-    hashed = client.get("/static/css/foundation.css?v=0123456789ab")
+    hashed = client.get(current)
+    other = client.get("/static/css/foundation.css?v=0123456789ab")
     manual = client.get("/static/css/foundation.css?v=20261002-fein2")
-    assert plain.status_code == hashed.status_code == manual.status_code == 200
+    assert plain.status_code == hashed.status_code == other.status_code == manual.status_code == 200
     # Unversioned (nested imports, images): always revalidate via ETag.
     assert plain.headers["cache-control"] == "no-cache"
     # asset_url's content hash never changes under its URL.
     assert hashed.headers["cache-control"] == IMMUTABLE_CACHE_CONTROL
+    # Another hash is not this content: during a deploy an old instance
+    # answers the new page's URL, and a year-long pin would keep its bytes.
+    assert other.headers["cache-control"] == "no-cache"
     # A hand-written mark is no proof of content and is never pinned.
     assert manual.headers["cache-control"] == "no-cache"
     revalidated = client.get("/static/css/foundation.css", headers={"if-none-match": plain.headers["etag"]})
     assert revalidated.status_code == 304
+
+
+def test_only_a_file_below_static_is_hashed_for_its_mark(monkeypatch):
+    from app.core import static_delivery
+
+    hashed = []
+    monkeypatch.setattr(static_delivery, "asset_url", lambda path: hashed.append(path) or path)
+    for path in ("/static/../app/main.py", "/static/css/../../requirements.txt"):
+        assert static_delivery.static_cache_control(path, "v=0123456789ab") == "no-cache"
+    assert hashed == []
+    static_delivery.static_cache_control("/static/css/foundation.css", "v=0123456789ab")
+    assert hashed == ["/static/css/foundation.css"]
 
 
 def test_a_vendored_library_is_pinned_under_its_version_folder():

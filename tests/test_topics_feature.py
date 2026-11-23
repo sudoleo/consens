@@ -1180,6 +1180,12 @@ def test_topic_page_leads_with_the_state_line_and_the_answer(monkeypatch):
     assert "Answer from Jul 23" in historical.text
     assert 'href="/topics/gpt-6">See the current answer' in historical.text
     assert historical.headers["x-robots-tag"] == "noindex, follow"
+    # The language switch stays on this version, and the page cache hands no
+    # visitor's other parameters on to the next one.
+    assert f'href="?version={first["id"]}&amp;lang=de"' in historical.text
+    topics_router._topic_page_cache.clear()
+    assert 'href="?lang=de"' in client.get("/topics/gpt-6?ref=mail").text
+    assert 'href="?lang=de"' in client.get("/topics/gpt-6").text
 
 
 def _topic_with_runs(db, count, *, summary_for=None):

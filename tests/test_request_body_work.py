@@ -50,6 +50,22 @@ def test_a_body_of_countless_values_never_reaches_the_parser(unit):
     assert got == []
 
 
+@pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16", "utf-16-be", "utf-32-le", "utf-32"])
+def test_a_body_in_another_unicode_encoding_never_reaches_the_parser(encoding):
+    # json.loads reads UTF-16 and UTF-32 bytes as well. There an escaped quote
+    # is no longer a backslash right before a quote, so the count took the
+    # whole rest of the body for one string and let 2.6 million lists through.
+    text = '["\\"", ' + "[]," * 300_000 + "0]"
+    body = text.encode(encoding)
+    assert len(json.loads(body)) == 300_002
+    status, got = post(body)
+    assert status == 400
+    assert got == []
+    status, got = post(json.dumps(["\\\"", "a"]).encode(encoding), path="/agent")
+    assert status == 400
+    assert got == []
+
+
 def test_a_real_body_passes_whatever_its_strings_hold():
     # Two files as base64, a text full of the bytes that count outside a
     # string (commas, brackets, braces, quotes, backslashes) and a long list

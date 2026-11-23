@@ -4,9 +4,9 @@ Two narrow jobs, both applied as one ASGI middleware:
 
 * Content-hashed build output (``static/dist/<group>.<12 hex>.js|css``),
   the content-hashed font files (``static/fonts/.../<name>.<12 hex>.woff2``,
-  named by ``scripts/subset_inter_font.py``) and URLs carrying
-  ``asset_url``'s content hash (``?v=<12 hex>``) never change under their
-  name, so browsers may keep them for a year without revalidation. A font
+  named by ``scripts/subset_inter_font.py``) and URLs carrying the content
+  hash ``asset_url`` gives the file now (``?v=<12 hex>``) never change under
+  their name, so browsers may keep them for a year without revalidation. A font
   that had to be asked for again on every visit (a 304 round trip) arrived
   after the first paint and swapped the text under the reader's eyes.
   Every other ``/static`` response is ``no-cache``: browsers and
@@ -35,6 +35,7 @@ from functools import lru_cache
 from pathlib import Path
 from starlette.datastructures import Headers, MutableHeaders
 
+from app.core.assets import asset_url
 from app.core.observability import call_on_path
 
 # StaticFiles takes the type from the platform's table, and Windows (and some
@@ -47,7 +48,7 @@ mimetypes.add_type("text/javascript", ".mjs")
 
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 REVALIDATE_CACHE_CONTROL = "no-cache"
-_CONTENT_VERSION = re.compile(r"(?:^|&)v=[0-9a-f]{12}(?:&|$)")
+_CONTENT_VERSION = re.compile(r"(?:^|&)v=(?P<digest>[0-9a-f]{12})(?:&|$)")
 _HASHED_DIST = re.compile(r"^/static/dist/[A-Za-z0-9_-]+\.[0-9a-f]{12}\.(?:js|css|mjs)$")
 _HASHED_FONT = re.compile(r"^/static/fonts/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.[0-9a-f]{12}\.woff2$")
 # A vendored library lives in a folder named after its pinned version
@@ -109,9 +110,27 @@ def static_cache_control(path: str, query_string: str = "") -> "str | None":
         return IMMUTABLE_CACHE_CONTROL
     if not (path or "").startswith("/static/"):
         return None
-    if _CONTENT_VERSION.search(query_string or ""):
+    version = _CONTENT_VERSION.search(query_string or "")
+    if version and _is_current_version(path, version["digest"]):
         return IMMUTABLE_CACHE_CONTROL
     return REVALIDATE_CACHE_CONTROL
+
+
+def _is_current_version(path: str, digest: str) -> bool:
+    """Whether ``digest`` is the hash asset_url gives ``path`` now.
+
+    During a deploy the new page can ask an old instance for a new hash (or
+    the other way round): pinned for a year, the old bytes would stay in the
+    browser and the CDN under the new URL. Only files below /static are
+    hashed, whatever dot segments the request path carries.
+    """
+    try:
+        target = (STATIC_ROOT.parent / path.lstrip("/")).resolve()
+    except (OSError, ValueError):
+        return False
+    if not target.is_relative_to(STATIC_ROOT.resolve()):
+        return False
+    return asset_url(path) == f"{path}?v={digest}"
 
 
 def _media_type(headers: Headers) -> str:

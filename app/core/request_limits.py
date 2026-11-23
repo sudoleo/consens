@@ -271,6 +271,13 @@ class RequestBodyLimitMiddleware:
             body = bytes(buffered)
             buffered.clear()
             if not (headers.get(b"content-type") or b"").lower().startswith(b"multipart/"):
+                # json.loads also reads UTF-16 and UTF-32, where an escaped
+                # quote is no backslash right before a quote and the count
+                # goes wrong. Those encodings always hold a zero byte; JSON
+                # and form bodies in UTF-8 never do.
+                if b"\x00" in body:
+                    await self._reject(send, "The request body is not UTF-8.", status=400)
+                    return
                 within = (await asyncio.to_thread(json_elements_within, body)
                           if len(body) > _COUNT_IN_THREAD_BYTES else json_elements_within(body))
                 if not within:
