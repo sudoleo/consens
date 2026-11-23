@@ -528,6 +528,20 @@ Vertrag verbietet dagegen handgeschriebene `?v=`-Marken und unversionierte
 CSS/JS-Links in Templates (Identität kommt aus `asset_url()`), und jeder
 verschachtelte Import muss auf eine vorhandene Datei zeigen.
 
+### Budget für die Werkzeuge des Agenten
+
+`tests/test_agent_tool_budget.py` hält fest, welche Werkzeuge der Agent in
+einer Nachricht bekommt und wie lang jedes ist
+(`tests/fixtures/agent_tool_budget.json`). Der Test wird rot, wenn ein
+Werkzeug dazukommt, wegfällt, länger wird als sein Budget oder deutlich
+kürzer. Zuerst kürzen oder auf das Werkzeug verzichten; ist die Änderung
+gewollt, die neuen Zahlen im selben Commit übernehmen:
+
+```powershell
+venv\Scripts\python.exe scripts\agent_tool_budget.py          # Tabelle und Abweichungen
+venv\Scripts\python.exe scripts\agent_tool_budget.py --write  # neue Zahlen als Budget
+```
+
 ## Browser-E2E
 
 Die neuen Google-/Gmail-/Workspace-/Modusselektor-Browserdateien verwenden den

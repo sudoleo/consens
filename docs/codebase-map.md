@@ -6106,6 +6106,24 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
   hinzufügt, das beim ersten Gebrauch lädt, bekommt es über `message_run` mit;
   was die Route selbst nachlädt, steht in `warm()`. Tests:
   `tests/test_agent_warmup.py`, `tests/test_background_task_supervision.py`.
+- **Budget für die Werkzeuge des Agenten (`scripts/agent_tool_budget.py`,
+  seit 2026-11-23).** Jedes Werkzeug geht mit Name, Beschreibung und
+  Argumenten bei jedem Schritt an das Modell, und jedes weitere ist eines
+  mehr zur Auswahl (Max: „Angst, dass wir zu viele Tools bekommen und der
+  Agent verwirrt ist“). `measure()` baut über `message_run` die vollste erste
+  Nachricht, die der Dienst ohne Datenbank bauen kann (eigene Websuche,
+  Bildersuche, GitHub, Bilder-Modell, Host für Apps), und zählt je Werkzeug
+  die Zeichen von `ReadOnlyTool.schema()`: `closed` sind die Werkzeuge zum
+  Start, `workspace` die des offenen Arbeitsplatzes (Stand: 14 mit 18,8k
+  und 19 mit 21,4k Zeichen, davon `browser` 6,3k). Die Zahlen stehen in
+  `tests/fixtures/agent_tool_budget.json`; `tests/test_agent_tool_budget.py`
+  wird rot, wenn ein Werkzeug neu ist, fehlt, über seinem Budget liegt oder
+  mehr als `SLACK` (10 %) darunter (dann sinkt das Budget, damit der Text
+  nicht unbemerkt zurückwächst). Die Meldung nennt jede Abweichung und den
+  Befehl, der die neuen Zahlen übernimmt (`--write`): Wachstum ist eine
+  Entscheidung im selben Commit. Nicht erfasst sind Werkzeuge, die mit
+  Schaltern oder Daten eines Kontos kommen (Memory, Google, angehängte
+  Dateien, Helfer).
 - **Ein Bucket-Client je Prozess (`agent_files.shared_objects`, seit
   2026-11-23).** Nachrichten mit Datei brauchten in derselben Messung rund
   0,6 s länger bis zum ersten Schritt (3 von 3, auch wenn sie nicht die erste

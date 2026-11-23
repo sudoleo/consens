@@ -1,0 +1,39 @@
+{
+  "closed": {
+    "compare_models": 1212,
+    "create_document": 2545,
+    "find_pictures": 923,
+    "open_workspace": 688,
+    "prepare_settings_change": 2101,
+    "prepare_watch": 1569,
+    "read_document": 517,
+    "read_settings": 596,
+    "read_source": 1000,
+    "revise_document": 3881,
+    "search_chats": 1082,
+    "search_pictures": 588,
+    "show_image": 924,
+    "web_search": 1152
+  },
+  "workspace": {
+    "ask_user": 1825,
+    "browser": 6326,
+    "github_import": 869,
+    "note_sign_in": 995,
+    "prepare_pull_request": 1082,
+    "update_plan": 889,
+    "vm_edit_file": 939,
+    "vm_exec": 1104,
+    "vm_install_packages": 555,
+    "vm_process_output": 641,
+    "vm_read_file": 587,
+    "vm_render_office": 618,
+    "vm_save_picture": 854,
+    "vm_share_file": 662,
+    "vm_show_app": 1102,
+    "vm_start_process": 884,
+    "vm_stop_process": 306,
+    "vm_view_image": 447,
+    "vm_write_file": 717
+  }
+}
