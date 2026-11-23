@@ -153,6 +153,22 @@ describe("projects in the chat list", () => {
     expect(JSON.parse(request.body)).toEqual({ project_id: "p_aaaaaaaaaaaa" });
   });
 
+  it("forgets a project the server no longer has, whatever language its sentence is in", async () => {
+    const data = [{ id: "a", timestamp: ago(0) }];
+    const { window, document, chatProjects } = await boot(data, { projects: [PROJECTS[0]], open: ["p_aaaaaaaaaaaa"] });
+    window.auth = { currentUser: { uid: "u1", getIdToken: async () => "token" } };
+    window.App.showPopup = vi.fn();
+    // main.py's error shape (error_body), the sentence as a German reader gets it.
+    window.fetch = vi.fn(async () => ({ ok: false, status: 404,
+      json: async () => ({ error: "Projekt nicht gefunden", code: "project_not_found" }) }));
+
+    expect(await chatProjects.move("a", "p_aaaaaaaaaaaa")).toBe(false);
+
+    expect(window.App.showPopup).toHaveBeenCalledWith("That project no longer exists.");
+    expect(chatProjects.known("p_aaaaaaaaaaaa")).toBe(false);
+    expect(layout(document)).not.toContain("[Thesis]");
+  });
+
   it("sends a deletion still offering its Undo when asked to settle (logout)", async () => {
     const data = [{ id: "t1", timestamp: ago(1), project_id: "p_aaaaaaaaaaaa" }];
     const { window, document, chatProjects } = await boot(data, { projects: [PROJECTS[0]] });

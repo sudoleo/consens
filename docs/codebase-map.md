@@ -8240,7 +8240,7 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   nichts: das erste Projekt entsteht über „Move to project“ im Chat-Menü (füllt dasselbe `.bookmark-menu`
   mit den Projekten als `menuitemradio`, Trenner, „New project“ als Feld; ohne Projekt gleich das Feld),
   weitere auch über „+“ (Zeile im Benennen-Zustand). Verschieben ist optimistisch wie Pin (Fehler stellt
-  zurück, 404 eines Projekts vergisst es), mit Toast „Moved to {name}“ + Undo; Löschen eines Projekts
+  zurück, 404 mit `code: project_not_found` vergisst das Projekt), mit Toast „Moved to {name}“ + Undo; Löschen eines Projekts
   blendet es weich aus, die Chats kehren unter ihre Daten zurück, Toast mit Undo, DELETE erst danach (ein
   neuer Lauf und eine verdeckte Seite schicken es sofort, `performLogout` über `settle()` noch mit dem
   Token des Kontos vor `signOut`). Offen/zu merkt sich

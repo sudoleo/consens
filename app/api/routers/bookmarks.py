@@ -728,9 +728,15 @@ class BookmarkProjectRequest(BaseModel):
     project_id: StrictStr | None
 
 
+def _project_not_found():
+    # The code tells the sidebar the project is gone (chat-projects.js gone):
+    # the sentence arrives translated, and a move's 404 can also be the chat's.
+    return HTTPException(status_code=404, detail={"error": "Project not found", "code": "project_not_found"})
+
+
 def _project_id_or_404(project_id):
     if not chat_projects.valid_id(project_id):
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise _project_not_found()
     return project_id
 
 
@@ -779,7 +785,7 @@ def rename_project(request: Request, project_id: str, payload: ProjectNameReques
     try:
         project = chat_projects.rename(db_firestore, uid, project_id, name)
     except chat_projects.ProjectNotFound as exc:
-        raise HTTPException(status_code=404, detail="Project not found") from exc
+        raise _project_not_found() from exc
     except persistence_guard.AccountDeletionInProgress as exc:
         raise HTTPException(status_code=409, detail="Account deletion is in progress") from exc
     except Exception as exc:
@@ -797,7 +803,7 @@ def delete_project(request: Request, project_id: str):
     try:
         chat_projects.delete(db_firestore, uid, project_id)
     except chat_projects.ProjectNotFound as exc:
-        raise HTTPException(status_code=404, detail="Project not found") from exc
+        raise _project_not_found() from exc
     except persistence_guard.AccountDeletionInProgress as exc:
         raise HTTPException(status_code=409, detail="Account deletion is in progress") from exc
     except Exception as exc:
@@ -875,7 +881,7 @@ def move_bookmark_to_project(request: Request, bookmark_id: str, payload: Bookma
             patch={chat_projects.FIELD: project_id},
         )
     except chat_projects.ProjectNotFound as exc:
-        raise HTTPException(status_code=404, detail="Project not found") from exc
+        raise _project_not_found() from exc
     except persistence_guard.PersistenceConflictError as exc:
         raise HTTPException(status_code=404, detail="Bookmark not found") from exc
     except Exception as exc:

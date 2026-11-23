@@ -140,8 +140,10 @@
     const data = await response.json().catch(() => ({}));
     if (stale(user, generation)) throw Object.assign(new Error("Account changed"), { stale: true });
     if (!response.ok) {
-      throw Object.assign(new Error(data.detail || `Request failed (${response.status})`),
-        { status: response.status, detail: data.detail || "" });
+      // main.py's refusal ({error, code}); the sentence comes in the reader's language.
+      const refusal = App.errorFields(data);
+      throw Object.assign(new Error(refusal.error || `Request failed (${response.status})`),
+        { status: response.status, detail: refusal.error || "", code: String(refusal.code || "") });
     }
     return data;
   }
@@ -159,7 +161,7 @@
     sync();
   }
   function gone(error) {
-    return error?.status === 404 && error.detail === "Project not found";
+    return error?.status === 404 && error.code === "project_not_found";
   }
 
   // ---- Rows (chat-list.js places them) ---------------------------------------

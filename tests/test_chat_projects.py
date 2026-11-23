@@ -119,7 +119,8 @@ def test_a_chat_cannot_move_into_a_project_that_is_not_there_nor_be_made_by_a_mo
     missing = _move(database, "gone_bookmark", project["id"])
     wrong_type = _move(database, "b1", 5)
 
-    assert unknown.status_code == 404 and unknown.json()["detail"] == "Project not found"
+    assert unknown.status_code == 404 and unknown.json()["detail"] == {
+        "error": "Project not found", "code": "project_not_found"}
     assert malformed.status_code == 404
     assert missing.status_code == 404
     assert wrong_type.status_code == 422
