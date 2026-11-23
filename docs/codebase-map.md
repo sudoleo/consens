@@ -2969,7 +2969,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`, `morphMarkdown`,
   `renderMarkdownStream`, `keepTextSelection`, ein Parse je Render über
   `renderMarkdownFragment`; jeder Codeblock bekommt seit 2026-10-26 einen
-  Kopier-Knopf `.code-copy` ohne Text, `addCopyButtons` in jedem Renderpfad,
+  Kopier-Knopf `.code-copy` ohne Text (immer sichtbar im leisen Ton, nicht erst
+  unter dem Zeiger), `addCopyButtons` in jedem Renderpfad,
   ein Klick-Listener am Dokument kopiert, weil Morphs Listener nicht tragen) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`; eine `id:`-Zeile wird als zweites
   Argument an `renderer.receive(data, id)` gereicht, nur wenn vorhanden); setzt LaTeX nach jedem
@@ -3097,7 +3098,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`markdown-stream.js`, rechtsbündig mit Tabellenziffern): Ein Strich für
   einen fehlenden Wert („–“, „—“, „-“) zählt dabei nicht gegen die Zahlen
   und steht als `is-numeric is-blank` dort, wo die Zahlen stehen, im
-  leisen Ton.
+  leisen Ton. Das eine Wort unter den Zahlen („unbegrenzt“, „Total“) steht
+  als `is-among-numbers` ebenfalls rechts, bleibt aber Text (darf umbrechen,
+  keine Tabellenziffern).
   Spaltenbreiten: `markShortTableCells` markiert jede Zelle bis zwölf
   Zeichen als `is-short`. Sie bleibt einzeilig und nimmt nur den Platz ihrer
   Wörter; die Mindestbreite für lesbaren Fließtext (7rem, am Handy 10rem,

@@ -586,8 +586,14 @@ function markNumericTableColumns(table) {
 
     Array.from(table.rows || []).forEach(row => {
       const cell = row.cells[column];
-      if (cell && (cell.closest("thead") || isNumericTableValue(cell.textContent))) {
+      if (!cell) return;
+      if (cell.closest("thead") || isNumericTableValue(cell.textContent)) {
         cell.classList.add("is-numeric");
+      } else if (!blanks.includes(cell)) {
+        // The one word among the numbers ("unlimited", "Total") stands
+        // where they stand, for the same reason as the dash. It stays a
+        // word: it may break, and it is not set in figures.
+        cell.classList.add("is-among-numbers");
       }
     });
     blanks.forEach(cell => cell.classList.add("is-numeric", "is-blank"));

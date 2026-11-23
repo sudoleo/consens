@@ -60,6 +60,17 @@ describe("Markdown tables", () => {
     expect(totalRow.cells[2].classList.contains("is-numeric")).toBe(true);
   });
 
+  // Left-aligned, "unlimited" under "5" and "10" began at the far side of
+  // the column, where it read as part of the column before.
+  it("stands the one word in a column of numbers where the numbers stand", () => {
+    const output = document.createElement("div");
+    window.injectMarkdown(output, "table");
+    const among = Array.from(output.querySelectorAll(".is-among-numbers")).map(cell => cell.textContent);
+
+    expect(among).toEqual(["Total"]);
+    expect(output.querySelector("tbody tr:last-child td").classList.contains("is-numeric")).toBe(false);
+  });
+
   // Left-aligned, the dash of a row without a value sat at the far side of
   // its column, beside the number of the column before.
   it("stands a dash for a missing value where the numbers of its column stand", () => {
@@ -81,6 +92,8 @@ describe("Markdown tables", () => {
     expect(output.querySelectorAll("th")[3].classList.contains("is-numeric")).toBe(false);
     expect(marks(cells[0][3])).toBe("");
     expect(marks(cells[3][3])).toBe("");
+    // A dash is a gap, not a word among the numbers.
+    expect(output.querySelectorAll(".is-among-numbers")).toHaveLength(0);
   });
 
   // With a floor of a sentence's width under every cell, "Rang" and "93"
