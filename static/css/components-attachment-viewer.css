@@ -277,6 +277,16 @@ dialog.modal.attachment-viewer-dialog.is-stage > .modal-content.attachment-viewe
   line-height: var(--line-height-ui);
 }
 
+/* What a page written in an answer could not load (attachments.js
+   showWrittenPage): beside its Download where there is room, above it on a
+   phone. */
+.attachment-viewer-note {
+  flex: 1 1 16rem;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
 .attachment-viewer-action {
   min-height: 32px;
   padding: 6px 12px;

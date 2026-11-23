@@ -414,12 +414,13 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
 .stream-table-pending > .skeleton:nth-child(even) { width: 94%; }
 /* The streamed answer's letters come into view by stream-reveal.js
    (highlights). What is not text comes with its first letters: a list's
-   bullet, a source pill, a checkbox, a rule, a table that appears whole. */
+   bullet, a source pill, a checkbox, a rule, a table that appears whole
+   and the line under it. */
 @media (prefers-reduced-motion: no-preference) {
   #agentAnswerBody.is-stream-revealing li::marker {
     animation: stream-marker-in var(--dur-layer) var(--ease-out) calc(var(--dur-press) / 2) both;
   }
-  #agentAnswerBody.is-stream-revealing :is(.src-ref, .md-task-box, hr, table) {
+  #agentAnswerBody.is-stream-revealing :is(.src-ref, .md-task-box, hr, table, .md-table-tools) {
     animation: stream-part-in var(--dur-layer) var(--ease-out) calc(var(--dur-press) / 2) both;
   }
 }

@@ -16,14 +16,24 @@ frame address at all, so the page stays the file.
 ``refusal`` says why a file is not shown this way, in words for the agent
 (agent_vm_tools.share). It reads the markup for what the policy would keep
 from loading; it is a courtesy to the agent, never the protection.
+
+An HTML block written in an answer runs the same way (``written_document``,
+markdown-stream.js "View as page"). Its code is in the browser already and
+never comes here: the route answers one fixed document under the same
+``HEADERS``, and the app's page hands that document the code as a message.
+A frame of the app's own page could not run it: it would inherit the app's
+policy, which allows no inline script and does allow the app's addresses.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import re
 
 PATH_PREFIX = "/agent/pages/"
+# No address of a shared page reads as this one (agent_pages._TOKEN).
+WRITTEN_PATH = PATH_PREFIX + "written"
 # A page loads whole each time it comes into view, and nothing of it is cached.
 MAX_BYTES = 2 * 1024 * 1024
 # 'unsafe-eval' adds nothing to what the file's own inline script may do
@@ -235,4 +245,34 @@ def document(source, name) -> bytes:
         "iframe{display:block;width:100%;height:100%;border:0}</style></head>"
         '<body><iframe sandbox="allow-scripts" title="' + title + '" srcdoc="'
         + html.escape(source, quote=True) + '"></iframe></body></html>\n'
+    ).encode("utf-8")
+
+
+# The script of ``written_document``. It hears one message, and only from the
+# page that frames it: frame-ancestors lets no page but the app's do that, so
+# opened by itself or from another site's window the document stays empty and
+# shows nobody's markup under this address. The code stands as the ``srcdoc``
+# of a frame, as a shared file does in ``document``; a later message, the
+# page's own included, changes nothing.
+_HOST = ("<script>(function(){var shown=0;addEventListener('message',function(e){"
+         "if(shown||parent===window||e.source!==parent)return;"
+         "var said=e.data&&e.data.consensPage,source=said&&said.source;"
+         "if(typeof source!=='string')return;shown=1;"
+         "var frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');"
+         "frame.title='Page';frame.srcdoc=source+'\\n'+%s;document.body.appendChild(frame)})})()</script>")
+
+
+def written_document() -> bytes:
+    """The answer's body for a page written in an answer: a document of ours
+    that waits for the code and frames it. The same for every request; the
+    frame it makes inherits this document's policy and sandbox."""
+    # A "</script>" inside the literal would end the script it stands in:
+    # the literal holds no "<" at all.
+    stay = json.dumps(_STAY).replace("<", "\\u003c")
+    return (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta name="color-scheme" content="light"><title>Page</title>'
+        "<style>html,body{height:100%;margin:0;background:#fff}"
+        "iframe{display:block;width:100%;height:100%;border:0}</style></head>"
+        "<body>" + _HOST % stay + "</body></html>\n"
     ).encode("utf-8")

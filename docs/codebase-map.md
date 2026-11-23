@@ -2978,6 +2978,37 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
   `injectMarkdown(el, md, evidenceSources?)` akzeptiert optional turnbezogene
   Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
+  **Die leise Zeile unter einem Block** (`.md-block-tools`, Optik in
+  `base.css`): rechts unter einer Tabelle und unter einem fertigen
+  ```` ```html ````-Block, immer sichtbar (kein Hover), Glyph und Wort. Die
+  Wörter stehen in `data-word` und werden per `::after` gezeichnet: Die Zeile
+  enthält keinen Textknoten, der Text der Antwort (Marken, Auswahl,
+  `textContent`, die kopierte Antwort) bleibt, wie er war;
+  `answer-copy.js` `clean` nimmt die Zeile heraus. Der Block darüber gibt
+  seinen Abstand nach unten an die Zeile ab (`:has(+ .md-block-tools)`).
+  Ein Klick-Listener am Dokument bedient beide, wie beim Kopier-Knopf.
+  - **Tabelle kopieren** (`addTableTools`, `.md-table-tools`, „CSV“ und
+    „Markdown“): `enhanceMarkdownTables` liest die Zellen (`tableCells`),
+    bevor eine Form daraus wird und bevor Quellen-Pills, Marken und Formeln
+    darin stehen. Kennzahlen und Gegenüberstellung sind keine Tabelle mehr,
+    die Zeile steht dann unter der Form und kopiert trotzdem die Zellen, wie
+    das Modell sie schrieb; Zeitstrahl und Balken ohne die gezeichneten
+    Balken. Zwei nebeneinander gezeichnete Abschnitte (`facingSections`)
+    waren nie eine Tabelle und haben keine Zeile. Die Zellen hängen als
+    `tableCells` an der Zeile und stehen in `CARRIED_PROPERTIES`, damit ein
+    Morph sie mitnimmt. CSV: Komma als Trenner, ein Wert mit Komma,
+    Anführungszeichen oder Zeilenumbruch (`<br>` in der Zelle) in
+    Anführungszeichen, eigene verdoppelt, Zeilen mit `\n`. Zum CSV-Text legt
+    `App.answerCopy.write` dieselben Zellen als `<table>` (`text/html`) auf
+    die Zwischenablage: In einer Tabellenkalkulation landen sie so in Zellen
+    statt in einer Spalte. Markdown: Fett, Kursiv, Code, Links und `<br>` der
+    Zelle wie geschrieben, `|` maskiert, Ausrichtung aus `align` der
+    Kopfzeile. Die Zeile entsteht in jedem Renderpfad zusammen mit der
+    Tabelle, damit am Ende des Streams nichts rückt. Tests:
+    `tests/js/markdown-table-copy.test.mjs`.
+  - **HTML-Block als Seite** (`pageLine`, `.md-code-tools`, „View as page“):
+    siehe „Seite im Chat“, Punkt „HTML-Block einer Antwort“. Tests:
+    `tests/js/markdown-code-page.test.mjs`.
   **Formen, die die Antwort zeichnet:** Strukturen, die Modelle ohnehin als
   gewöhnliches Markdown schreiben, bekommen eine eigene Form, allein aus der
   Struktur gelesen (keine neue Syntax, kein Stil-Prompt, kein Wort einer
@@ -3874,7 +3905,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Agent-Antwort (`button(answerBody, {eligible})`, erste der Aktionen vor Watch
   und Teilen) und die eine Aufbereitung einer Antwort für die Zwischenablage
   (`clean`, `text` für „Copy consensus“, `payload` = Markdown als Text +
-  gerendertes HTML). Details unter „Die Leiste unter einer Agent-Antwort“.
+  gerendertes HTML; `write` legt Text und HTML zusammen auf die
+  Zwischenablage, auch für eine einzelne Tabelle aus `markdown-stream.js`).
+  Details unter „Die Leiste unter einer Agent-Antwort“.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus. Das
   Menü schließt beim Scrollen nur, wenn sich die Seite wirklich bewegt (ein
   Scroll-Ereignis ohne Bewegung nach dem ersten Tippen in einem geöffneten
@@ -11239,7 +11272,7 @@ app/core/
   entitlements.py            Die drei Kontostufen free/plus/pro: normalize_tier + Entitlements
   site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
-  html_page.py               Eine vom Agenten geteilte HTML-Datei als Seite im Chat (seit 2026-11-23): welche Datei (refusal, loads), die Sandbox-Header jeder Antwort unter /agent/pages/ (HEADERS, POLICY) und das Dokument um die Datei (document); ohne schwere Importe, von security.py, i18n_middleware.py, agent_vm_tools.py und dem Datei-Router gelesen
+  html_page.py               Eine vom Agenten geteilte HTML-Datei als Seite im Chat (seit 2026-11-23): welche Datei (refusal, loads), die Sandbox-Header jeder Antwort unter /agent/pages/ (HEADERS, POLICY), das Dokument um die Datei (document) und das feste Dokument, in dem ein HTML-Block einer Antwort läuft (written_document, WRITTEN_PATH); ohne schwere Importe, von security.py, i18n_middleware.py, agent_vm_tools.py und dem Datei-Router gelesen
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   app_host.py                Der Host für Apps aus Arbeitsplätzen (AGENT_APP_HOST, seit 2026-11-23): AppHostMiddleware gibt jede Anfrage an diesen Host an agent_app_proxy.app, an allem vorbei, was consens.io ist; nur /health/ antwortet auf jedem Host
   network_block.py           Äußerste Middleware: 403 für die Cloud-Netze der Crawler-Welle (BLOCKED_NETWORKS), /api/v1/ bleibt offen
@@ -13658,7 +13691,9 @@ zählen nicht):
   statt der App-Richtlinie die Sandbox aus `html_page.HEADERS`, bei jedem
   Status, und `X-Frame-Options: SAMEORIGIN`, damit `/app` (`frame-src 'self'`)
   sie rahmen kann; siehe „Seite im Chat“. Keine andere Route darf eine Datei
-  eines Nutzers als Dokument (`text/html`, XHTML, SVG, XML) ausliefern.
+  eines Nutzers als Dokument (`text/html`, XHTML, SVG, XML) ausliefern. Code
+  aus einer Antwort läuft ebenfalls nur dort (`/agent/pages/written`), nie
+  in einem Rahmen, der die Richtlinie von `/app` erbt.
 - **Static-Caching, zwei Regime.** Für **`/app`** kommt die Marke seit
   2026-08-17 aus dem Dateiinhalt (`app/core/assets.py`); dort gibt es nichts
   mehr zu bumpen, wohl aber nach jeder `static/`-Änderung ein `npm run build`,
@@ -14346,6 +14381,52 @@ geteilt wird eine Seite nicht.
 - **Grenzen:** keine Bibliotheken per CDN (in die Datei kopieren), keine
   Netzaufrufe, keine Links nach außen, eine Datei ohne Nachbardateien. Was
   einen Server braucht, läuft weiter im Browser des Arbeitsplatzes.
+- **HTML-Block einer Antwort** (seit 2026-11-23, „View as page“): Ein
+  fertig geschriebener ```` ```html ````-Block jeder Antwort in `/app`
+  (`pre[data-code]` mit `code.language-html`, also Zaun geschlossen) läuft
+  auf Klick als Seite, in derselben Sandbox. **Weg:** Der Code ist schon im
+  Browser und geht nie an den Server. `GET /agent/pages/written`
+  (`show_written_page`, `html_page.WRITTEN_PATH`, vor `show_page`
+  registriert; kein Token liest sich so) liefert ohne Anmeldung ein festes
+  Dokument (`html_page.written_document`) unter denselben `HEADERS`. Sein
+  einziges Skript (`_HOST`) nimmt genau eine Nachricht `{consensPage:
+  {source}}` an, nur von der Seite, die es rahmt (`e.source === parent`,
+  und nie ungerahmt: `parent === window`), und setzt den Code samt `_STAY`
+  als `srcdoc` eines `<iframe sandbox="allow-scripts">`, wie `document` es
+  mit einer Datei tut. Rahmen darf es nur die App (`frame-ancestors
+  'self'`): Direkt oder aus dem Fenster einer fremden Seite geöffnet bleibt
+  es leer, unter der Adresse steht also nie fremdes Markup. **Warum so:**
+  Ein `srcdoc`-, `blob:`- oder `data:`-Rahmen direkt in `/app` erbt die
+  Richtlinie der App: kein Inline-Skript (die Seite liefe nicht), aber
+  Netz zu den Adressen der App. Eine Route, die den Blocktext annimmt und
+  zurückgibt, bräuchte Anmeldung (ein Rahmen sendet keine), also Token und
+  Zwischenspeicher oder ein Formular-POST, und schickte Modell-Code durch
+  Server, Ratenlimit und WAF. Das feste Dokument braucht nichts davon und
+  hat keine Eingabe. **Im Browser:** `markdown-stream.js` `pageLine` setzt
+  die Zeile unter den Block, sobald der Zaun geschlossen ist, in jedem
+  Renderpfad (ihr Platz steht damit, nichts rückt später); den Knopf darin
+  setzt nur der Render der festen Antwort (`injectMarkdown`,
+  `addCopyButtons(…, {pages: true})`), nie der Stream. `openPage` liest den
+  Code mit `DOMParser` (führt nichts aus, lädt nichts) für Titel (`<title>`,
+  sonst „Page“) und `outsideLoads` (wie viele Dateien die Seite woanders
+  anfragt: Skripte, Stylesheets, Bilder, Rahmen) und öffnet
+  `App.attachments.openStored({htmlSource, outside, …})`.
+  `attachments.js` `showWrittenPage` zeigt sie auf der Bühne des Betrachters
+  (ein Dialog über dem Chat, im Chat bewegt sich nichts): `pageFrame` mit
+  `src` = `WRITTEN_PAGE`, nach `load` `postMessage` an das Fenster dieses
+  Rahmens (Ziel `'*'`, weil sein Origin keine Adresse ist), darunter
+  „Download“ (`page.html`) und, wenn `outside` > 0, ein Satz, dass die
+  Seite ohne Netz läuft und wie viele Dateien nicht geladen wurden. Das
+  Zählen ist ein Hinweis für den Leser; fernhalten tut die Richtlinie.
+  Die Höhe meldet eine solche Seite nicht (`_FIT` fehlt, die Bühne gibt sie
+  vor). Tests: `tests/test_agent_pages.py` (festes Dokument, jede Antwort
+  mit Sandbox, nichts aus der Anfrage, Pfad im Skript),
+  `tests/js/markdown-code-page.test.mjs`,
+  `tests/js/composer-attachments.test.mjs`,
+  `tests/e2e/test_agent_page_sandbox.py` (dieselbe feindliche Seite als
+  Nachricht: erreicht nichts; spätere Nachrichten und ein fremder Öffner
+  ändern nichts), `tests/e2e/test_answer_tools_frontend.py` (gebaute App,
+  hell, dunkel, Handy: Zeilen, Zwischenablage, Seite läuft, nichts rückt).
 - **Nicht zusätzlich im Browser** (`agent_browser.py` `page_file`,
   `_runs_in_chat`, `PAGE_IN_CHAT`): Max will dieselbe Seite nicht im Browser
   und im Chat. In einem Chat, dessen früherer Turn eine Seite per Server und

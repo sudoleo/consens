@@ -1527,6 +1527,29 @@ Server.
 - [ ] In DevTools: Die Antwort von `/agent/pages/…` trägt
       `Content-Security-Policy: sandbox allow-scripts; …`; der Download der
       Datei kommt als `application/octet-stream`.
+- [ ] HTML-Block einer Antwort („Schreib mir einen kleinen Rechner als
+      HTML“, ohne Arbeitsplatz): Während die Antwort schreibt, steht unter
+      dem Block kein Knopf; ist sie fertig, steht rechts darunter „View as
+      page“ („Als Seite ansehen“), ohne dass etwas darunter rückt. Klick →
+      die Seite läuft im großen Betrachter (Regler, Klicks wirken), der Chat
+      dahinter bleibt, wo er war; „Download“ speichert `page.html`. Lädt der
+      Block etwas von einem CDN, sagt eine Zeile, dass die Seite ohne Internet
+      läuft. Ein Block ohne schließenden Zaun und andere Sprachen haben
+      keinen Knopf. Hell, dunkel, Handy.
+
+## Tabelle kopieren (seit 2026-11-23)
+- [ ] Unter jeder Tabelle einer Antwort stehen rechts „CSV“ und „Markdown“,
+      immer sichtbar, auch unter Kennzahlen und einer Gegenüberstellung, die
+      aus einer Tabelle gezeichnet wurden. Beim Streamen erscheinen sie mit
+      der Tabelle, danach rückt nichts mehr.
+- [ ] „CSV“ in einen Texteditor einfügen: Kopfzeile und Zeilen mit Komma,
+      ein Wert wie `1.234,56 €` oder mit Anführungszeichen steht in
+      Anführungszeichen. In Excel oder Google Sheets einfügen: Die Werte
+      stehen in einzelnen Zellen. Für Kennzahlen und Gegenüberstellung kommen
+      die ursprünglichen Zeilen der Tabelle, nicht die gezeichnete Form.
+- [ ] „Markdown“ einfügen: eine Markdown-Tabelle mit Fett und Links wie in
+      der Antwort. Nach dem Klick zeigt das Zeichen kurz einen Haken.
+      Hell, dunkel, Handy; „Copy answer“ enthält die Wörter der Zeile nicht.
 
 ## App im eigenen Browser (seit 2026-11-23)
 - [ ] Mit `AGENT_APP_HOST`: Agent mit Arbeitsplatz, „Bau mir eine kleine

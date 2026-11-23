@@ -15,6 +15,8 @@ An HTML file the agent shared runs in the chat as a page (app/core/html_page.py)
 the browser asks for its address, signed in, and a frame loads it from
 ``show_page``, the only route that answers a file of a chat as a document.
 Every other answer here is bytes to save or one of the fixed preview types.
+``show_written_page`` answers no file: it is the fixed document an HTML
+block of an answer runs in, under the same sandbox.
 """
 import io
 import logging
@@ -201,6 +203,16 @@ def open_page(request: Request, chat_id: str, file_id: str):
 
 def _no_page(status):
     return Response(b"", status_code=status, media_type="text/plain; charset=utf-8", headers=html_page.HEADERS)
+
+
+# Before the route of a shared page, whose address would take this path too.
+@router.get(html_page.WRITTEN_PATH)
+@limiter.limit("120/minute")
+def show_written_page(request: Request):
+    """The document an HTML block of an answer runs in (html_page.
+    written_document). It holds nothing of an account or a chat and takes
+    nothing from the request: the browser gives it the code."""
+    return Response(html_page.written_document(), media_type=html_page.CONTENT_TYPE, headers=html_page.HEADERS)
 
 
 @router.get(html_page.PATH_PREFIX + "{token}")

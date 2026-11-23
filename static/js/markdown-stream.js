@@ -387,9 +387,12 @@ function copyLabel(text) {
   return window.App?.t ? window.App.t(text) : text;
 }
 
-function addCopyButtons(root) {
+// `pages`: the render of an answer whose text is fixed (pageLine).
+function addCopyButtons(root, { pages = false } = {}) {
   root.querySelectorAll?.("pre").forEach(pre => {
-    if (!pre.querySelector(":scope > code") || pre.querySelector(":scope > .code-copy")) return;
+    if (!pre.querySelector(":scope > code")) return;
+    pageLine(pre, pages);
+    if (pre.querySelector(":scope > .code-copy")) return;
     const button = (pre.ownerDocument || document).createElement("button");
     button.type = "button";
     button.className = "code-copy";
@@ -400,6 +403,69 @@ function addCopyButtons(root) {
     pre.classList.add("has-copy");
     pre.append(button);
   });
+}
+
+// --- An HTML block as a page ----------------------------------------------
+// Under a finished ```html block stands a quiet line with "View as page": it
+// opens the code as a page that runs, on the stage of the file viewer
+// (attachments.js showWrittenPage), in the sandbox of a page the agent
+// shared (app/core/html_page.py). The code of a model never runs in this
+// page. The line is there as soon as the block is closed (data-code,
+// codeBlock), so nothing below it moves later; its button comes with the
+// render of the fixed answer, not while the answer is still being written.
+// The button's word is drawn from an attribute (base.css), so the answer's
+// text (claims, selections, the copied answer) stays as it was.
+const PAGE_LABEL = "View as page";
+
+// A glyph of a line is parsed once and copied for each line: rendering an
+// answer parses the answer and nothing else.
+function lineGlyph(markup) {
+  const template = document.createElement("template");
+  template.innerHTML = markup;
+  return template.content.firstElementChild;
+}
+const PAGE_GLYPH = lineGlyph('<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.4v9.2l7-4.6z"></path></svg>');
+
+function pageLine(pre, withButton) {
+  if (!pre.matches("pre[data-code]") || !pre.querySelector(":scope > code.language-html")) return;
+  const doc = pre.ownerDocument || document;
+  let line = pre.nextElementSibling;
+  if (!line?.classList.contains("md-code-tools")) {
+    line = doc.createElement("div");
+    line.className = "md-block-tools md-code-tools";
+    pre.after(line);
+  }
+  if (!withButton || line.firstElementChild) return;
+  const button = doc.createElement("button");
+  button.type = "button";
+  button.className = "md-block-tool code-page";
+  button.setAttribute("aria-label", copyLabel(PAGE_LABEL));
+  button.dataset.word = copyLabel(PAGE_LABEL);
+  button.append(doc.importNode(PAGE_GLYPH, true));
+  line.append(button);
+}
+
+function openPage(button) {
+  const code = button.closest(".md-code-tools")?.previousElementSibling?.querySelector?.(":scope > code");
+  if (!code) return;
+  const source = code.textContent;
+  // Read by a parser that runs nothing and loads nothing.
+  const read = new DOMParser().parseFromString(source, "text/html");
+  window.App?.attachments?.openStored?.({ name: "page.html", title: read.title.trim() || copyLabel("Page"),
+    mime: "text/html", htmlSource: source, outside: outsideLoads(read) });
+}
+
+// How many files a page asks for at another address: scripts, stylesheets,
+// pictures, frames. None of them loads where the page runs, and the viewer
+// says so. A count for the reader; the policy of the page's answer is what
+// keeps them out.
+const LOADING = ["script[src]", "link[rel~=stylesheet][href]", "img[src]", "iframe[src]", "video[src]", "audio[src]",
+  "source[src]", "embed[src]", "object[data]"];
+function outsideLoads(read) {
+  const here = /^(?:data:|blob:|about:|javascript:|#|$)/i;
+  return new Set(Array.from(read.querySelectorAll(LOADING.join(",")),
+    node => (node.getAttribute("src") || node.getAttribute("href") || node.getAttribute("data") || "").trim())
+    .filter(address => !here.test(address))).size;
 }
 
 async function copyCode(button) {
@@ -426,8 +492,11 @@ async function copyCode(button) {
 }
 
 document.addEventListener("click", event => {
-  const button = event.target?.closest?.(".code-copy");
-  if (button) copyCode(button);
+  const button = event.target?.closest?.(".code-copy, .code-page, .table-copy");
+  if (!button) return;
+  if (button.classList.contains("code-copy")) copyCode(button);
+  else if (button.classList.contains("code-page")) openPage(button);
+  else copyTable(button);
 });
 
 // A model's headings stand under the chat's h1 and the turn's h2 "Answer":
@@ -556,6 +625,133 @@ function watchTablePan(wrapper) {
   if (wrapper.firstElementChild) observer.observe(wrapper.firstElementChild);
 }
 
+// --- Copying a table --------------------------------------------------------
+// Under each table of an answer stands a quiet line that copies it, as CSV
+// or as Markdown. The cells are read when the answer is rendered: before a
+// shape is drawn from them (figures and two sides are no table any more,
+// answer-shapes.js) and before pills, marks and formulas stand in them. So
+// the copy is the table the model wrote, whatever it became on the page.
+// The line holds no text (its words are drawn from attributes, base.css):
+// the answer's text (claims, selections, the copied answer) stays as it was.
+const TABLE_COPIES = [["csv", "CSV", "Copy table as CSV"], ["markdown", "Markdown", "Copy table as Markdown"]];
+const TABLE_GLYPH = lineGlyph('<svg viewBox="0 0 16 16" aria-hidden="true"><g class="md-tool-copy"><rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.75"></rect><path d="M10.75 5.25V4A1.75 1.75 0 0 0 9 2.25H4A1.75 1.75 0 0 0 2.25 4v5A1.75 1.75 0 0 0 4 10.75h1.25"></path></g><path class="md-tool-copied" d="M3.25 8.5l3 3 6.5-7"></path></svg>');
+
+// A cell's words: as plain text, a line break where the cell has one, or as
+// the inline Markdown they were written in.
+function cellWords(node, markdown) {
+  let words = "";
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      const text = child.nodeValue.replace(/\s+/g, " ");
+      words += markdown ? text.replace(/\|/g, "\\|") : text;
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      const tag = child.tagName;
+      if (tag === "BR") { words += markdown ? "<br>" : "\n"; continue; }
+      const inner = cellWords(child, markdown);
+      const href = tag === "A" ? child.getAttribute("href") : "";
+      if (!markdown || !inner.trim()) words += inner;
+      else if (tag === "STRONG" || tag === "B") words += `**${inner}**`;
+      else if (tag === "EM" || tag === "I") words += `*${inner}*`;
+      else if (tag === "DEL" || tag === "S") words += `~~${inner}~~`;
+      else if (tag === "CODE") words += `\`${inner}\``;
+      else words += href ? `[${inner}](${href})` : inner;
+    }
+  }
+  return words;
+}
+
+// The table as written: its rows of cells, the first one the heading, as
+// text and as Markdown, and how each column is aligned. A cell across
+// several columns leaves the others empty.
+function tableCells(table) {
+  const rows = Array.from(table.rows || []);
+  const read = markdown => rows.map(row => Array.from(row.cells).flatMap(cell => {
+    const words = cellWords(cell, markdown).split("\n").map(line => line.trim()).join("\n").trim();
+    return [words, ...Array(Math.max(0, (cell.colSpan || 1) - 1)).fill("")];
+  }));
+  const aligns = rows.length ? Array.from(rows[0].cells).flatMap(cell =>
+    Array(cell.colSpan || 1).fill((cell.getAttribute("align") || "").toLowerCase())) : [];
+  return { text: read(false), markdown: read(true), aligns };
+}
+
+// A value with a comma, a quote or a line break stands in quotes, its own
+// quotes doubled ("1,5 %", 'the "small" one').
+function tableCsv(rows) {
+  const quote = String.fromCharCode(34);
+  const field = value => (value.includes(quote) || /[,\r\n]/.test(value)
+    ? quote + value.split(quote).join(quote + quote) + quote : value);
+  return rows.map(row => row.map(field).join(",")).join("\n");
+}
+
+function tableMarkdown(rows, aligns) {
+  const width = Math.max(...rows.map(row => row.length));
+  const columns = Array.from({ length: width }, (_, column) => column);
+  const line = cells => "| " + columns.map(column => cells[column] || "").join(" | ") + " |";
+  const rule = { left: ":---", center: ":---:", right: "---:" };
+  return [line(rows[0]), line(columns.map(column => rule[aligns[column]] || "---")), ...rows.slice(1).map(line)].join("\n");
+}
+
+// The same cells as a table, for a target that takes one (a spreadsheet, a
+// mail): pasted there, the CSV would land in a single column.
+function tableHtml(rows) {
+  const cell = (value, tag) => "<" + tag + ">" + escapeHtml(value).replace(/\n/g, "<br>") + "</" + tag + ">";
+  const row = (cells, tag) => "<tr>" + cells.map(value => cell(value, tag)).join("") + "</tr>";
+  return "<table><thead>" + row(rows[0], "th") + "</thead><tbody>"
+    + rows.slice(1).map(cells => row(cells, "td")).join("") + "</tbody></table>";
+}
+
+// The line stands after `place`: the table's scroll region, or the shape
+// drawn from the table.
+function addTableTools(place, cells) {
+  if (!place?.parentNode || !cells.text.length || place.parentElement?.closest("td, th")) return;
+  const doc = place.ownerDocument || document;
+  const line = doc.createElement("div");
+  line.className = "md-block-tools md-table-tools";
+  line.append(doc.importNode(TABLE_GLYPH, true));
+  for (const [format, word, label] of TABLE_COPIES) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "md-block-tool table-copy";
+    button.dataset.format = format;
+    button.dataset.word = word;
+    // The answer around it is never translated (data-i18n-skip); its label is.
+    button.setAttribute("aria-label", copyLabel(label));
+    button.title = copyLabel(label);
+    line.append(button);
+  }
+  line.tableCells = cells;
+  place.after(line);
+}
+
+async function copyTable(button) {
+  const line = button.closest(".md-table-tools");
+  const cells = line?.tableCells;
+  if (!cells) return;
+  const markdown = button.dataset.format === "markdown";
+  const text = markdown ? tableMarkdown(cells.markdown, cells.aligns) : tableCsv(cells.text);
+  try {
+    const rich = !markdown && window.App?.answerCopy?.write;
+    if (rich) await rich({ text, html: tableHtml(cells.text) });
+    else await navigator.clipboard.writeText(text);
+  } catch (error) {
+    window.App?.showPopup?.("Copy to clipboard failed.");
+    return;
+  }
+  const label = copyLabel(TABLE_COPIES.find(([format]) => format === button.dataset.format)?.[2] || "");
+  line.querySelectorAll(".is-copied").forEach(other => other.classList.remove("is-copied"));
+  line.classList.add("is-copied");
+  button.classList.add("is-copied");
+  button.setAttribute("aria-label", copyLabel("Copied"));
+  button.title = copyLabel("Copied");
+  clearTimeout(line._copiedTimer);
+  line._copiedTimer = setTimeout(() => {
+    line.classList.remove("is-copied");
+    button.classList.remove("is-copied");
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  }, 1600);
+}
+
 // Shapes the answer draws (figures, two sides, a timeline, bars, steps) come
 // from answer-shapes.js, the same rules the public pages draw with.
 function enhanceMarkdownTables(root) {
@@ -563,7 +759,13 @@ function enhanceMarkdownTables(root) {
   tables.forEach((table, index) => {
     if (table.closest(".markdown-table-wrap")) return;
     const shapes = window.AnswerShapes;
-    if (shapes?.replaceTable(table)) return;
+    const cells = tableCells(table);
+    const parent = table.parentNode;
+    const before = table.previousSibling;
+    if (shapes?.replaceTable(table)) {
+      addTableTools(before ? before.nextSibling : parent.firstChild, cells);
+      return;
+    }
 
     table.classList.add("markdown-table");
     markNumericTableColumns(table);
@@ -589,6 +791,7 @@ function enhanceMarkdownTables(root) {
     table.parentNode.insertBefore(wrapper, table);
     wrapper.appendChild(table);
     watchTablePan(wrapper);
+    addTableTools(wrapper, cells);
   });
 }
 
@@ -601,7 +804,7 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   enhanceMarkdownTables(el);
   window.AnswerShapes?.facingSections(el);
 
-  addCopyButtons(el);
+  addCopyButtons(el, { pages: true });
 
   const linked = Array.isArray(evidenceSources) && evidenceSources.length && window.linkifySourceTags;
   if (linked) window.linkifySourceTags(el, evidenceSources);
@@ -642,7 +845,8 @@ function isPlainMarkdown(el, md) {
 // (a selection inside it stays), elements keep their identity and take the
 // new render's attributes. Nodes of another kind are taken from the new
 // render as they are, so the result equals it node for node.
-const CARRIED_PROPERTIES = ["sourceData", "sourceGroup"];
+// tableCells: what the line under a table copies (addTableTools).
+const CARRIED_PROPERTIES = ["sourceData", "sourceGroup", "tableCells"];
 // Claim marks carry their own listeners and state: they never become another
 // element, the new render's node takes their place.
 const MARK_NODES = ".cx-claim, .cx-spot, .claim-badge";

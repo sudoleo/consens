@@ -632,6 +632,45 @@
       });
     }
 
+    // A page written in an answer (markdown-stream.js "View as page"), on
+    // the stage. Its code never runs in this page: the frame loads the fixed
+    // document of app/core/html_page.py (written_document), whose answer is
+    // sandboxed like a shared page's, and that document gets the code as a
+    // message once it stands. Its origin is no address, so the message can
+    // name none; it goes to the window of this frame.
+    const WRITTEN_PAGE = "/agent/pages/written";
+    function showWrittenPage(att) {
+      const frame = window.App.agentWorkspace.pageFrame(att.title || att.name, "attachment-viewer-frame");
+      frame.addEventListener("load", function () {
+        // An empty frame reports a load of its own when it enters the page.
+        if (!frame.getAttribute("src")) return;
+        frame.contentWindow?.postMessage({ consensPage: { source: att.htmlSource } }, "*");
+      });
+      frame.src = WRITTEN_PAGE;
+      viewerBody.appendChild(frame);
+      const row = document.createElement("div");
+      row.className = "attachment-viewer-actions";
+      // What the page asks for elsewhere stays out (the policy of its
+      // answer): said once, so a page that looks unfinished explains itself.
+      if (att.outside > 0) {
+        const note = document.createElement("span");
+        note.className = "attachment-viewer-note";
+        note.textContent = att.outside === 1
+          ? "This page runs without the network. One file it asks for at another address was not loaded."
+          : `This page runs without the network. ${att.outside} files it asks for at other addresses were not loaded.`;
+        row.appendChild(note);
+      }
+      const download = document.createElement("button");
+      download.type = "button";
+      download.className = "attachment-viewer-action";
+      download.textContent = "Download";
+      download.addEventListener("click", function () {
+        saveBlob(new Blob([att.htmlSource], { type: "text/html;charset=utf-8" }), att.name);
+      });
+      row.appendChild(download);
+      viewerBody.appendChild(row);
+    }
+
     function saveBlob(blob, name) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -685,7 +724,8 @@
 
     function openAttachmentViewer(att) {
       if (!viewerOverlay || !viewerBody) return;
-      const runs = Boolean(att?.htmlPage && att.fileId && window.App?.agentWorkspace?.pageAddress);
+      const written = typeof att?.htmlSource === "string" && Boolean(window.App?.agentWorkspace?.pageFrame);
+      const runs = written || Boolean(att?.htmlPage && att.fileId && window.App?.agentWorkspace?.pageAddress);
       if (!att?.gallery && !runs && openInFileViewer(att)) {
         if (viewerOverlay.hasAttribute("open")) closeAttachmentViewer();
         return;
@@ -697,10 +737,12 @@
       viewerTitle.textContent = att.title || att.name;
       showGalleryPlace(att);
       const mime = String(att.mime || "");
-      setStage(Boolean(att.fileId || att.data) && !att.previewOnly
-        && (mime.indexOf("image/") === 0 || mime === "application/pdf" || att.picture === "svg" || runs));
+      setStage(written || (Boolean(att.fileId || att.data) && !att.previewOnly
+        && (mime.indexOf("image/") === 0 || mime === "application/pdf" || att.picture === "svg" || runs)));
 
-      if (runs) {
+      if (written) {
+        showWrittenPage(att);
+      } else if (runs) {
         showStoredPage(att);
       } else if (att.fileId && window.App?.agentWorkspace?.openFile) {
         showStoredAttachment(att);

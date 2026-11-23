@@ -182,6 +182,37 @@ def test_the_document_holds_the_file_as_text_of_one_attribute():
     assert "preventDefault" in html_page._STAY and "consensPage:{height:h}" in html_page._FIT
 
 
+def test_the_document_of_a_written_page_is_one_script_of_ours_that_frames_what_its_parent_sends():
+    """An HTML block of an answer runs in a fixed document: it holds nothing
+    but our script, which takes the code from the page that frames it and
+    from no one else, and makes it the srcdoc of a sandboxed frame."""
+    import json
+    import re
+    body = html_page.written_document().decode('utf-8')
+    assert body == html_page.written_document().decode('utf-8')
+    assert body.count('<script>') == 1 and body.count('</script>') == 1 and '<iframe' not in body
+    script = re.search(r'<script>(.*)</script>', body, re.S).group(1)
+    # Only the framing page is heard, never an opener and never the page
+    # itself once it runs, and only once.
+    assert "if(shown||parent===window||e.source!==parent)return;" in script
+    assert "frame.setAttribute('sandbox','allow-scripts')" in script and 'allow-same-origin' not in script
+    assert "frame.srcdoc=source+'\\n'+" in script
+    # The lines that keep a link from emptying the frame go after the code,
+    # as a string of the script that does not end it.
+    literal = re.search(r"frame\.srcdoc=source\+'\\n'\+(\".*\");document\.body\.appendChild", script, re.S).group(1)
+    assert '<' not in literal and json.loads(literal) == html_page._STAY
+    # Its address is no address of a shared page.
+    with pytest.raises(agent_pages.InvalidToken):
+        agent_pages.read(html_page.WRITTEN_PATH.removeprefix(html_page.PATH_PREFIX))
+
+
+def test_the_browser_frames_a_written_page_at_the_address_the_route_answers():
+    from pathlib import Path
+    script = (Path(__file__).resolve().parents[1] / 'static' / 'js' / 'attachments.js').read_text(encoding='utf-8')
+    assert f'const WRITTEN_PAGE = "{html_page.WRITTEN_PATH}";' in script
+    assert script.count('consensPage: { source: att.htmlSource }') == 1
+
+
 def test_the_prompt_names_the_place_the_app_gives_a_page():
     """The agent builds for a frame it cannot see: the size its prompt
     names is the stylesheet's, the answer's column and the page's field."""
@@ -273,7 +304,7 @@ def test_every_answer_under_the_page_path_is_sandboxed(client, method):
     partial request: whatever leaves under /agent/pages/ carries the sandbox."""
     client, files, chat = client
     good = address(client, chat, share(files, chat))
-    for url in (good, '/agent/pages/' + 'x' * 120, '/agent/pages/nothing', '/agent/pages/a/b/c'):
+    for url in (good, '/agent/pages/' + 'x' * 120, '/agent/pages/nothing', '/agent/pages/a/b/c', html_page.WRITTEN_PATH):
         response = getattr(client, method)(url)
         assert sandboxed(response), (method, url, response.status_code)
     for headers in ({'Range': 'bytes=0-10'}, {'If-None-Match': '*'}, {'If-Modified-Since': 'Mon, 23 Nov 2026 10:00:00 GMT'}):
@@ -281,6 +312,26 @@ def test_every_answer_under_the_page_path_is_sandboxed(client, method):
         # Always the whole answer anew: nothing of it is kept or cut.
         assert response.status_code == 200 and sandboxed(response) and 'content-range' not in response.headers
     assert client.head(good).status_code == 200 and client.head(good).content == b''
+
+
+def test_a_written_page_gets_the_fixed_document_sandboxed_whoever_asks(client):
+    """The document an HTML block of an answer runs in: the same bytes for
+    every request, under the headers of a shared page, with nothing of an
+    account in it and no German rewrite."""
+    client, files, chat = client
+    response = client.get(html_page.WRITTEN_PATH)
+    assert response.status_code == 200 and sandboxed(response)
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.content == html_page.written_document()
+    for headers in ({'x-test-uid': 'someone-else'}, {'Accept-Language': 'de-DE,de;q=0.9'}, {'Cookie': 'consens_lang=de'}):
+        other = client.get(html_page.WRITTEN_PATH, headers=headers)
+        assert other.status_code == 200 and other.content == response.content and sandboxed(other)
+        assert '/i18n/' not in other.text and 'content-language' not in other.headers
+    # Nothing a request carries reaches the document.
+    echoed = client.get(html_page.WRITTEN_PATH + '?source=%3Cscript%3Ealert(1)%3C/script%3E')
+    assert echoed.content == response.content
+    assert client.head(html_page.WRITTEN_PATH).status_code == 200
+    assert client.post(html_page.WRITTEN_PATH, content=b'<p>x</p>').status_code == 405
 
 
 def test_a_storage_failure_answers_sandboxed_too(client, monkeypatch):

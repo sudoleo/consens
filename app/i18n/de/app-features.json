@@ -7,6 +7,8 @@
   "Remove": "Entfernen",
   "? The agent can no longer use it in this chat.": "? Der Agent kann die Datei in diesem Chat dann nicht mehr nutzen.",
   "Loading preview…": "Vorschau wird geladen…",
+  "This page runs without the network. One file it asks for at another address was not loaded.": "Die Seite läuft hier ohne Internet. Eine Datei von außerhalb wurde nicht geladen.",
+  "This page runs without the network. {outside} files it asks for at other addresses were not loaded.": "Die Seite läuft hier ohne Internet. {outside} Dateien von außerhalb wurden nicht geladen.",
   "This file type cannot be previewed here. Download it to open it.": "Für diesen Dateityp gibt es hier keine Vorschau. Lade die Datei herunter, um sie zu öffnen.",
   "This file couldn’t be loaded. Try again.": "Die Datei konnte nicht geladen werden. Versuch es noch einmal.",
   "This file was attached to the saved chat. To keep storage light, only the file name is stored – not the file itself.": "Diese Datei hing am gespeicherten Chat. Um Speicher zu sparen, wird nur der Dateiname gespeichert – nicht die Datei selbst.",

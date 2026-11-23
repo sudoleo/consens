@@ -136,6 +136,46 @@ pre.has-copy { padding-right: 44px; }
   .code-copy:hover { background: var(--hover); color: var(--ink); }
 }
 
+/* The quiet line under a table or an HTML block of an answer
+   (markdown-stream.js addTableTools, pageLine): what the block offers, at
+   its right edge. Always there, for a pointer and for a finger alike. Its
+   words are drawn from the buttons' attributes, so the line adds no text to
+   the answer. The block above gives its own space below to the line, and
+   the line of an HTML block keeps its height while it is still empty (the
+   answer is being written): the button then comes into a place that is
+   there. */
+:is(pre, .markdown-table-wrap, .md-figures, .md-facing):has(+ .md-block-tools) { margin-bottom: 2px; }
+.md-block-tools {
+  display: flex; align-items: center; justify-content: flex-end; gap: 2px;
+  min-height: 26px; margin: 0 0 1.1em; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: var(--font-size-xs); line-height: 1;
+}
+.md-block-tools svg {
+  flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor;
+  stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
+}
+.md-block-tool {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 7px;
+  border: 0; border-radius: var(--radius-2xs); background: transparent; color: inherit; font: inherit; cursor: pointer;
+  transition: color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
+}
+.md-block-tool::after { content: attr(data-word); }
+.md-block-tool.is-copied { color: var(--ink); }
+.md-block-tool:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+/* The glyph of a table's line turns into a tick for the moment after a copy. */
+.md-table-tools .md-tool-copied, .md-table-tools.is-copied .md-tool-copy { display: none; }
+.md-table-tools.is-copied .md-tool-copied { display: inline; }
+@media (hover: hover) and (pointer: fine) {
+  .md-block-tool:hover { background: var(--hover); color: var(--ink); }
+}
+@media (pointer: coarse) {
+  .md-block-tools, .md-block-tool { min-height: 36px; }
+  .md-block-tool { padding-inline: 10px; }
+}
+@media print {
+  .md-block-tools { display: none; }
+}
+
 /* Inline-Code (nicht in Codeblöcken): dezenter Chip statt nacktem Text. */
 :not(pre) > code {
   padding: 1px 5px;

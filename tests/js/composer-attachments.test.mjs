@@ -335,6 +335,58 @@ describe("composer attachment tray", () => {
     expect(body.querySelector("iframe")).toBeNull();
   });
 
+  // A page written in an answer (markdown-stream.js "View as page") runs in
+  // the fixed sandboxed document of app/core/html_page.py, which gets the
+  // code as a message: no attribute and no markup of this page holds it.
+  const pageFrame = document => (name, className) => {
+    const frame = document.createElement("iframe");
+    frame.className = className; frame.setAttribute("sandbox", "allow-scripts"); frame.setAttribute("aria-label", name);
+    return frame;
+  };
+
+  it("runs a page written in an answer on the stage, handing its code to the sandboxed document", () => {
+    const { window, document } = boot();
+    window.App.fileViewer = { previews: () => true, describe: () => ({ label: "HTML" }), open: vi.fn() };
+    window.App.agentWorkspace = { pageFrame: pageFrame(document) };
+    const saved = [];
+    window.HTMLAnchorElement.prototype.click = function () { saved.push([this.download, this.href]); };
+    const source = "<script>window.top.ran = true</script><p>Loan</p>";
+    window.App.attachments.openStored({ name: "page.html", title: "Loan calculator", mime: "text/html", htmlSource: source, outside: 0 });
+    expect(document.getElementById("attachmentViewerModal").classList.contains("is-stage")).toBe(true);
+    expect(document.getElementById("attachmentViewerTitle").textContent).toBe("Loan calculator");
+    // Never the preview beside the chat, which would show its source.
+    expect(window.App.fileViewer.open).not.toHaveBeenCalled();
+    const body = document.getElementById("attachmentViewerBody");
+    const frame = body.querySelector("iframe");
+    expect([frame.getAttribute("sandbox"), frame.getAttribute("src"), frame.getAttribute("aria-label"), frame.className])
+      .toEqual(["allow-scripts", "/agent/pages/written", "Loan calculator", "attachment-viewer-frame"]);
+    expect(frame.hasAttribute("srcdoc")).toBe(false);
+    expect(document.body.innerHTML).not.toContain("window.top.ran");
+    expect(window.ran).toBeUndefined();
+    const said = vi.spyOn(frame.contentWindow, "postMessage").mockImplementation(() => {});
+    frame.dispatchEvent(new window.Event("load"));
+    expect(said.mock.calls).toEqual([[{ consensPage: { source } }, "*"]]);
+    expect(body.querySelector(".attachment-viewer-note")).toBeNull();
+    const actions = [...body.querySelectorAll(".attachment-viewer-actions button")];
+    expect(actions.map(button => button.textContent)).toEqual(["Download"]);
+    actions[0].click();
+    expect(saved).toEqual([["page.html", "blob:preview"]]);
+  });
+
+  it("says what a written page asks for elsewhere and does not get", () => {
+    const { window, document } = boot();
+    window.App.agentWorkspace = { pageFrame: pageFrame(document) };
+    const note = outside => {
+      window.App.attachments.openStored({ name: "page.html", title: "Page", mime: "text/html", htmlSource: "<p>x</p>", outside });
+      return document.querySelector("#attachmentViewerBody .attachment-viewer-note")?.textContent;
+    };
+    expect(note(1)).toBe("This page runs without the network. One file it asks for at another address was not loaded.");
+    expect(note(3)).toBe("This page runs without the network. 3 files it asks for at other addresses were not loaded.");
+    expect(note(0)).toBeUndefined();
+    // A newer page takes the stage: one frame at a time.
+    expect(document.querySelectorAll("#attachmentViewerBody iframe")).toHaveLength(1);
+  });
+
   // An SVG the agent shared is served as a download (agent_vm_tools.share).
   it("shows an SVG the agent shared as the picture diagram-render.js draws of it, with its download", async () => {
     const { window, document } = boot();

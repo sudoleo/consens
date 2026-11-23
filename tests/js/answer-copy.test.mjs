@@ -13,6 +13,7 @@ const RENDERED = `<h2 id="h" class="md-heading">Tickets</h2>
   <div class="md-picture-line"><span class="md-picture" data-picture="p2"><figure class="agent-vm-picture"><img src="/agent/files/x" alt="The arena"><button>Remove</button></figure></span></div>
   <table class="md-shaped"><thead><tr><th align="left">Day</th><th>Open</th></tr></thead>
     <tbody><tr><td class="is-numeric">Mon<span class="md-bar" aria-hidden="true"><i></i></span></td><td colspan="1">9:00</td></tr></tbody></table>
+  <div class="md-block-tools md-table-tools"><svg aria-hidden="true"></svg><button type="button" class="md-block-tool table-copy" data-word="CSV"></button></div>
   <ul class="md-task-list"><li class="md-task-item"><button type="button" class="md-task-box" role="checkbox" aria-checked="true"></button>Book</li></ul>
   <pre class="has-copy"><code class="language-python">print(1)</code><button type="button" class="code-copy" aria-label="Copy code"><svg></svg></button></pre>
   <p><a href="javascript:alert(1)">bad</a> <a href="https://example.org/a" target="_blank" rel="noopener">good</a></p>`;
@@ -83,6 +84,8 @@ describe("Copy under an Agent answer", () => {
     // No picture of the workspace, no button, nothing hidden from readers,
     // no class, data or state of this page, no script address.
     expect(doc.querySelectorAll("img, button, svg, [aria-hidden], [class], [style], [role], [tabindex], [data-claim]")).toHaveLength(0);
+    // The line under a table goes whole, not as an empty block after it.
+    expect(doc.querySelector("table").nextElementSibling.tagName).toBe("UL");
     const links = [...doc.querySelectorAll("a")].map(a => [a.textContent, a.getAttribute("href"), a.attributes.length]);
     expect(links).toEqual([["bad", null, 0], ["good", "https://example.org/a", 1]]);
     // The answer on the page keeps everything.

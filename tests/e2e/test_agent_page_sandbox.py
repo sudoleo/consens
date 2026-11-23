@@ -8,6 +8,11 @@ it holds a sign-in in its storage, a cookie and a secret, and frames the
 page as agent-workspace.js does. The page inside tries to read all of it and
 to reach the network in every way a page has. What the file store hands the
 route is this test's (tests/test_agent_pages.py covers the store's part).
+
+An HTML block written in an answer runs in the fixed document of the same
+path (html_page.written_document), which the app's page hands the code as a
+message: the same page is as confined there, and the document shows nothing
+that anyone but the page framing it sends.
 """
 import json
 import socket
@@ -16,7 +21,9 @@ import threading
 import pytest
 from playwright.sync_api import expect
 
-CHAT, HOSTILE, FRIENDLY = 'a' * 32, 'b' * 32, 'c' * 32
+from app.core import html_page
+
+CHAT, HOSTILE, FRIENDLY, SECOND = 'a' * 32, 'b' * 32, 'c' * 32, '2' * 32
 
 FRIENDLY_PAGE = """<!doctype html><meta charset="utf-8"><title>Slider</title>
 <style>body { font: 16px system-ui; margin: 24px } output { font-weight: 600 }</style>
@@ -136,6 +143,30 @@ HOST_PAGE = """<!doctype html><meta charset="utf-8"><title>The app</title>
     .then(body => { document.getElementById('page').src = body.url; });
 </script>"""
 
+# The app's page around a page written in an answer (attachments.js
+# showWrittenPage): it frames the fixed document and hands it the code.
+WRITTEN_HOST_PAGE = """<!doctype html><meta charset="utf-8"><title>The app</title>
+<script>
+  localStorage.setItem('idToken', 'SECRET-TOKEN');
+  document.cookie = 'session=SECRET-COOKIE; path=/';
+  window.secret = 'SECRET-VALUE';
+  window.heard = [];
+  addEventListener('message', event => heard.push([event.origin, typeof event.data === 'string' ? event.data : JSON.stringify(event.data)]));
+</script>
+<iframe id="page" sandbox="allow-scripts" referrerpolicy="no-referrer" title="page" style="width:800px;height:500px"></iframe>
+<script>
+  fetch('/collect?via=control');
+  const frame = document.getElementById('page');
+  frame.addEventListener('load', () => frame.contentWindow.postMessage({ consensPage: { source: SOURCE } }, '*'));
+  frame.src = 'WRITTEN';
+</script>"""
+# A page that tries to put another one in its place.
+SECOND_PAGE = """<p id="first">first</p>
+<script>
+  const other = { consensPage: { source: '<p id="second">second</p>' } };
+  parent.postMessage(other, '*'); top.postMessage(other, '*'); postMessage(other, '*');
+</script>"""
+
 
 @pytest.fixture(scope='module')
 def page_server():
@@ -175,6 +206,12 @@ def page_server():
     def host(file_id: str):
         return HOST_PAGE.replace('CHAT', CHAT).replace('FILE', file_id)
 
+    @app.get('/host-written/{file_id}', response_class=HTMLResponse)
+    def host_written(file_id: str):
+        # As a string of the script: no "<" of the page may end that script.
+        source = json.dumps(pages[file_id].decode()).replace('<', '\\u003c')
+        return WRITTEN_HOST_PAGE.replace('SOURCE', source).replace('WRITTEN', html_page.WRITTEN_PATH)
+
     @app.api_route('/collect', methods=['GET', 'POST', 'PUT', 'OPTIONS'])
     def collect(request: Request, via: str = ''):
         hits.append({'via': via, 'method': request.method, 'cookie': request.headers.get('cookie', '')})
@@ -201,6 +238,7 @@ def page_server():
         assert server.started, 'The page server did not start'
         origin, other = f'http://127.0.0.1:{port}', f'http://localhost:{port}'
         pages[FRIENDLY] = FRIENDLY_PAGE.replace('OTHER', other).encode()
+        pages[SECOND] = SECOND_PAGE.encode()
         for file_id, markup in LEAVING.items():
             pages[file_id] = markup.replace('OTHER', other).replace('ORIGIN', origin).encode()
         pages[HOSTILE] = (HOSTILE_PAGE.replace('OTHER', other).replace('ORIGIN', origin).replace('CHAT', CHAT)
@@ -364,6 +402,77 @@ def test_a_page_that_goes_elsewhere_reaches_no_other_address(browser, page_serve
         # Whatever the frame shows now, it is nothing from another address.
         for frame in page.frames:
             assert '/collect' not in frame.url, frame.url
+    finally:
+        page_server['hits'].clear()
+        context.close()
+
+
+def test_a_page_written_in_an_answer_runs_as_confined_as_a_shared_one(browser, page_server):
+    """The code never came from the server: the app's page gave it to the
+    fixed document, and there it reaches nothing of the app or the network."""
+    context = browser.new_context(viewport={'width': 1100, 'height': 800})
+    page = context.new_page()
+    dialogs, downloads, answered = [], [], []
+    page.on('dialog', lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+    page.on('download', lambda download: downloads.append(download.suggested_filename))
+    context.on('response', lambda response: answered.append(response.url))
+    try:
+        page.goto(f"{page_server['origin']}/host-written/{HOSTILE}")
+        inner = page.frame_locator('#page').frame_locator('iframe')
+        _confined(_report(inner))
+        # What the app's page heard of it: its hello, from no origin.
+        assert page.evaluate('heard') == [['null', 'hello from the page']]
+        page.wait_for_timeout(800)
+        expect(inner.locator('#out')).to_contain_text('"done":true')
+        assert page.url == f"{page_server['origin']}/host-written/{HOSTILE}"
+        assert page.evaluate("[window.secret, localStorage.getItem('idToken'), document.cookie]") == [
+            'SECRET-VALUE', 'SECRET-TOKEN', 'session=SECRET-COOKIE']
+        assert len(context.pages) == 1 and dialogs == [] and downloads == []
+        assert [hit['via'] for hit in page_server['hits']] == ['control'], page_server['hits']
+        left = [url for url in answered if '/collect' in url and 'via=control' not in url]
+        assert left == [], left
+        # The document that took the code is sandboxed by its own answer.
+        response = context.request.get(page_server['origin'] + html_page.WRITTEN_PATH)
+        assert response.status == 200 and response.headers['content-security-policy'] == html_page.POLICY
+    finally:
+        page_server['hits'].clear()
+        context.close()
+
+
+def test_the_document_of_a_written_page_shows_only_what_the_page_framing_it_sends(browser, page_server):
+    """Once it shows a page, no later message changes it, the page's own
+    included. Opened by itself it stays empty, whoever opened it and whatever
+    that window sends: no markup of a stranger stands under this address."""
+    context = browser.new_context(viewport={'width': 1100, 'height': 800})
+    page = context.new_page()
+    try:
+        page.goto(f"{page_server['origin']}/host-written/{SECOND}")
+        written = page.frame_locator('#page')
+        expect(written.frame_locator('iframe').locator('#first')).to_have_text('first')
+        page.evaluate("""() => document.getElementById('page').contentWindow.postMessage(
+          { consensPage: { source: '<p id="third">third</p>' } }, '*')""")
+        page.wait_for_timeout(400)
+        expect(written.locator('iframe')).to_have_count(1)
+        expect(written.frame_locator('iframe').locator('#first')).to_have_text('first')
+        expect(written.frame_locator('iframe').locator('#second, #third')).to_have_count(0)
+        # A window of another site opens the address and sends it a page.
+        opener = context.new_page()
+        opener.goto(f"{page_server['other']}/collect?via=opener")
+        with context.expect_page() as opened:
+            opener.evaluate("""address => {
+              const other = window.open(address);
+              let sent = 0;
+              const send = () => {
+                other.postMessage({ consensPage: { source: '<p id="planted">planted</p>' } }, '*');
+                if (++sent < 30) setTimeout(send, 50);
+              };
+              send();
+            }""", page_server['origin'] + html_page.WRITTEN_PATH)
+        alone = opened.value
+        alone.wait_for_load_state()
+        alone.wait_for_timeout(1600)
+        assert alone.url == page_server['origin'] + html_page.WRITTEN_PATH
+        assert alone.evaluate("[document.querySelectorAll('iframe').length, document.body.innerText.trim()]") == [0, '']
     finally:
         page_server['hits'].clear()
         context.close()

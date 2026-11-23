@@ -2,7 +2,8 @@
 // answer-copy.js
 // Copy under an Agent answer, and the one preparation of an answer for the
 // clipboard (Copy consensus in consensus-actions.js copies through it too).
-// Export: window.App.answerCopy {button, clean, text, payload}.
+// Export: window.App.answerCopy {button, clean, text, payload, write}.
+// (write: also what copies one table of an answer, markdown-stream.js.)
 // Uses window.App.sourceRefs (sources.js) and App.answerTail
 // (agent-workspace.js) at runtime.
 // =====================================================================
@@ -19,7 +20,7 @@
   // copy carries the source, as a code block would.
   function clean(body) {
     const clone = body.cloneNode(true);
-    clone.querySelectorAll(".claim-badge, .copy-btn, .code-copy").forEach(el => el.remove());
+    clone.querySelectorAll(".claim-badge, .copy-btn, .code-copy, .md-block-tools").forEach(el => el.remove());
     const originalRefs = Array.from(body.querySelectorAll(".src-ref"));
     clone.querySelectorAll(".src-ref").forEach((ref, index) => {
       ref.replaceWith(document.createTextNode(App.sourceRefs?.plainText(originalRefs[index]) || ""));
@@ -207,5 +208,5 @@
     if (!row.parentNode || (!sharedRow && after.nextElementSibling !== row)) after.after(row);
   }
 
-  App.answerCopy = { button: syncAnswerCopyButton, clean, text, payload };
+  App.answerCopy = { button: syncAnswerCopyButton, clean, text, payload, write };
 })();
