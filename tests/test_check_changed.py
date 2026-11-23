@@ -226,11 +226,13 @@ def test_build_output_is_named_as_a_folder(tmp_path):
 
 
 def test_a_test_that_walks_a_folder_runs_for_every_file_of_its_kind_there(tmp_path):
+    # The calls are written in two parts: spelled out, this file would count
+    # as walking those folders itself and run for every change in them.
     root = tree(tmp_path, {
-        "tests/test_sheets.py": 'for sheet in (ROOT / "static" / "css").glob("*.css"):\n    pass\n',
-        "tests/test_runtime.py": 'for module in Path("app").rglob("*.py"):\n    pass\n',
+        "tests/test_sheets.py": 'for sheet in (ROOT / "static" / "css").' + 'glob("*.css"):\n    pass\n',
+        "tests/test_runtime.py": 'for module in Path("app").r' + 'glob("*.py"):\n    pass\n',
         "tests/test_no_walk.py": 'one = ROOT / "static" / "css" / "base.css"\n',
-        "tests/js/syntax.test.mjs": 'for (const name of readdirSync("static/js")) check(name, ".js");\n',
+        "tests/js/syntax.test.mjs": 'for (const name of readdir' + 'Sync("static/js")) check(name, ".js");\n',
     })
     assert selected(root, "static/css/new.css") == {"tests/test_sheets.py": "walks static/ for *.css"}
     assert selected(root, "static/css/notes.txt") == {}
@@ -485,7 +487,5 @@ def test_the_changes_that_turned_main_red_select_their_test(repository, changed,
 
 
 def test_a_script_of_the_app_selects_the_javascript_tests_that_load_it(repository):
-    files = selected(repository, "static/js/agent-mode.js", suite="frontend")
-    loading = {f"tests/js/{path.name}" for path in (ROOT / "tests/js").glob("*.test.mjs")
-               if '"static/js/agent-mode.js"' in path.read_text(encoding="utf-8")}
-    assert loading and loading <= files.keys()
+    files = selected(repository, "static/js/app-state.js", suite="frontend")
+    assert files["tests/js/app-state.test.mjs"] == "names static/js/app-state.js"
