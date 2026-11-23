@@ -3178,7 +3178,10 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   Ausgabe, ohne Bild; öffnet der Agent danach eine eigene Seite, geht die
   angeheftete Karte, weil die Seite des Nutzers nicht mehr vorn ist. Der Server
   reicht das Bild des Helfers nur für die Seite des Nutzers weiter und fragt
-  nur dort nach neuen, `BrowserTools.for_user`. Die Übergabe per `ask_user`
+  nur dort nach neuen, `BrowserTools.for_user`. Eine einzelne HTML-Datei des
+  eigenen Servers, die nichts von außen braucht, öffnet `for_user` nicht: Sie
+  läuft als Seite im Chat (`docs/codebase-map.md` „Seite im Chat“, „Nicht
+  zusätzlich im Browser“). Die Übergabe per `ask_user`
   hat ihre eigene Karte über dem Feld und braucht keine Seitenkarte;
   seit 2026-10-29 mit dem Bild der Seite, Titel und Website; vorher „Live
   ansehen“ an jedem `browser`-Schritt; seit 2026-10-30 zeigt die angeheftete

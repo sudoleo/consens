@@ -496,6 +496,63 @@ def test_a_page_the_agent_opens_for_itself_has_no_card_and_no_picture(store, fak
         act(action="read", for_user=True)
 
 
+def test_a_page_that_runs_in_the_chat_does_not_open_for_the_user_in_the_browser_as_well(store, fake_vm):
+    """One HTML file of the agent's server that needs nothing from outside
+    itself runs in the chat (vm_share_file): the browser does not show it to
+    the user a second time on a card (Max). The tool asks the server for the
+    page first; the agent learns where the page goes, and nothing opens."""
+    url = "http://localhost:8765/benchmark-interaktiv.html"
+    page = b'<!doctype html><title>Benchmark</title><style>b{color:red}</style><script>document.title="ok"</script>'
+    loop, browser = tools(store)
+    reported = []
+
+    def act(**fields):
+        args = BrowserArgs(**fields)
+        return args, browser.call(args, cancellation=ProviderCancellation(), report=reported.append)
+    def asked():
+        return [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2].startswith("curl ")]
+    fake_vm.commands[agent_browser.page_command(url)] = ([("stdout", page)], 0, .1)
+    with pytest.raises(ValueError, match="runs in the chat under your answer"):
+        act(action="open", url=url, for_user=True)
+    assert asked() == [agent_browser.page_command(url)]
+    assert fake_vm.requests == [] and not any("for_user" in fields for fields in reported)
+    # No card for it, neither while the call ran nor after it was refused.
+    refused = BrowserArgs(action="open", url=url, for_user=True)
+    assert "for_user" not in browser._activity(refused, None)
+    assert "for_user" not in browser._activity(refused, {"error": agent_browser.PAGE_IN_CHAT})
+    # The agent may still open it to look at it itself: the server is not asked.
+    act(action="open", url=url)
+    assert [request["url"] for request in fake_vm.requests] == [url]
+    assert len(asked()) == 1
+    # Opened for the user as before: a page that loads from elsewhere, one the
+    # server does not give, and an app at its server's root.
+    other, missing, app = (f"http://localhost:8765/{name}" for name in ("chart.html", "gone.htm", ""))
+    fake_vm.commands[agent_browser.page_command(other)] = (
+        [("stdout", b'<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>')], 0, .1)
+    fake_vm.commands[agent_browser.page_command(missing)] = ([], 22, .1)
+    for target in (other, missing, app):
+        args, result = act(action="open", url=target, for_user=True)
+        assert browser._activity(args, result)["for_user"] is True
+    assert [request["url"] for request in fake_vm.requests][1:] == [other, missing, app]
+    assert sum(1 for fields in reported if fields.get("for_user")) == 2
+    assert asked() == [agent_browser.page_command(address) for address in (url, other, missing)]
+    # Only one HTML file on the agent's own server is such a page.
+    assert [agent_browser.page_file(address) for address in (
+        "http://localhost:8765/a.HTML", "http://127.0.0.1:3000/x/index.htm", "localhost:4000/b.html",
+        "https://example.com/a.html", "http://localhost:8765/", "http://localhost:8765/a.html.js",
+        "javascript:alert(1)")] == [True, True, True, False, False, False, False]
+
+
+def test_a_page_that_runs_in_the_chat_is_no_card_in_the_message_and_the_agent_reads_why(store, fake_vm):
+    url = "http://localhost:8765/chart.html"
+    fake_vm.commands[agent_browser.page_command(url)] = ([("stdout", b"<!doctype html><p>Chart</p>")], 0, .1)
+    loop = vm_loop(store, Agent([[("browser", {"action": "open", "url": url, "for_user": True})]]))
+    list(loop.run())
+    saved = [e for e in store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_activity"] if e.get("name") == "browser"]
+    assert [(e["status"], "for_user" in e) for e in saved] == [("failed", False)]
+    assert results(loop) == [{"error": agent_browser.PAGE_IN_CHAT}] and fake_vm.requests == []
+
+
 def test_a_screenshot_the_agent_shows_lands_under_its_answer_with_the_page_as_its_source(
         store, fake_vm, tmp_path, monkeypatch):
     """In Prod, asked "can I see it?", DeepSeek tried for 9 minutes to

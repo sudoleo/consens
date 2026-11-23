@@ -51,6 +51,7 @@ import json
 import logging
 import posixpath
 import re
+import shlex
 import threading
 import time
 from typing import Literal, Optional
@@ -58,6 +59,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core import html_page
 from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
@@ -167,8 +169,10 @@ class BrowserArgs(BaseModel):
     tab: int = Field(default=0, ge=0, le=100)
     new_tab: bool = False
     for_user: bool = Field(default=False, description=(
-        "open: true when the user is to look at or use this page themselves, such as an app you built for them: "
-        "the chat then shows it on a card, where they open it live."))
+        "open: true when the user is to look at or use this page themselves in the browser, such as a website "
+        "or an app you built that needs a server of its own: the chat then shows it on a card, where they open "
+        "it live. One HTML file of your server that needs nothing from outside itself does not open this way: "
+        "it runs in the chat once you share it with vm_share_file."))
     offset: int = Field(default=0, ge=0, le=100_000)
     seconds: int = Field(default=0, ge=0, le=WAIT_MAX)
     file: str = Field(default="", max_length=1024, description="upload: a file in your workspace.")
@@ -300,6 +304,15 @@ BROWSER_PRIVATE = ("That address is the workspace's own files or a private netwo
 LOCAL_PORT = ("localhost in the browser is your workspace, port by port: name the port your server listens on, "
               "1024 and up (http://localhost:3000).")
 LOCAL_DOWNLOAD = "download takes a file on the web: what your workspace serves is in your workspace already."
+# A page of the agent's own server that is one HTML file needing nothing from
+# outside itself runs in the chat (vm_share_file, app/core/html_page.py), so
+# it does not open for the user in the browser as well (Max: the browser and
+# the page in the chat for the same page is one too many). The tool asks the
+# server for the page before it opens the card: a page it cannot fetch, or one
+# that loads from elsewhere, opens as before.
+PAGE_CHECK_SECONDS = 5
+PAGE_IN_CHAT = ("This page needs nothing from outside itself, so it does not open for the user in the browser: share "
+                "its file with vm_share_file and it runs in the chat under your answer, where the user uses it.")
 # After a download a site refused, where vm_save_picture is (agent_vm_tools.py):
 # on 2026-11-01 Wikimedia refused twelve picture downloads with 429 and 400,
 # and the agent waited 25 and 30 s for it, while the server's own fetch of
@@ -348,6 +361,24 @@ def required(args):
         raise ValueError("show goes with the action screenshot or with screenshot_after.")
     if args.for_user and args.action != "open":
         raise ValueError("for_user goes with the action open.")
+
+
+def page_file(url):
+    """Whether ``url`` names one HTML file on the agent's own server
+    (http://localhost:8765/chart.html): the kind of page that may run in the
+    chat instead. An address that is not one is no such page."""
+    try:
+        parts = urlsplit(check_url(url))
+    except ValueError:
+        return False
+    return (canonical_host(parts.hostname or "") in LOCAL_HOSTS
+            and parts.path.lower().endswith((".html", ".htm")))
+
+
+def page_command(url):
+    """The fixed command that asks the agent's server for the page ``url``."""
+    return (f"curl -sf --max-time {PAGE_CHECK_SECONDS} --max-filesize {html_page.MAX_BYTES} -- "
+            f"{shlex.quote(url)}")
 
 
 def helper(backend, name, request, timeout, cancellation):
@@ -712,6 +743,11 @@ class BrowserTools:
         self.vm._start(cancellation, bench=args.action == "upload", change=False, spends=False)
         prepared = time.monotonic()
         session = self.vm.session
+        if args.action == "open" and args.for_user and page_file(request["url"]):
+            if self._runs_in_chat(request["url"], cancellation):
+                raise ValueError(PAGE_IN_CHAT)
+            # Its card, now that the page is one for the browser (_activity).
+            report({"for_user": True})
         upload = None
         timeout = CALL_SECONDS + (args.seconds if args.action == "wait" else 0)
         left = self.vm.loop.answer_time_left() if hasattr(self.vm.loop, "answer_time_left") else None
@@ -949,12 +985,37 @@ class BrowserTools:
                 continue
         raise ValueError(f"Too many files named {name} in {folder}.")
 
+    def _runs_in_chat(self, url, cancellation):
+        """Whether the page at ``url`` on the agent's server is one HTML file
+        that runs in the chat (html_page.refusal). Asked as the agent's user,
+        outside the VM time and the provider's failure count: a page that
+        cannot be asked for is no page for the chat."""
+        out = bytearray()
+
+        def keep(stream, chunk):
+            if stream == "stdout" and len(out) <= html_page.MAX_BYTES:
+                out.extend(chunk)
+        try:
+            outcome = self.vm.session.backend.exec(
+                self.vm.session.name, page_command(url), cwd="/", timeout=PAGE_CHECK_SECONDS + 2, on_output=keep,
+                cancellation=cancellation)
+        except ProviderCancelled:
+            raise
+        except Exception as exc:
+            logging.info("Agent browser page check failed category=%s %s", safe_exception(exc), log_tag(self.vm.loop))
+            return False
+        return outcome.exit_code == 0 and bool(out) and html_page.refusal(bytes(out)) is None
+
     def _activity(self, args, result):
         fields = {"action": args.action}
         if args.action == "open":
             fields["url"] = args.url[:500]
-            if args.for_user:
-                # The page's card in the chat (agent-activity.js showsPage).
+            # The page's card in the chat (agent-activity.js showsPage). A
+            # page that may run in the chat instead gets it once the call
+            # found it does not (call reports it), and keeps it once opened;
+            # a refused one (result {"error"}) never.
+            opened = isinstance(result, dict) and "error" not in result
+            if args.for_user and (opened or not page_file(args.url)):
                 fields["for_user"] = True
         elif args.ref:
             fields["ref"] = args.ref

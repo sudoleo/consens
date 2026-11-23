@@ -1514,6 +1514,9 @@ Server.
 - [ ] Chat neu laden und wieder öffnen: Die Seite ist wieder da, und ihr
       Platz hat schon vor dem Laden ihre Höhe (nichts darunter springt). Follow-up
       senden: Die Seite der vorigen Antwort lädt neu und bleibt bedienbar.
+- [ ] In einem Chat, in dem der Agent eine Seite schon einmal per Server im
+      Browser gezeigt hat: „Zeig mir das nochmal interaktiv“ → die Seite läuft
+      unter der Antwort, keine Browser-Karte darüber.
 - [ ] Eine HTML-Datei mit `<script src="https://…">` oder fremden Bildern
       bleibt ein Download; der Agent nennt den Grund oder teilt eine Fassung,
       die alles in der Datei trägt (dann steht nur diese eine unter der Antwort).

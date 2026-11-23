@@ -14321,6 +14321,23 @@ geteilt wird eine Seite nicht.
 - **Grenzen:** keine Bibliotheken per CDN (in die Datei kopieren), keine
   Netzaufrufe, keine Links nach außen, eine Datei ohne Nachbardateien. Was
   einen Server braucht, läuft weiter im Browser des Arbeitsplatzes.
+- **Nicht zusätzlich im Browser** (`agent_browser.py` `page_file`,
+  `_runs_in_chat`, `PAGE_IN_CHAT`): Max will dieselbe Seite nicht im Browser
+  und im Chat. In einem Chat, dessen früherer Turn eine Seite per Server und
+  Browser zeigte, tat Muse Ember beides (nachgestellt 3 von 3), auch mit
+  einem Hinweis in der Beschreibung von `for_user` noch 2 von 3. Darum setzt
+  das Werkzeug es durch: Ein `open` mit `for_user` auf eine einzelne
+  `.html`/`.htm` des eigenen Servers (`localhost`, `127.0.0.1`, `[::1]`)
+  fragt die Seite vorher mit `curl` (`page_command`, 5 s, höchstens
+  `MAX_BYTES`) als Nutzer des Agenten ab, außerhalb der VM-Zeit und der
+  Fehlerzählung des Anbieters. Braucht sie nichts von außen
+  (`html_page.refusal`), öffnet nichts, und der Agent liest `PAGE_IN_CHAT`
+  (teilen mit `vm_share_file`). Danach 0 von 3. Eine Seite, die von außen
+  lädt, die der Server nicht liefert, oder eine App an der Wurzel des
+  Servers öffnet wie bisher. Bis die Prüfung durch ist, trägt der Schritt
+  kein `for_user` (keine Karte, auch nicht als Skelett); danach meldet ihn
+  `report`, ein abgelehnter bleibt ohne. Ohne `for_user` öffnet der Agent
+  jede Seite für sich selbst.
 - Tests: `tests/test_agent_pages.py` (Richtlinie, welche Datei, ein
   Durchgang, Dokument, Token, jede Antwort unter dem Pfad mit Sandbox samt
   HEAD, Range, 405 und 503, fremdes Konto, andere Datei, abgelaufen, gelöscht,
