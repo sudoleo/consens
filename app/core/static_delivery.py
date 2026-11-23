@@ -122,13 +122,16 @@ def _is_current_version(path: str, digest: str) -> bool:
     During a deploy the new page can ask an old instance for a new hash (or
     the other way round): pinned for a year, the old bytes would stay in the
     browser and the CDN under the new URL. Only files below /static are
-    hashed, whatever dot segments the request path carries.
+    hashed, and only under the one spelling of their path: asset_url keeps
+    an entry per path it is given, and a request can spell a file's path in
+    endless ways (dot segments, doubled slashes).
     """
+    root = STATIC_ROOT.resolve()
     try:
-        target = (STATIC_ROOT.parent / path.lstrip("/")).resolve()
+        target = (root.parent / path.lstrip("/")).resolve()
     except (OSError, ValueError):
         return False
-    if not target.is_relative_to(STATIC_ROOT.resolve()):
+    if not target.is_relative_to(root) or path != f"/static/{target.relative_to(root).as_posix()}":
         return False
     return asset_url(path) == f"{path}?v={digest}"
 

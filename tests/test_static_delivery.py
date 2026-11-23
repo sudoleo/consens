@@ -230,3 +230,19 @@ def test_every_font_a_kept_stylesheet_names_is_served():
             checked += 1
             assert (ROOT / url.lstrip("/")).is_file() or legacy_font_target(url), (sheet.name, ref)
     assert checked >= 6
+
+
+def test_another_spelling_of_a_path_is_never_hashed_or_kept():
+    # asset_url keeps one entry per path it is given; any visitor can spell a
+    # file's path in endless ways (dot segments, doubled slashes).
+    from app.core import assets
+    from app.core.static_delivery import static_cache_control
+
+    current = asset_url("/static/css/foundation.css")
+    digest = current.rsplit("=", 1)[1]
+    assert static_cache_control("/static/css/foundation.css", f"v={digest}") == IMMUTABLE_CACHE_CONTROL
+    kept = set(assets._closure_cache)
+    for spelling in ("/static/./css/foundation.css", "/static/css/../css/foundation.css",
+                     "/static//css/foundation.css", "/static/css/./././foundation.css"):
+        assert static_cache_control(spelling, f"v={digest}") == "no-cache"
+    assert set(assets._closure_cache) == kept
