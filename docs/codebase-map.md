@@ -12665,9 +12665,18 @@ Neue Bereiche umfassen Google/Kalender/Gmail, private Dateien/Dokumentversionen,
 gemeinsames Tageskonto, Antwortreceipts und Watch-Evidenz/Outbox. Historische
 Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
 
+- **Vor dem Push:** `dev.ps1 check changed` führt nur die Tests aus, die zu
+  den geänderten Dateien gehören (Commits gegenüber `origin/main` plus
+  Arbeitsverzeichnis). Die Auswahl trifft `scripts/check_changed.py` ohne
+  gespeicherten Zustand: geänderte Tests, direkte Importe, genannte Dateien,
+  Tests, die Ordner durchlaufen, und eine feste Liste; bei übergreifenden
+  Änderungen die ganze Suite. Browser-Tests nennt es nur, mit fertigem
+  Aufruf. `dev.ps1` führt den Plan aus. Regeln, Grenzen und Messung:
+  „Vor dem Push“ in `docs/testing.md`; Tests: `tests/test_check_changed.py`.
 - **Windows-Einstieg:** `dev.ps1 check frontend|backend|browser` koordiniert
-  die vorhandenen npm-/Pytest-Befehle; `-TestPath` begrenzt den Lauf auf eine
-  Datei oder ein Verzeichnis der gewählten Suite. Frontend prüft zusätzlich
+  die vorhandenen npm-/Pytest-Befehle; `-TestPath` begrenzt den Lauf auf
+  Dateien oder Verzeichnisse der gewählten Suite (mehrere durch Komma
+  getrennt). Frontend prüft zusätzlich
   den Build-Stand. Browser nutzt Firebase `emulators:exec` für Start und Stopp,
   liest Host/Port aus `firebase.json` und den Demo-Projekt-/Loopback-Vertrag
   aus `app/core/e2e_profile.py`. Die aufrufende Shell erhält ihre Umgebung und

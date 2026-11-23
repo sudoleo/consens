@@ -3,6 +3,8 @@
 .SYNOPSIS
 Run the project's existing local checks. See docs/testing.md for setup.
 .EXAMPLE
+.\dev.ps1 check changed
+.EXAMPLE
 .\dev.ps1 check frontend
 .EXAMPLE
 .\dev.ps1 check backend -TestPath tests/test_streaming.py
@@ -14,15 +16,19 @@ Run the project's existing local checks. See docs/testing.md for setup.
 param(
     [ValidateSet('check', 'update', 'help')]
     [string]$Command = 'help',
-    [ValidateSet('frontend', 'backend', 'browser', 'rules')]
+    [ValidateSet('changed', 'frontend', 'backend', 'browser', 'rules')]
     [string]$Target,
-    [string]$TestPath
+    [string[]]$TestPath,
+    [string]$Base = 'origin/main'
 )
 
 if ($Command -eq 'help') {
-    Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser|rules> [-TestPath <test file or directory>]'
+    Write-Host 'Usage: .\dev.ps1 check changed [-Base <commit>]'
+    Write-Host '       .\dev.ps1 check <frontend|backend|browser|rules> [-TestPath <test file or directory>[,<more>]]'
     Write-Host '       .\dev.ps1 update'
     Write-Host 'update:   bring main up to date with origin/main (fast-forward only) and install changed dependencies'
+    Write-Host 'changed:  the tests for what differs from origin/main, picked by scripts/check_changed.py, which says why;'
+    Write-Host '          the check before a push. It names the browser tests to start and does not start them.'
     Write-Host 'frontend: JavaScript tests + build:check (run npm run build to rebuild)'
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
@@ -70,6 +76,23 @@ function Assert-VenvPython([string]$Python, [string]$Expected) {
     $actual = "$(& $Python -c 'import sys; print(*sys.version_info[:2], sep=chr(46))')".Trim()
     if ($actual -ne $wanted) {
         throw "venv uses Python $actual, the project expects $wanted (.python-version). Rebuild the venv as described in docs/testing.md."
+    }
+}
+
+function Find-Npm {
+    $null = Find-DevCommand 'node' 'Install Node.js and add it to PATH.'
+    $found = Find-DevCommand 'npm.cmd' 'Install Node.js including npm.'
+    if (-not (Test-Path -LiteralPath 'node_modules/vitest/vitest.mjs') -or -not (Test-Path -LiteralPath 'node_modules/esbuild/package.json')) {
+        throw 'Frontend dependencies are missing. Run npm ci.'
+    }
+    return $found
+}
+
+# npm.cmd is a batch file and Firebase emulators:exec takes a shell command:
+# only a repository path of these characters is ever handed to either.
+function Assert-TestPathCharacters([string]$Path) {
+    if ($Path -notmatch '^[a-zA-Z0-9_./-]+$') {
+        throw 'TestPath must use letters, digits, underscores, hyphens, dots and path separators.'
     }
 }
 
@@ -221,47 +244,48 @@ if ($Command -eq 'update') {
 }
 
 try {
-    if (-not $Target) { throw 'Choose frontend, backend, browser or rules. Run .\dev.ps1 help.' }
+    if (-not $Target) { throw 'Choose changed, frontend, backend, browser or rules. Run .\dev.ps1 help.' }
     Push-Location -LiteralPath $PSScriptRoot
     $locationPushed = $true
 
-    $testRoot = switch ($Target) {
-        'frontend' { 'tests/js' }
-        'backend' { 'tests' }
-        'browser' { 'tests/e2e' }
-        'rules' { 'tests/rules' }
-    }
-    $selectedTests = $testRoot
-    if ($TestPath) {
-        $resolvedTest = (Resolve-Path -LiteralPath $TestPath).ProviderPath
-        $allowedRoot = (Resolve-Path -LiteralPath $testRoot).ProviderPath
-        if ($resolvedTest -ne $allowedRoot -and -not $resolvedTest.StartsWith("$allowedRoot\", [StringComparison]::OrdinalIgnoreCase)) {
-            throw "TestPath must be inside $testRoot."
-        }
-        $selectedTests = $resolvedTest.Substring($PSScriptRoot.Length + 1).Replace('\', '/')
-        # Firebase emulators:exec accepts a shell command. Only a validated,
-        # repository-relative path is ever interpolated into that command.
-        if ($selectedTests -notmatch '^[a-zA-Z0-9_./-]+$') {
-            throw 'TestPath must use letters, digits, underscores, hyphens, dots and path separators.'
-        }
-        if ($Target -eq 'backend' -and ($selectedTests -eq 'tests/e2e' -or $selectedTests.StartsWith('tests/e2e/', [StringComparison]::OrdinalIgnoreCase))) {
-            throw 'Use check browser for tests/e2e.'
-        }
+    # Several paths arrive as an array from PowerShell and as one
+    # comma-separated word from any other shell.
+    $TestPath = @($TestPath | ForEach-Object { "$_" -split ',' } | Where-Object { $_ })
+    if ($Target -eq 'changed' -and $TestPath) {
+        throw 'check changed picks the tests itself. -TestPath belongs to the other targets.'
     }
 
-    if ($Target -eq 'rules' -and $selectedTests -eq 'tests/rules') {
-        $selectedTests = 'tests/rules/firestore.rules.test.mjs'
+    $testRoot = switch ($Target) {
+        'frontend' { 'tests/js' }
+        'browser' { 'tests/e2e' }
+        'rules' { 'tests/rules' }
+        default { 'tests' }
+    }
+    $selectedTests = @($testRoot)
+    if ($TestPath) {
+        $allowedRoot = (Resolve-Path -LiteralPath $testRoot).ProviderPath
+        $selectedTests = @(foreach ($path in $TestPath) {
+            $resolvedTest = (Resolve-Path -LiteralPath $path).ProviderPath
+            if ($resolvedTest -ne $allowedRoot -and -not $resolvedTest.StartsWith("$allowedRoot\", [StringComparison]::OrdinalIgnoreCase)) {
+                throw "TestPath must be inside $testRoot."
+            }
+            $relativeTest = $resolvedTest.Substring($PSScriptRoot.Length + 1).Replace('\', '/')
+            Assert-TestPathCharacters $relativeTest
+            if ($Target -eq 'backend' -and ($relativeTest -eq 'tests/e2e' -or $relativeTest.StartsWith('tests/e2e/', [StringComparison]::OrdinalIgnoreCase))) {
+                throw 'Use check browser for tests/e2e.'
+            }
+            $relativeTest
+        })
+    }
+    elseif ($Target -eq 'rules') {
+        $selectedTests = @('tests/rules/firestore.rules.test.mjs')
     }
 
     if ($Target -in @('frontend', 'browser', 'rules')) {
-        $null = Find-DevCommand 'node' 'Install Node.js and add it to PATH.'
-        $npm = Find-DevCommand 'npm.cmd' 'Install Node.js including npm.'
-        if (-not (Test-Path -LiteralPath 'node_modules/vitest/vitest.mjs') -or -not (Test-Path -LiteralPath 'node_modules/esbuild/package.json')) {
-            throw 'Frontend dependencies are missing. Run npm ci.'
-        }
+        $npm = Find-Npm
     }
 
-    if ($Target -in @('backend', 'browser', 'rules')) {
+    if ($Target -in @('changed', 'backend', 'browser', 'rules')) {
         $python = Join-Path $PSScriptRoot 'venv/Scripts/python.exe'
         if (-not (Test-Path -LiteralPath $python)) {
             throw 'Missing venv/Scripts/python.exe. Create it with python -m venv venv; see docs/testing.md.'
@@ -274,19 +298,39 @@ try {
         # Do not inherit an E2E run into the backend suite, or UNIT_TEST_MODE
         # into a browser run. Restore the caller's environment in finally.
         Set-DevEnvironment 'RUN_E2E' $(if ($Target -eq 'browser') { '1' } else { $null })
-        Set-DevEnvironment 'UNIT_TEST_MODE' $(if ($Target -eq 'backend') { '1' } else { $null })
+        Set-DevEnvironment 'UNIT_TEST_MODE' $(if ($Target -in @('changed', 'backend')) { '1' } else { $null })
         Set-DevEnvironment 'E2E_TEST_MODE' $(if ($Target -in @('browser', 'rules')) { '1' } else { $null })
     }
 
     switch ($Target) {
+        'changed' {
+            # Which tests a change needs is scripts/check_changed.py's answer
+            # alone. Its plan runs here with the commands of the targets below.
+            $planFile = Join-Path ([IO.Path]::GetTempPath()) "consensio-check-changed-$PID.json"
+            try {
+                Invoke-DevStep 'Tests for the changed files (scripts/check_changed.py)' $python @('scripts/check_changed.py', '--base', $Base, '--plan', $planFile)
+                $plan = Get-Content -LiteralPath $planFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            }
+            finally { Remove-Item -LiteralPath $planFile -ErrorAction SilentlyContinue }
+            $frontendTests = @($plan.frontend.files | Where-Object { $_ })
+            $backendTests = @($plan.backend.files | Where-Object { $_ })
+            foreach ($path in $frontendTests + $backendTests) { Assert-TestPathCharacters $path }
+            if ($plan.frontend.whole -or $frontendTests -or $plan.build_check) { $npm = Find-Npm }
+            if ($plan.frontend.whole) { Invoke-DevStep 'JavaScript tests' $npm @('test') }
+            elseif ($frontendTests) { Invoke-DevStep 'JavaScript tests' $npm (@('test', '--') + $frontendTests) }
+            if ($plan.build_check) { Invoke-DevStep 'Frontend build freshness (fix: npm run build)' $npm @('run', 'build:check') }
+            if ($plan.backend.whole) { Invoke-DevStep 'Backend tests' $python @('-m', 'pytest', 'tests', '-q') }
+            elseif ($backendTests) { Invoke-DevStep 'Backend tests' $python (@('-m', 'pytest') + $backendTests + @('-q')) }
+            foreach ($call in @($plan.not_started | Where-Object { $_ })) { Write-Host "[dev] Not started here: $call" }
+        }
         'frontend' {
             $testArguments = @('test')
-            if ($TestPath) { $testArguments += @('--', $selectedTests) }
+            if ($TestPath) { $testArguments += @('--') + $selectedTests }
             Invoke-DevStep 'JavaScript tests' $npm $testArguments
             Invoke-DevStep 'Frontend build freshness (fix: npm run build)' $npm @('run', 'build:check')
         }
         'backend' {
-            Invoke-DevStep 'Backend tests' $python @('-m', 'pytest', $selectedTests, '-q')
+            Invoke-DevStep 'Backend tests' $python (@('-m', 'pytest') + $selectedTests + @('-q'))
         }
         { $_ -in @('browser', 'rules') } {
             $firebase = Find-DevCommand 'firebase.cmd' 'Install the Firebase CLI as documented in tests/e2e/README.md.'

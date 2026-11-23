@@ -45,6 +45,7 @@ Die bezahlte Messung vor dem Einschalten steht in
 PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 
 ```powershell
+.\dev.ps1 check changed
 .\dev.ps1 check frontend
 .\dev.ps1 check backend
 .\dev.ps1 check browser
@@ -53,6 +54,7 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 
 | Ziel | Ablauf |
 |---|---|
+| `changed` | Die Prüfung vor dem Push: nur die Tests, die zu den geänderten Dateien gehören, mit denselben Befehlen wie `frontend` und `backend`. Die Auswahl und ihre Grenzen stehen unter [Vor dem Push](#vor-dem-push-nur-die-betroffenen-tests). |
 | `frontend` | `npm test`, danach `npm run build:check`. Ein veralteter Build führt zum Fehler; mit `npm run build` bewusst neu erzeugen. |
 | `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
 | `browser` | Voraussetzungen und Build prüfen, in die [Warteschlange](#warteschlange-für-browser--und-rules-läufe) einreihen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
@@ -71,12 +73,13 @@ worker“ und „something prevents Vite server from exiting“ stehen, und
 `.\dev.ps1 check frontend` kam nicht zurück. Deshalb nicht auf `threads`
 zurückstellen.
 
-Eine einzelne Datei oder ein Verzeichnis innerhalb der gewählten Suite:
+Eine einzelne Datei oder ein Verzeichnis innerhalb der gewählten Suite, mehrere
+durch Komma getrennt:
 
 ```powershell
 .\dev.ps1 check frontend -TestPath tests/js/app-state.test.mjs
 .\dev.ps1 check backend -TestPath tests/test_streaming.py
-.\dev.ps1 check browser -TestPath tests/e2e/test_phase2_transactions.py
+.\dev.ps1 check browser -TestPath tests/e2e/test_phase2_transactions.py,tests/e2e/test_smoke.py
 ```
 
 Testpfade beziehen sich auf das Projektverzeichnis, auch wenn das Skript aus
@@ -101,6 +104,142 @@ E2E-Abhängigkeiten, Chromium, Firebase CLI und Java 21+ auf `PATH` oder unter
 herunterladen. Paketinstallation, Chromium und der erste Emulatorstart benötigen
 Netzzugang; marked, DOMPurify und KaTeX werden im Browserlauf aus lokalen
 Vendorassets geladen. Die Browserfixtures ersetzen das Firebase-SDK.
+
+### Vor dem Push: nur die betroffenen Tests
+
+```powershell
+.\dev.ps1 check changed
+```
+
+Der Befehl führt die Tests aus, die zu den geänderten Dateien gehören, und ist
+die Prüfung vor jedem Push. Die vollständigen Suiten gehören der CI, die sie
+bei jedem Push ausführt. Lokal brauchen sie rund 17 min (Backend 13 min,
+Frontend knapp 4 min, seriell auf vier Kernen) und bremsen jede Session
+daneben.
+
+Verglichen wird mit `origin/main`, so wie der Checkout es zuletzt geholt hat:
+die Commits, die dort fehlen, dazu Index, Arbeitsverzeichnis und neue Dateien.
+`-Base <Commit>` vergleicht mit einem anderen Stand; `-Base HEAD~1` prüft den
+letzten Commit. Ist nichts geändert, läuft nichts.
+
+Die Auswahl trifft `scripts/check_changed.py`. Es liest dafür nur die Dateien
+des Checkouts und braucht keinen gespeicherten Zustand, stimmt also auch in
+einem Worktree, der gerade erst angelegt wurde. Die Auswahl selbst dauert etwa
+zwei Sekunden. Eine Testdatei läuft, wenn
+
+1. sie selbst geändert ist,
+2. sie eine geänderte Datei importiert. Als Import zählen auch die Punktnamen,
+   die `monkeypatch.setattr` und `mock.patch` bekommen, die relativen Importe
+   der JavaScript-Tests und bei einem geänderten Template das Modul, das es
+   rendert: Dessen Tests rufen die Seite über die Route ab, ohne das Template
+   zu nennen,
+3. sie eine geänderte Datei beim Namen nennt, mit Pfad oder Dateiname. So
+   laden die JavaScript-Tests ihre Quellen (`loadScripts([...])`), und so
+   lesen viele Python-Tests CSS, JS und Templates als Text. Was die
+   Hilfsmodule eines Tests unter `tests/` nennen, gilt als von ihm genannt.
+   Genauso zählt eine Datei, die die geänderte einbindet:
+   `static/js/bundles.json` listet die Skripte von `/app`, ein Stylesheet
+   importiert ein anderes, ein Template bindet ein Partial ein,
+4. sie einen Ordner durchläuft (`glob`, `os.walk`, `readdirSync` und
+   Ähnliches) und einen Ordner auf dem Pfad der geänderten Datei zusammen mit
+   deren Endung nennt,
+5. sie auf der festen Liste `ALWAYS` im Skript steht. Das sind sieben Tests,
+   die über Module hinweg aufzählen: jeder englische Text hat sein Deutsch,
+   die Werkzeuge des Agenten und ihr Budget, kein Modul loggt eine rohe
+   Exception, Wortwahl und Typografie der App, Kontrastmodus, öffentliche
+   Seiten. Sie laufen bei jeder Änderung, für die auch die CI startet, und
+   brauchen zusammen eine halbe Minute.
+
+Die ganze Suite läuft stattdessen, wenn eine Datei geändert ist, durch die
+keine Auswahl hindurchsieht (`tests/conftest.py`, `requirements*.txt`,
+`package.json`, `package-lock.json`, `.python-version`, `dev.ps1`,
+`pytest.ini`, `vitest.config.mjs`), oder wenn die Auswahl 40 % der Dateien
+einer Suite erreicht. `npm run build:check` läuft, sobald ein Build-Eingang
+geändert ist (`static/`, die Build-Skripte).
+
+Browser-Tests und der Rules-Test brauchen die
+[Warteschlange](#warteschlange-für-browser--und-rules-läufe) und werden deshalb
+nur genannt, zusammen mit dem fertigen Aufruf. Ein Browser-Test wird nach
+denselben Regeln genannt und außerdem, wenn er nach einer ID, einer Klasse
+oder einem sichtbaren Text fragt, die der Diff entfernt oder umbenennt. Von
+den genannten Dateien die zum geänderten Verhalten starten; die ganze
+Browser-Suite läuft nachts in der CI.
+
+Die Ausgabe nennt je Suite, wie viele Dateien aus welchem Grund laufen:
+
+```text
+[changed] 2 changed file(s) against origin/main: agent_delegation.py, test_agent_delegation.py
+[changed] backend: 49 of 291 test files
+  1 changed: test_agent_delegation.py
+  39 import a changed file: test_agent_accounting_audit.py, test_agent_admission.py, +37
+  1 name a changed file: test_i18n.py
+  5 walk a changed folder: test_agent_workspace.py, test_logging_redaction_contract.py, +3
+  3 always run: test_forced_colors.py, test_public_design_system.py, test_ui_copy.py
+[changed] frontend: 1 of 162 test files
+  1 name a changed file: agent-review.test.mjs
+[changed] browser, not started here: 1 of 80 test files
+  1 import a changed file: test_agent_transactions.py
+[changed] start those with: .\dev.ps1 check browser -TestPath tests/e2e/test_agent_transactions.py
+```
+
+`venv\Scripts\python.exe scripts\check_changed.py --why` zeigt dieselbe
+Auswahl mit dem Grund je Datei, ohne etwas zu starten.
+
+**Grenze:** Regel 2 folgt einem Import nicht über weitere Module. Ändert sich
+ein Modul so, dass erst die Tests seiner Nutzer es merken (eine Signatur, ein
+Rückgabeformat), wählt der Befehl diese Tests nicht. Das fängt die CI. Wer so
+etwas ändert, nimmt die Tests der Nutzer mit `check backend -TestPath` dazu.
+
+Die Tests der Auswahl stehen in `tests/test_check_changed.py`, die des
+Aufrufs in `tests/test_dev_cli.py`.
+
+#### Messung vom 23.11.2026
+
+**Treffer.** Grundlage sind die 23 roten Push-Läufe auf `main` vom 31.10. bis
+23.11.2026: 20 mit zusammen 22 fehlgeschlagenen Backend-Tests, einer mit einem
+JavaScript-Test, zwei im `dependency-audit` (kein Test). Zu jedem Backend-Test
+wurde der Commit gesucht, ab dem er scheitert, indem der Test an den Commits
+davor ausgeführt wurde. 18 der 22 scheitern auch auf dem Entwicklungsrechner.
+Die Auswahl für den verursachenden Commit enthält alle 18, auch ohne die feste
+Liste, und ebenso den JavaScript-Test. Vor der Nachbesserung waren es 17:
+`tests/test_og_cards.py` ruft `/app` über die Route ab und nennt
+`templates/index.html` nicht; seitdem gehört ein Template zu dem Modul, das es
+rendert. Die übrigen vier bestehen lokal am roten Commit, ein lokaler Lauf
+hätte sie also nicht gefunden: Drei waren wackelige Tests, einer
+(`tests/test_agent_progress.py` nach `c681bbea`) hing an der Laufzeit und wäre
+nur mit einem Zwischenmodul gewählt worden. 14 der 18 Fehlschläge trafen fünf
+Tests, die über Module hinweg aufzählen; sie stehen deshalb zusätzlich auf der
+festen Liste.
+
+**Import-Tiefe.** Die Importe der App bilden einen Knoten: Folgt man ihnen bis
+zum Ende, erreicht die Hälfte der 211 Module 223 der 295 Backend-Testdateien.
+Deshalb folgt Regel 2 einem Import über höchstens `IMPORT_HOPS` Module. Die
+Auswahl der Backend-Dateien für jeden der 249 Commits mit Codeänderung vor dem
+23.11.2026:
+
+| Zwischenmodule | Dateien im Median | Testzeit im Median | ganze Suite | Treffer |
+|---|---|---|---|---|
+| 0 (gewählt) | 36 von 296 | 115 s | bei 4 % der Commits | 18 von 18 |
+| 1 | 68 | 219 s | bei 24 % | 18 von 18 |
+| 2 | 110 | 423 s | bei 48 % | 18 von 18 |
+| beliebig viele | 223 | 612 s | bei 57 % | 18 von 18 |
+
+Die Testzeit ist die Summe der Testdauern aus einem vollen Lauf (737 s
+Testzeit, 13 min Laufzeit). Dazu kommen bei 3 % der Commits Dateien, die immer
+die ganze Suite auslösen. Im Frontend wählt der Befehl im Median 14 von 165
+Dateien, und er nennt im Median 5 Browser-Dateien.
+
+**Laufzeit.** Fünf Commits vom 22. und 23.11.2026, jeweils die Auswahl für den
+Commit allein ausgeführt, seriell auf dem Entwicklungsrechner. Der volle Lauf
+braucht dort 17 min (Backend 13:12 min, Frontend 3:52 min, `build:check` 6 s).
+
+| Commit | Backend | Frontend | Lauf |
+|---|---|---|---|
+| `52922bff`, ein kleines Modul und sein Test | 10 von 291 Dateien | keine | 0:42 min |
+| `28968932`, eine CSS-Datei | 23 | 14 von 162, `build:check` | 1:36 min |
+| `9cd1f8aa`, ein Router, ein Skript und ihre Tests | 34 | 19, `build:check` | 1:42 min |
+| `a08afd55`, das zentrale Modul `agent_delegation.py` und sein Test | 49 | 1 | 3:37 min |
+| `e161aadd`, vier Services, `main.py`, ein Skript und sechs Tests | ganze Suite (117 von 292 betroffen) | 37, `build:check` | 12:53 min |
 
 ### Prüfungen vor dem Commit
 

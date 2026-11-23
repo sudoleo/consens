@@ -40,7 +40,9 @@ Emulator-Lebenszyklus und Wiederherstellung der Shell-Umgebung:
 .\dev.ps1 check browser
 ```
 
-Optional grenzt `-TestPath tests/e2e/<datei>.py` die Suite ein. Läuft schon ein
+Optional grenzt `-TestPath tests/e2e/<datei>.py` die Suite ein, mehrere Dateien
+durch Komma getrennt. Welche Dateien zu einer Änderung gehören, nennt
+`.\dev.ps1 check changed` zusammen mit dem fertigen Aufruf. Läuft schon ein
 Browser- oder Rules-Lauf einer anderen Session, reiht sich der Aufruf ein und
 startet von selbst, sobald die festen Ports frei sind. Setup und genaue
 Semantik: [`docs/testing.md`](../../docs/testing.md). Die folgenden direkten

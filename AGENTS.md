@@ -57,8 +57,9 @@
   CI. Meldet sich der Hintergrundlauf grün (Exit 0), nichts dazu sagen. Meldet
   er rot (Exit 1), reparieren: veraltete Tests an gewolltes Verhalten anpassen,
   echte Fehler im Code beheben, wackelige (zeitabhängige) Tests
-  deterministisch machen statt sie erneut anzustoßen. Vor UI-Änderungen geänderte Texte, IDs und Selektoren
-  in `tests/e2e` suchen und die Treffer mitziehen, denn die Browser-Suite läuft
+  deterministisch machen statt sie erneut anzustoßen. Bei UI-Änderungen die
+  Browser-Tests mitziehen, die geänderte Texte, IDs oder Selektoren verwenden
+  (`.\dev.ps1 check changed` nennt sie), denn die Browser-Suite läuft
   nur nachts. Was dort rot wird, repariert der tägliche CI-Wächter (geplante
   Aufgabe `consens-ci-watch`).
 - Nur bei fehlenden Zugängen, einem nicht eigenständig lösbaren Blocker oder
@@ -111,24 +112,32 @@ Ein falscher Kommentar ist schlimmer als keiner.
 - Der pre-commit-Hook („Prüfungen vor dem Commit“ in `docs/testing.md`) lehnt
   Commits ab, deren `static/dist` nicht zu den Quellen passt oder deren
   englischer Text kein Deutsch hat. Die Ursache beheben, nie `--no-verify`.
-- Windows-Einstieg für Tests: `.\dev.ps1 check frontend|backend|browser`,
-  optional `-TestPath <Datei oder Verzeichnis>`; direkte Runner-Befehle und Setup
+- Windows-Einstieg für Tests: `.\dev.ps1 check changed` vor dem Push, für
+  einzelne Suiten `.\dev.ps1 check frontend|backend|browser`,
+  optional `-TestPath <Datei oder Verzeichnis>[,<weitere>]`; direkte Runner-Befehle und Setup
   stehen in `docs/testing.md`. Bei Änderungen an Test-/Build-Einstiegspunkten
   oder Voraussetzungen `dev.ps1` und die zugehörige Dokumentation im selben
   Auftrag mitpflegen. Prüfumfang nach betroffenem Verhalten und Risiko wählen;
   vollständige Suiten bei übergreifenden Änderungen oder vorgeschriebenen Checks.
   Nach erfolgreichen Prüfungen nur bei weiteren Änderungen, Fehlern oder
   konkreten offenen Risiken erneut oder breiter testen.
-- **Laufzeitbudget:** Die vollständige Browser-Suite (`tests/e2e`, gemessen
+- **Laufzeitbudget:** Vor jedem Push `.\dev.ps1 check changed` ausführen,
+  statt passende Testdateien zu schätzen oder ganze Suiten zu starten. Der
+  Befehl leitet aus den geänderten Dateien (Commits gegenüber `origin/main`
+  plus Arbeitsverzeichnis) die betroffenen Backend- und Frontend-Tests ab,
+  führt nur diese aus und sagt, warum (Regeln und Messung unter „Vor dem
+  Push“ in `docs/testing.md`). Die vollständigen Suiten gehören der CI, die
+  sie bei jedem Push ohnehin ausführt: Lokal dauern sie rund 17 min (Backend
+  13, Frontend 4), während andere Sessions arbeiten länger, und bremsen sie
+  alle (4 Kerne). Ganz laufen sie lokal nur, wenn `check changed` es bei
+  übergreifenden Änderungen selbst so entscheidet (Abhängigkeiten,
+  Python-Version, `conftest.py`, `dev.ps1`, eine Auswahl ab 40 % einer Suite).
+  Browser-Tests startet der Befehl nicht: Er nennt die betroffenen Dateien
+  und den fertigen Aufruf (`.\dev.ps1 check browser -TestPath
+  <Datei>,<Datei>`). Davon die Dateien zum geänderten Verhalten starten, meist
+  1–3. Die vollständige Browser-Suite (`tests/e2e`, gemessen
   ca. 6–12 s pro Fall, bei über 300 Fällen 1 Stunde und mehr) wird lokal
-  **nicht** nach einer Implementierung gestartet. Stattdessen nur die Dateien
-  zum geänderten Verhalten (`-TestPath tests/e2e/<datei>`, meist 1–3 Dateien),
-  dazu `frontend` (Sekunden) und bei Backend-Änderungen die betroffenen
-  Backend-Dateien statt aller. Der Gesamtlauf dauert 6–10 min, während
-  andere Sessions arbeiten länger, und bremst sie alle (4 Kerne); die CI
-  führt ihn bei jedem Push ohnehin aus. Lokal deshalb nur bei übergreifenden
-  Änderungen (Abhängigkeiten, Python-Version, `conftest.py`, gemeinsame
-  Kern-Infrastruktur). Die volle Browser-Suite
+  **nicht** nach einer Implementierung gestartet. Sie
   läuft in der CI (`workflow_dispatch` → `browser-and-rules`) und nur lokal,
   wenn der Nutzer sie ausdrücklich verlangt. Browser- und Rules-Läufe nur über
   `dev.ps1` starten: Es reiht sie rechnerweit ein (feste Ports

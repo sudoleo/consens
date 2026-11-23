@@ -96,6 +96,21 @@ def main(tool, args=None):
 if __name__ == '__main__':
     main(sys.argv[1], sys.argv[2:])
 ''', encoding="utf-8")
+    # `check changed` runs the plan of scripts/check_changed.py. Which tests a
+    # change selects is tested in tests/test_check_changed.py; here the
+    # script hands dev.ps1 the plan the case names.
+    (root / "scripts").mkdir()
+    (root / "scripts/check_changed.py").write_text('''
+import os, sys
+sys.path.insert(0, os.getcwd())
+import fake_tools
+fake_tools.record('check_changed', sys.argv[1:])
+if os.environ.get('DEV_FAIL') == 'check_changed':
+    raise SystemExit(2)
+print('[changed] the plan of this case')
+with open(sys.argv[sys.argv.index('--plan') + 1], 'w', encoding='utf-8') as stream:
+    stream.write(os.environ['DEV_PLAN'])
+''', encoding="utf-8")
     commands = root / "tools"
     commands.mkdir()
     for name in ("node", "npm", "java", "firebase"):
@@ -104,13 +119,14 @@ if __name__ == '__main__':
             encoding="utf-8",
         )
 
-    def run(target, *, failure="", test_path="", command="check", inherited=True, queued=None):
+    def run(target, *, failure="", test_path="", command="check", inherited=True, queued=None, plan=None, base=""):
         env = os.environ.copy()
         env.update({
             "PATH": str(commands) + os.pathsep + env.get("PATH", ""),
             "JAVA_HOME": "", "DEV_SCRIPT": str(root / "dev.ps1"),
             "DEV_LOG": str(tmp_path / "calls.jsonl"), "DEV_STATE": str(tmp_path / "state.json"),
             "DEV_TARGET": target, "DEV_COMMAND": command, "DEV_TEST_PATH": test_path,
+            "DEV_PLAN": json.dumps(plan or {}), "DEV_BASE": base,
             "DEV_FAIL": failure, "RUN_E2E": "inherited-run", "UNIT_TEST_MODE": "inherited-unit", "PYTHONUTF8": "0",
             "E2E_TEST_MODE": "inherited-e2e", "FIRESTORE_EMULATOR_HOST": "inherited-host:1234",
             "GOOGLE_APPLICATION_CREDENTIALS": "inherited-credential.json",
@@ -124,7 +140,9 @@ if __name__ == '__main__':
                 env.pop(key, None)
         script = """
 $originalPath = $env:PATH
-& $env:DEV_SCRIPT $env:DEV_COMMAND $env:DEV_TARGET -TestPath $env:DEV_TEST_PATH
+$base = @{}
+if ($env:DEV_BASE) { $base.Base = $env:DEV_BASE }
+& $env:DEV_SCRIPT $env:DEV_COMMAND $env:DEV_TARGET -TestPath $env:DEV_TEST_PATH @base
 $code = $LASTEXITCODE
 $state = @{ cwd = (Get-Location).Path; originalPath = $originalPath; env = @{} }
 foreach ($name in @('PATH', 'RUN_E2E', 'UNIT_TEST_MODE', 'E2E_TEST_MODE',
@@ -184,6 +202,95 @@ def test_backend_isolates_inherited_e2e_flags_and_restores_caller(cli, failure):
     assert calls[0]["env"]["UNIT_TEST_MODE"] == "1"
     assert calls[0]["env"]["RUN_E2E"] is None
     assert calls[0]["env"]["E2E_TEST_MODE"] is None
+
+
+def test_several_test_paths_run_in_one_call(cli):
+    root, run = cli
+    (root / "tests/test_other.py").touch()
+    (root / "tests/e2e/test_other.py").touch()
+    result, calls = run("backend", test_path="tests/test_example.py,tests/test_other.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls[0]["args"] == ["tests/test_example.py", "tests/test_other.py", "-q"]
+    # The call `check changed` prints for the browser tests it names.
+    result, calls = run("browser", test_path="tests/e2e/test_example.py,tests/e2e/test_other.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls[-4]["args"][-1] == "venv\\Scripts\\python.exe -m pytest tests/e2e/test_example.py tests/e2e/test_other.py -q"
+    result, calls = run("backend", test_path="tests/test_example.py,tests/e2e/test_other.py")
+    assert result.returncode == 1 and "Use check browser" in result.stderr
+
+
+def plan_of(**parts):
+    """What scripts/check_changed.py writes for dev.ps1 (Plan.as_json)."""
+    return {"changed": ["app/x.py"], "backend": {"whole": False, "files": []},
+            "frontend": {"whole": False, "files": []}, "build_check": False, "not_started": [], **parts}
+
+
+def test_changed_runs_the_selected_tests_like_the_other_targets_do(cli):
+    root, run = cli
+    browser = ".\\dev.ps1 check browser -TestPath tests/e2e/test_example.py"
+    result, calls = run("changed", plan=plan_of(
+        backend={"whole": False, "files": ["tests/test_example.py", "tests/test_other.py"]},
+        frontend={"whole": False, "files": ["tests/js/example.test.mjs"]}, build_check=True, not_started=[browser]))
+    assert result.returncode == 0, result.stdout + result.stderr
+    selection, *runners = calls
+    assert selection["tool"] == "check_changed" and selection["args"][:3] == ["--base", "origin/main", "--plan"]
+    assert not Path(selection["args"][3]).exists()
+    assert [(call["tool"], call["args"]) for call in runners] == [
+        ("npm", ["test", "--", "tests/js/example.test.mjs"]), ("npm", ["run", "build:check"]),
+        ("pytest", ["tests/test_example.py", "tests/test_other.py", "-q"]),
+    ]
+    assert all(call["cwd"] == str(root) for call in calls)
+    assert runners[-1]["env"]["UNIT_TEST_MODE"] == "1"
+    assert runners[-1]["env"]["RUN_E2E"] is None and runners[-1]["env"]["E2E_TEST_MODE"] is None
+    said = result.stdout.splitlines()
+    assert "[changed] the plan of this case" in said
+    # Browser tests need the emulator queue: named again after the run, never started.
+    assert said[-2:] == [f"[dev] Not started here: {browser}", "[dev] OK: changed"]
+
+
+def test_changed_runs_whole_suites_when_the_selection_says_so_and_compares_with_another_commit(cli):
+    _, run = cli
+    result, calls = run("changed", base="HEAD~1", plan=plan_of(
+        backend={"whole": True, "files": []}, frontend={"whole": True, "files": []}, build_check=True))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls[0]["args"][:2] == ["--base", "HEAD~1"]
+    assert [(call["tool"], call["args"]) for call in calls[1:]] == [
+        ("npm", ["test"]), ("npm", ["run", "build:check"]), ("pytest", ["tests", "-q"])]
+
+
+def test_changed_with_nothing_selected_runs_nothing_and_needs_no_node(cli):
+    root, run = cli
+    (root / "node_modules/vitest/vitest.mjs").unlink()
+    result, calls = run("changed", plan=plan_of())
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [call["tool"] for call in calls] == ["check_changed"]
+    result, calls = run("changed", plan=plan_of(build_check=True))
+    assert result.returncode == 1 and "npm ci" in result.stderr
+
+
+@pytest.mark.parametrize("failure,code,ran", [
+    ("check_changed", 2, ["check_changed"]),
+    ("npm-test", 23, ["check_changed", "npm"]),
+    ("pytest", 23, ["check_changed", "npm", "pytest"]),
+])
+def test_changed_preserves_failure_and_stops(cli, failure, code, ran):
+    _, run = cli
+    result, calls = run("changed", failure=failure, plan=plan_of(
+        backend={"whole": False, "files": ["tests/test_example.py"]},
+        frontend={"whole": False, "files": ["tests/js/example.test.mjs"]}))
+    assert result.returncode == code, result.stdout + result.stderr
+    assert [call["tool"] for call in calls] == ran
+    assert "[dev] OK" not in result.stdout
+
+
+def test_changed_takes_no_test_path_and_no_path_a_shell_would_read(cli):
+    _, run = cli
+    result, calls = run("changed", test_path="tests/test_example.py", plan=plan_of())
+    assert result.returncode == 1 and "picks the tests itself" in result.stderr
+    assert not calls
+    result, calls = run("changed", plan=plan_of(frontend={"whole": False, "files": ["tests/js/a.test.mjs&calc"]}))
+    assert result.returncode == 1 and "TestPath must use" in result.stderr
+    assert [call["tool"] for call in calls] == ["check_changed"]
 
 
 @pytest.mark.parametrize("failure", ["", "pytest"])
