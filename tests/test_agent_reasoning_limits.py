@@ -157,6 +157,42 @@ def test_the_client_says_once_when_a_tool_call_begins(monkeypatch):
     starts = [i for i, e in enumerate(events) if e.get("kind") == "status" and e.get("id") == "tool_call"]
     deltas = [i for i, e in enumerate(events) if e.get("type") == "delta"]
     assert len(starts) == 1 and starts[0] > deltas[-1] and events[starts[0]]["status"] == "working"
+    # The call is named as it begins, not once it is written: the live line
+    # says the step from here on.
+    assert events[starts[0]]["tool"] == "compare_models"
+
+
+def _call_statuses(events):
+    return [event.get("tool") for event in events if event.get("kind") == "status" and event.get("id") == "tool_call"]
+
+
+def test_the_step_is_named_once_its_arguments_begin_and_only_a_tool_of_the_request(monkeypatch):
+    # OpenAI's shape: the name alone, then the arguments in pieces. The name
+    # is whole once they begin.
+    def call(name, *arguments):
+        return [packet({"tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                                        "function": {"name": name, "arguments": ""}}]}),
+                *[packet({"tool_calls": [{"index": 0, "function": {"arguments": part}}]}) for part in arguments],
+                packet({}, finish="tool_calls", usage={"prompt_tokens": 50, "completion_tokens": 30})]
+    value, events, error = _stream(monkeypatch, call("compare_models", '{"question": ', '"Which?"}'), tools=TOOL)
+    assert error is None and value.tool_calls
+    # Said when the call began (the preamble moves then), named one piece later, never again.
+    assert _call_statuses(events) == [None, "compare_models"]
+    # One entry in the step's activity, updated: a view that joins later reads the name too.
+    assert [item.get("tool") for item in value.activity if item["id"] == "tool_call"] == ["compare_models"]
+    # A name the request did not offer never reaches the page.
+    _, events, _ = _stream(monkeypatch, call("__proto__", '{"question": "Which?"}'), tools=TOOL)
+    assert _call_statuses(events) == [None]
+
+
+def test_a_name_sent_in_pieces_is_named_whole(monkeypatch):
+    value, events, error = _stream(monkeypatch, [
+        packet({"tool_calls": [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "compare"}}]}),
+        packet({"tool_calls": [{"index": 0, "function": {"name": "_models"}}]}),
+        packet({"tool_calls": [{"index": 0, "function": {"arguments": '{"question": "Which?"}'}}]}),
+        packet({}, finish="tool_calls", usage={"prompt_tokens": 50, "completion_tokens": 30})], tools=TOOL)
+    assert error is None and value.tool_calls[0]["function"]["name"] == "compare_models"
+    assert _call_statuses(events) == [None, "compare_models"]
 
 
 def test_a_refusal_reason_after_a_written_answer_keeps_the_answer(monkeypatch):

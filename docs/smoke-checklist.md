@@ -1959,6 +1959,14 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   gedrosseltem Netz (DevTools „Slow 4G“) oder großem Anhang bleibt „Analyzing
   your message…“ stehen, bis das Modell den ersten Schritt zeigt; nie
   „Sending…“ dazwischen.
+- [ ] Eine Frage, die eine Suche braucht: Auf „Analyzing your message…“ folgt
+  „Searching the web…“, sobald das Modell die Suche beginnt, und die Zeile
+  bleibt dieselbe, wenn die Suche läuft (kein zweites Einblenden). Lässt man
+  im Arbeitsplatz eine längere Datei schreiben, steht „Writing a file…“ schon,
+  während der Text der Datei noch entsteht, nicht „Thinking…“.
+- [ ] Direkt nach einem Deploy: Die erste Agent-Nachricht ist nicht merklich
+  langsamer als die zweite; im Render-Log steht kurz nach „Application startup
+  complete“ einmal „Agent warmed seconds=…“ und nie „Agent warm-up failed“.
   Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
   verschwinden die Live-Absätze; ein geöffneter Verlauf bleibt offen, solange er

@@ -36,7 +36,6 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
-import os
 import re
 import threading
 import time
@@ -199,22 +198,14 @@ def object_key(uid, chat_id, turn_id, seq):
     return f"{OBJECT_PREFIX}/{uid}/{chat_id}/{turn_id}/{seq:06d}"
 
 
-_OBJECT_STORES = {}
-_OBJECT_STORES_LOCK = threading.Lock()
-
-
 def _objects():
-    """The private object store, one client per configuration, or None where
-    none is configured."""
-    from app.services.agent_files import PrivateObjects, StorageNotConfigured, _local_dir
-    key = (os.getenv("AGENT_FILES_BUCKET", ""), _local_dir())
-    with _OBJECT_STORES_LOCK:
-        if key not in _OBJECT_STORES:
-            try:
-                _OBJECT_STORES[key] = PrivateObjects()
-            except StorageNotConfigured:
-                _OBJECT_STORES[key] = None
-        return _OBJECT_STORES[key]
+    """The process's private object store (agent_files.shared_objects), or
+    None where none is configured."""
+    from app.services.agent_files import StorageNotConfigured, shared_objects
+    try:
+        return shared_objects()
+    except StorageNotConfigured:
+        return None
 
 
 class WorkLog:

@@ -66,6 +66,12 @@
     // The user's turn (agent_ask.py): the card above the field says what for.
     ask_user: ['Your turn', 'Waiting for you…', 'Asked you'],
   };
+  // A call the model has named and still writes (the "tool_call" status'
+  // `tool`, AgentCompletion._named_call) shows as the step from then on.
+  // Not these: their words say that somebody else acts or waits already.
+  const WRITTEN_UNNAMED = new Set(['ask_user', 'delegate']);
+  const namesStep = name => typeof name === 'string' && Object.prototype.hasOwnProperty.call(tools, name)
+    && !WRITTEN_UNNAMED.has(name);
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
   // Checks the app runs once the answer is written (DelegationLoop._finish_review).
@@ -1799,9 +1805,16 @@
     // connection too: the next line is the model's, a word about the
     // transport after "Analyzing" would read as a step back.
     const opening = running && !events.some(item => ['reasoning', 'progress', 'tool', 'hold'].includes(item.kind));
+    // The step the model has named and still writes: the line says it from
+    // the call's first words, not once its last one is written: else a
+    // search shows a second late, and a file's text reads as thinking until
+    // it is whole. It gives way to the step's own entry once the call runs.
+    const written = running && !activeTool && latest?.status === 'working' && namesStep(latest.tool)
+      && !afterLatest.some(item => item.kind === 'tool') ? { name: latest.tool, status: 'running' } : null;
+    const step = activeTool || written;
     const heading = running && reconnecting ? 'Reconnecting…'
       : asking ? 'Waiting for you' : held ? 'Paused' : waiting ? 'Waiting for available tokens…' : reviewStage
-      || (activeTool ? (calm ? calmStep(activeTool) : stepLabel(activeTool)) : writing ? 'Writing answer…'
+      || (step ? (calm ? calmStep(step) : stepLabel(step)) : writing ? 'Writing answer…'
         : opening ? 'Analyzing your message…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.
@@ -1883,7 +1896,7 @@
         // the mark and its sheen and cross-fades from one to the next.
         const aside = paragraphs.find(item => item.id === 'comparison-highlight' || item.id === 'waiting');
         let thought = '';
-        if (!activeTool && !aside) {
+        if (!step && !aside) {
           for (let index = events.length - 1; index >= 0 && !thought; index -= 1) {
             const item = events[index];
             if (item.kind === 'tool') break;

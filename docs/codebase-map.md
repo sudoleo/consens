@@ -564,6 +564,9 @@ nach Readiness als überwachter Einmal-Task. Alle übrigen nicht abbrechbaren
 Cleanup-/Recovery-Arbeiten starten ebenfalls erst nach Readiness. Ein
 best-effort Einmal-Task räumt abgelaufene Telegram-Link-/Delivery-Metadaten auf und registriert bei
 vollständiger Telegram-Konfiguration den User-Bot-Webhook.
+Jeder Server (auch ein lokaler, nie das E2E-Profil) wärmt außerdem den Agenten
+einmal auf einem eigenen Thread vor (`agent_warmup.warm_later`, siehe „Von
+Senden bis zur ersten Modellanfrage“): ohne Datenbank und ohne Modellaufruf.
 `app/core/background_tasks.py` überwacht alle Lifespan-Tasks, startet abgestürzte
 Loops mit exponentiellem Backoff neu, alarmiert nach drei aufeinanderfolgenden
 Fehlern und hält Start-/Fehler-/letzte Erfolgszeiten für
@@ -5612,7 +5615,8 @@ Toolcall, nimmt `_retract` den Text per Status `retract` mit `clear_response`
 zurück und zeigt seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der
 Zeitleiste (`NOTE_CHARS` = 8000, Zeilen bleiben; auch nie gestreamter kurzer
 Text). Schon gezeigter Text wandert, sobald der Client den Aufruf meldet
-(Status `tool_call` aus `AgentCompletion.stream`, `_move_preamble`); folgen nur
+(Status `tool_call` aus `AgentCompletion.stream`, `_move_preamble`; mit `tool`
+ist er zugleich der Schritt der Live-Zeile, „Ruhige Live-Zeile“); folgen nur
 `SIDE_TOOLS` (`update_memory`, `prepare_watch`, `prepare_settings_change`,
 `update_plan` mit fertigem Plan, `prepare_pull_request`), bleibt der Text die
 Antwort (`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
@@ -6076,6 +6080,42 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
   Tabs zwischen ihrem ersten Read und der Anlage Mail importiert, gelten
   Einwilligung (sonst 422, der Turn wird freigegeben) und das eingeschränkte
   Modell auch hier.
+- **Vorwärmen beim Serverstart (`app/services/agent_warmup.py`).** Was ein Lauf
+  beim ersten Gebrauch aufbaut (die nachgeladenen Module seiner Werkzeuge, den
+  Tokenizer, das Schema jedes Werkzeugs, den OpenRouter-Katalog, den
+  HTTP-Client der Anbieter), zahlte sonst die erste Agent-Nachricht nach jedem
+  Serverstart, zwischen der Anlage ihres Turns und dem Start des Laufs. Prod,
+  eine Woche (2026-11-16 bis 11-23, 51 Turns gegen die Startzeiten im
+  Render-Log): Turn angelegt → Schritt reserviert 0,64–1,06 s bei jeder ersten
+  Nachricht nach einem Deploy oder dem nächtlichen Neustart (14 von 14 ohne
+  Datei), bei späteren 0,11–0,42 s (p50 0,16); dazu der HTTP-Client in der
+  ersten Anfrage selbst. Weil auf einen Deploy meist gleich ein Test folgt,
+  traf es fast jede erste Nachricht des Betreibers. `warm()` baut einmal, was
+  die Route für die erste Nachricht eines neuen Chats baut
+  (`message_run`: `AgentRunStore.messages` mit leerer Verlaufsseite, dann
+  `DelegationLoop` mit Standardmodell, Standard-Prüfern und den Einstellungen
+  aus dem Code, dazu die Werkzeuge des Arbeitsplatzes), und startet nichts
+  davon: kein Konto, `AgentRunStore(None)`, kein Schlüssel, der Arbeitsplatz
+  bleibt zu (ein offener weckt seinen Browser, `VMTools.prewarm`). Im frischen
+  Prozess gemessen: der erste Aufbau 1,1 s kalt, 4 ms nach `warm()`. Ein
+  Fehler wird nur geloggt („Agent warm-up failed“), der Erfolg mit seiner Dauer
+  („Agent warmed seconds=…“). Wer der Route oder dem Konstruktor etwas
+  hinzufügt, das beim ersten Gebrauch lädt, bekommt es über `message_run` mit;
+  was die Route selbst nachlädt, steht in `warm()`. Tests:
+  `tests/test_agent_warmup.py`, `tests/test_background_task_supervision.py`.
+- **Ein Bucket-Client je Prozess (`agent_files.shared_objects`, seit
+  2026-11-23).** Nachrichten mit Datei brauchten in derselben Messung rund
+  0,6 s länger bis zum ersten Schritt (3 von 3, auch wenn sie nicht die erste
+  nach einem Start waren): `AgentFiles` legte je Nachricht einen eigenen
+  `PrivateObjects` an, und ein neuer Bucket-Client meldet sich mit seinem
+  ersten Aufruf bei Google an und öffnet seine Verbindung. Gegen den Bucket
+  gemessen: erster Download auf einem neuen Client 1,2 s, auf einem benutzten
+  45 ms. Jetzt teilen sich alle `AgentFiles` ohne eigenes `objects` und das
+  Work-Log einen Speicher je Konfiguration (Bucket-Name, lokaler Ordner);
+  davon hat auch jeder Upload etwas, der vor dem Senden auf denselben Weg
+  wartete. Wo kein Speicher eingerichtet ist, wirft `shared_objects` jedes Mal
+  `StorageNotConfigured` und merkt sich nichts. Test:
+  `test_every_message_shares_one_bucket_client_per_configuration`.
 - Den Anteil der Prüfer am Kontingent (`ComparisonTools._output_shares`)
   rechnet der erste startende Prüfer auf seinem Thread
   (`AnswerAudit.output_share`), nicht `follow` vor dem ersten Schritt, aus dem
@@ -6593,7 +6633,18 @@ nicht zu zeigen. Auch bei langsamer Verbindung oder großem Anhang bleibt es
 dabei: Ein „Sending…“ nach drei Sekunden ohne Server-Antwort gab es kurz und
 ist wieder weg (Max 2026-11-11: „Analysiere deiner Nachricht springt zu wird
 gesendet. Das ergibt keinen Sinn“); die nächste Zeile nach „Analyzing“ ist ein
-Schritt des Modells. Das Zeichen
+Schritt des Modells. **Der Schritt steht, sobald das Modell ihn benennt**
+(seit 2026-11-23): Der Status `tool_call` aus `AgentCompletion.stream` trägt
+`tool`, den Namen des ersten Aufrufs, sobald dessen Argumente beginnen
+(`_named_call`: dann ist der Name ganz, auch wenn ein Anbieter ihn in Stücken
+schickt; nur ein Werkzeug, das die Anfrage anbot). `renderActivity` zeigt ihn
+wie einen laufenden Schritt (`written`, in den Worten von
+`calmStep`/`stepLabel`), bis dessen eigener Eintrag kommt: dieselbe Zeile, kein
+zweites Erscheinen. Vorher stand „Analyzing“ bzw. „Thinking…“, bis der Aufruf
+fertig geschrieben war (Prod, erster Schritt: erstes Token → Ende des Aufrufs
+p50 1,0 s bei GPT-6.1 Terra, 0,3 s bei Muse Ember; beim Text einer Datei die
+ganze Schreibzeit). Nicht `ask_user` und `delegate` (`WRITTEN_UNNAMED`): Ihre
+Worte sagen, dass schon jemand wartet oder arbeitet. Das Zeichen
 atmet im Takt (`activity-dot-breathe`, wie der Punkt des laufenden Schritts im
 geöffneten Verlauf), weil bis zum ersten Wort des Modells (gemessen 0,7–2,3 s
 p50 je Modell, dazu rund 0,4 s Vorlauf) sonst nur das Wort stand und der
@@ -11237,6 +11288,7 @@ app/services/
   agent_quota.py             Gemeinsames UTC-Tageskonto in Mikro-Euro (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
   agent_background.py        Agent-Turns auf eigenem Thread statt an der Verbindung (start/stop per Request oder Turn, Stop-vor-Start-Marke, Drain bei SIGTERM, run_loop für Entscheidungen im Prozess)
   agent_live.py              Prozesslokale Frames je laufendem Turn (SSE-Tail für POST /agent, JSON für /live, reset bei Fensterverlust)
+  agent_warmup.py            Vorwärmen beim Serverstart: baut einmal den Lauf einer ersten Nachricht (Module, Tokenizer, Werkzeug-Schemas, Katalog, HTTP-Client), ohne Datenbank und Modellaufruf
   agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade

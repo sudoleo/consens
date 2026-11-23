@@ -138,7 +138,8 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   Aufrufe haben, und `vm_write_file` trägt bis 100.000 Zeichen als Argument
   (im `step`-Eintrag ganz); 200 Schritte mit je vier vollen Schreibaufrufen
   kämen auf über 80 Mio. Zeichen.
-- Große Inhalte: `PrivateObjects` aus `agent_files.py` (privater Bucket, lokal
+- Große Inhalte: `PrivateObjects` aus `agent_files.py` (der eine Speicher des
+  Prozesses, `shared_objects`, den auch die Dateien der Chats nutzen; privater Bucket, lokal
   ein Ordner, ein Client je Konfiguration), Schlüssel
   `work-log/{uid}/{chat}/{turn}/{seq}`.
 - Löschen: `chat_store._delete_chat_tree` ruft je Turn

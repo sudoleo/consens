@@ -797,6 +797,8 @@ class AgentCompletion:
         # one continues it) and the fragments that named no call of ours.
         self._tool_last = None
         self.skipped_tool_parts = 0
+        # The tool the "tool_call" status last named (_named_call).
+        self._named = None
         self._raw_usage = {}
         self._final_usage_fields = set()
         self.tool_argument_limit = 2048
@@ -1027,6 +1029,20 @@ class AgentCompletion:
                 if room > 0:
                     output[key] += fragment[:room]
 
+    def _named_call(self, offered):
+        """The tool of the step's first call while the model still writes it,
+        for the live line: a long call (a file's text, a long command) else
+        shows nothing of the step until its last character. Known once its
+        arguments begin: a provider may send the name in pieces, and it is
+        whole by then. None before that and for a name the request did not
+        offer."""
+        for index in sorted(self._tool_parts):
+            if index in self._over_limit:
+                continue
+            function = self._tool_parts[index]["function"]
+            return function["name"] if function["arguments"] and function["name"] in offered else None
+        return None
+
     def _completed_tool_calls(self):
         """The step's calls in stream order, each with an id a provider takes
         back (letters, digits, _ and -): an id with other characters, too
@@ -1253,6 +1269,8 @@ class AgentCompletion:
                 payload["parallel_tool_calls"] = bool(self.parallel_tool_calls)
         if native_searches:
             payload["max_tool_calls"] = native_searches
+        offered = {tool["function"]["name"] for tool in tools or []
+                   if tool.get("type") == "function" and isinstance(tool.get("function"), dict)}
         # Cached for the requests that read the prompt again: the chat model's
         # next steps and message, a worker's next step or retry, and the search
         # rounds inside this request (2026-10-21: 21 of 49 Claude comparison
@@ -1362,10 +1380,14 @@ class AgentCompletion:
                             if allow_tool_calls:
                                 calling = bool(self._tool_parts)
                                 self._tool_delta(delta["tool_calls"])
-                                if self._tool_parts and not calling:
+                                named = self._named_call(offered)
+                                if (self._tool_parts and not calling) or named != self._named:
+                                    self._named = named
                                     # Text before it is no answer: the loop
                                     # moves it into the timeline (_move_preamble).
-                                    yield self.event("status", "tool_call", status="working")
+                                    # ``tool``: the step the live line names from here on.
+                                    yield self.event("status", "tool_call", status="working",
+                                                     **({"tool": named} if named else {}))
                             else:
                                 # A step that may only write (tool_choice none) and
                                 # calls anyway: the call is not run; its text stands.

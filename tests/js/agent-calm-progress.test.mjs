@@ -147,6 +147,55 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
+  it("names the step from the moment the model names it, while it still writes the call", () => {
+    const { activity, events, render, status, wait, host } = setup();
+    const calling = fields => ({ version: 1, kind: "status", step_id: "completion:0", id: "completion:0/tool_call",
+      status: "working", ...fields });
+    render();
+    wait(1500);
+    // A call began, its tool not known yet: nothing of the model to show.
+    activity.receive(events, calling());
+    render();
+    expect(status()).toBe("Analyzing your message…");
+    // Named: the line is the step, in the words it has once it runs.
+    activity.receive(events, calling({ tool: "web_search" }));
+    render();
+    expect(status()).toBe("Searching the web…");
+    // The call runs: the same line, no second arrival.
+    wait(1300);
+    activity.receive(events, tool({ id: "completion:0:call_1/tool", name: "web_search", status: "running" }));
+    render();
+    expect(status()).toBe("Searching the web…");
+    // It ended: the named call is over too, the pause is the model's.
+    activity.receive(events, tool({ id: "completion:0:call_1/tool", name: "web_search", status: "succeeded" }));
+    render();
+    expect(status()).toBe("Thinking…");
+    activity.dispose(host);
+  });
+
+  it("names a written call over an earlier thought, and never one whose words say that somebody else acts", () => {
+    const { activity, events, render, status, wait, host } = setup();
+    const calling = name => ({ version: 1, kind: "status", step_id: "completion:0", id: "completion:0/tool_call",
+      status: "working", tool: name });
+    activity.receive(events, { version: 1, step_id: "completion:0", kind: "reasoning", id: "r1", format: "summary",
+      text: "**Checking the assumptions**", append: true });
+    render();
+    expect(status()).toBe("Checking the assumptions");
+    // The user's turn and a helper show once they are there, not while their
+    // call is written; a name the page does not know is no step either.
+    for (const name of ["ask_user", "delegate", "constructor", "made_up"]) {
+      activity.receive(events, calling(name));
+      render();
+      wait(4100);
+      expect(status()).toBe("Checking the assumptions");
+    }
+    // A file's text streams for seconds: the line says so, like a running step.
+    activity.receive(events, calling("vm_write_file"));
+    render();
+    expect(status()).toBe("Writing a file…");
+    activity.dispose(host);
+  });
+
   it("holds a line a while: a step that comes and goes at once never flashes", () => {
     const { activity, events, render, status, wait, host } = setup();
     render();

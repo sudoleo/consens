@@ -155,6 +155,26 @@ class PrivateObjects:
             pass
 
 
+_SHARED_OBJECTS = {}
+_SHARED_OBJECTS_LOCK = threading.Lock()
+
+
+def shared_objects():
+    """This process's private object store, one per configuration.
+
+    A bucket client signs in to Google and opens its connection with its
+    first call. One per message made every message with a file wait for that
+    before its first step, and every upload before it was stored (the first
+    download on a new client took 1.2 s against the bucket, 45 ms on one in
+    use). Raises StorageNotConfigured where none is configured, every time:
+    nothing is kept then."""
+    key = (os.getenv("AGENT_FILES_BUCKET", ""), _local_dir())
+    with _SHARED_OBJECTS_LOCK:
+        if key not in _SHARED_OBJECTS:
+            _SHARED_OBJECTS[key] = PrivateObjects()
+        return _SHARED_OBJECTS[key]
+
+
 def extract_isolated(raw, mime):
     # Shared with regular consensus attachments (llm.attachments), so both
     # paths parse untrusted files under the same process/CPU/memory budget.
@@ -256,7 +276,7 @@ class AgentFiles:
     @property
     def objects(self):
         if self._objects is None:
-            self._objects = PrivateObjects()
+            self._objects = shared_objects()
         return self._objects
 
     def ref(self, uid, chat_id, file_id):

@@ -541,6 +541,43 @@ def test_hosted_bucket_uses_the_admin_key_file_without_adc(tmp_path, monkeypatch
     assert made == (['adc'] if explicit_adc else [FIREBASE_ADMIN_KEY_FILE])
 
 
+def test_every_message_shares_one_bucket_client_per_configuration(tmp_path, monkeypatch):
+    # A client of its own per message signed in to Google and opened a
+    # connection before its first download or upload (about a second).
+    from google.cloud import storage
+    from app.services import agent_files as module
+    _local_machine(monkeypatch, tmp_path)
+    monkeypatch.setenv('RENDER_SERVICE_NAME', 'consens')
+    monkeypatch.setattr(module, '_SHARED_OBJECTS', {})
+    made = []
+
+    class FakeClient:
+        def __init__(self):
+            made.append(self)
+
+        def bucket(self, name):
+            return (self, name)
+
+    monkeypatch.setattr(storage, 'Client', FakeClient)
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', str(tmp_path / 'adc.json'))
+    # Not configured: said every time, nothing kept.
+    for _ in range(2):
+        with pytest.raises(module.StorageNotConfigured):
+            module.AgentFiles(None).objects
+    assert module._SHARED_OBJECTS == {} and made == []
+    monkeypatch.setenv('AGENT_FILES_BUCKET', 'private-bucket')
+    first, second = module.AgentFiles(None), module.AgentFiles(None)
+    assert first.objects is second.objects and len(made) == 1
+    # The work log's long contents go through the same client.
+    from app.services import agent_work_log
+    assert agent_work_log._objects() is first.objects
+    # Another bucket is another store; a store handed in stays the caller's.
+    monkeypatch.setenv('AGENT_FILES_BUCKET', 'other-bucket')
+    assert module.AgentFiles(None).objects is not first.objects and len(made) == 2
+    own = object()
+    assert module.AgentFiles(None, objects=own).objects is own
+
+
 @pytest.mark.parametrize("tier,status", [("free", 200), ("plus", 200), ("pro", 200)])
 def test_uploads_are_open_to_every_tier_while_reading_stays_open(setup, monkeypatch, tier, status):
     from fastapi import FastAPI

@@ -370,6 +370,18 @@ def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser,
           format:'summary', text:'Checking the assumptions.', append:true})""")
         expect(status).to_have_text("Thinking…")
         expect(page.locator("#agentAnswerActivity .agent-progress > *")).to_have_count(1)
+        # The model names its step and still writes the call: the line is the
+        # step from here on, and stays the same line once the call runs.
+        page.evaluate("""() => __emitAgent({version:1, step_id:'completion:0', kind:'status',
+          id:'completion:0/tool_call', status:'working', tool:'web_search'})""")
+        expect(status).to_have_text("Searching the web…")
+        page.evaluate("() => { window.__line = document.querySelector('#agentAnswerActivity .agent-current-status'); }")
+        page.evaluate("""() => __emitAgent({version:1, step_id:'completion:0:call_1', kind:'tool',
+          id:'completion:0:call_1/tool', name:'web_search', status:'running'})""")
+        page.wait_for_timeout(400)
+        expect(status).to_have_text("Searching the web…")
+        expect(page.locator("#agentAnswerActivity .agent-progress > *")).to_have_count(1)
+        assert page.evaluate("() => window.__line === document.querySelector('#agentAnswerActivity .agent-current-status')")
         assert not errors
     finally:
         context.close()

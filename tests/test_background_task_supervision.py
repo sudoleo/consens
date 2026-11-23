@@ -268,12 +268,17 @@ def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
     stub = SimpleNamespace(retry_loop=idle)
     monkeypatch.setattr(main, "FirestoreApiAccountCleanup", lambda _db: stub)
     monkeypatch.setattr(main, "FirestoreAccountDeletion", lambda _db: stub)
+    warmed = []
+    monkeypatch.setattr(main.agent_warmup, "warm_later", lambda: warmed.append(1))
 
     async def exercise():
         async with main.lifespan(main.app):
             pass
 
     asyncio.run(exercise())
+    # Neither a writer nor a reader of the database: every server warms the
+    # Agent once (agent_warmup.py), also a local one.
+    assert warmed == [1]
     assert set(gated) == {
         "consensus-watch-scheduler",
         "topic-scheduler",
@@ -336,6 +341,7 @@ def test_e2e_profile_starts_no_lifespan_task(monkeypatch):
     monkeypatch.setattr(main, "apply_worker_thread_budget", lambda: 1)
     monkeypatch.setattr(main, "_scheduler_task", record)
     monkeypatch.setattr(main, "_supervised_task", record)
+    monkeypatch.setattr(main.agent_warmup, "warm_later", lambda: started.append("agent-warm-up"))
 
     async def exercise():
         async with main.lifespan(main.app):

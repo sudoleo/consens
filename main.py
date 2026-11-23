@@ -51,6 +51,7 @@ from app.core.notice_page import notice_page
 from app.core.rate_limit import (
     RATE_LIMITED_CODE, limiter, rate_limit_message, retry_after_seconds,
 )
+from app.services import agent_warmup
 from app.services.agent_background import agent_background
 
 from app.api.routers import (
@@ -208,6 +209,9 @@ async def lifespan(app: FastAPI):
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
     account_deletion = FirestoreAccountDeletion(db_firestore)
     _load_startup_configuration()
+    # Else the first Agent message after every start builds all of it itself,
+    # between its turn and its first model request. No database, no model call.
+    agent_warmup.warm_later()
     # Writes the local code's normalized defaults into app_config/models,
     # which every live process then adopts through the sync loop below.
     model_config_backfill_task = _scheduler_task(
