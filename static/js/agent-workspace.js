@@ -73,6 +73,22 @@
   // An HTML file of the agent's that needs nothing from outside itself runs
   // under the answer as a page (agent_vm_tools.share, app/core/html_page.py).
   const isPage = file => file.page === 'html' && file.kind === 'vm_file';
+  // A page's place follows the height the page says its content has
+  // (pageCard). While it settles, after it loaded or its width changed, it
+  // may say so a few times (a font, a chart drawn late). A page laid out
+  // against its frame's height answers every height with another: past
+  // PAGE_SETTLE_MOVES it keeps the place every page starts in. Each height
+  // it takes keeps it settling for PAGE_ANSWER_MS more, so such a page is
+  // found out on a slow device too, where its answers take their time.
+  const PAGE_SETTLE_MS = 2000, PAGE_SETTLE_MOVES = 5, PAGE_ANSWER_MS = 1000;
+  // The heights pages arrived at in this browser, { fileId: [width, height] },
+  // 0 for one that keeps the starting place: a chat opened again gives a
+  // page its place before it loads, so nothing under it moves when it does.
+  // Only the height a page arrives at is kept, not one the user gave it by
+  // using it: it loads as it was shared. pageHeightsNow: the same for this
+  // visit, where a temporary chat's stay (it leaves nothing in the browser).
+  const PAGE_HEIGHTS_KEY = 'agentPageHeights', PAGE_HEIGHTS_KEPT = 60, PAGE_WIDTH_SLACK = 24;
+  const pageHeightsNow = new Map();
   const openState = { versions: new Set() };
   let confirmKey = '';
 
@@ -832,13 +848,52 @@
     frame.setAttribute('aria-label', name);
     return frame;
   }
-  // A page the agent shared, running under the answer. Its place has its
-  // size before anything loads (agent-workspace.css): the app cannot look
-  // into the page to measure it, so a longer page scrolls inside. It loads
-  // once it comes near the screen; its name, a larger view (the viewer's
-  // stage, attachments.js), its download and its removal sit in the line
-  // under it. { figure, sync }: sync opens or closes the removal question
-  // without touching the frame.
+  function pageHeights() {
+    try {
+      const kept = JSON.parse(localStorage.getItem(PAGE_HEIGHTS_KEY) || '{}');
+      return kept && typeof kept === 'object' && !Array.isArray(kept) ? kept : {};
+    } catch { return {}; }
+  }
+  function keepPageHeight(chatId, id, width, height) {
+    const entry = [Math.round(width), Math.round(height)];
+    pageHeightsNow.set(id, entry);
+    if (App.temporaryChat?.token?.(chatId)) return;
+    try {
+      const kept = pageHeights();
+      delete kept[id];
+      kept[id] = entry;
+      const ids = Object.keys(kept);
+      for (const old of ids.slice(0, Math.max(0, ids.length - PAGE_HEIGHTS_KEPT))) delete kept[old];
+      localStorage.setItem(PAGE_HEIGHTS_KEY, JSON.stringify(kept));
+    } catch { /* No storage: the page finds its height again on every visit. */ }
+  }
+  // A page says how tall its content is (app/core/html_page.py _FIT). The
+  // word of a page is not trusted: only the document inside one of this
+  // module's page frames is heard, only for a number, and what the number
+  // may do is the card's to decide (pageCard fit).
+  window.addEventListener('message', event => {
+    const height = event.data?.consensPage?.height;
+    if (typeof height !== 'number' || !Number.isFinite(height) || !(height > 0)) return;
+    let around = null;
+    try { around = event.source?.parent; } catch { return; }
+    if (!around || around === window) return;
+    for (const frame of document.querySelectorAll('iframe.agent-page-frame')) {
+      if (frame.contentWindow === around) { frame._fitPage?.(height); return; }
+    }
+  });
+  // The focus going into a page: the window loses it to the page's frame.
+  window.addEventListener('blur', () => setTimeout(() => {
+    const frame = document.activeElement;
+    if (frame?.classList?.contains('agent-page-frame')) frame._pageArrived?.();
+  }, 0));
+  // A page the agent shared, running under the answer. Its place has a size
+  // before anything loads (agent-workspace.css) and then the height the page
+  // says its content has, within the stylesheet's bounds: the page stands in
+  // the answer whole, and only one longer than the bound scrolls inside. It
+  // loads once it comes near the screen; its name, a larger view (the
+  // viewer's stage, attachments.js), its download and its removal sit in the
+  // line under it. { figure, sync }: sync opens or closes the removal
+  // question without touching the frame.
   function pageCard(chatId, file, scope) {
     const key = `${scope}:file:${file.id}`;
     const figure = node('figure', 'agent-page'); figure.dataset.filesKey = key;
@@ -847,6 +902,56 @@
     const frame = pageFrame(file.name, 'agent-page-frame');
     stage.append(frame);
     let until = 0, loads = 0;
+    // fitted: the height the place has from the page, 0 for the starting
+    // place. bound: the page keeps the starting place. later: a height the
+    // page said while it was not its turn to move anything.
+    let fitted = 0, bound = false, moves = 0, settled = Infinity, later = 0, width = 0;
+    const place = height => {
+      fitted = height;
+      stage.classList.toggle('is-fitted', height > 0);
+      if (height) stage.style.setProperty('--agent-page-height', `${height}px`);
+      else stage.style.removeProperty('--agent-page-height');
+    };
+    // What is under the page moves with its height. That is the page
+    // arriving while it settles, and the user's own doing while they are in
+    // it (the pointer over it, or the focus inside): a tab that shows more, a
+    // slider that adds rows. A page that changes by itself later waits until
+    // the user comes to it, so a chat being read does not move.
+    const withUser = () => frame.matches(':hover') || document.activeElement === frame;
+    const fit = (height, here = withUser()) => {
+      if (bound) return;
+      const next = Math.round(height);
+      later = 0;
+      if (Math.abs(next - fitted) < 2) return;
+      if (Date.now() < settled) {
+        if (++moves > PAGE_SETTLE_MOVES) {
+          bound = true; place(0); keepPageHeight(chatId, file.id, stage.clientWidth, 0);
+          return;
+        }
+        keepPageHeight(chatId, file.id, stage.clientWidth, next);
+        if (settled !== Infinity) settled = Math.max(settled, Date.now() + PAGE_ANSWER_MS);
+      } else if (!here) { later = next; return; }
+      place(next);
+    };
+    frame._fitPage = height => fit(height);
+    frame._pageArrived = () => { if (later) fit(later, true); };
+    frame.addEventListener('pointerenter', frame._pageArrived);
+    // Its place gets a width when it enters the chat: there the page stands
+    // at the height this browser last gave it at that width, before the
+    // first frame is drawn. A width that changes later (the window, the
+    // sidebar, a phone turned) lets the page settle anew.
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => {
+        const now = stage.clientWidth;
+        if (!now || Math.abs(now - width) < 2) return;
+        const first = !width;
+        width = now;
+        if (!first) { if (settled !== Infinity) { settled = Date.now() + PAGE_SETTLE_MS; moves = 0; } return; }
+        const known = pageHeightsNow.get(file.id) || pageHeights()[file.id];
+        if (fitted || !Array.isArray(known) || !(Math.abs(known[0] - now) <= PAGE_WIDTH_SLACK)) return;
+        if (known[1] > 0) place(Math.round(known[1])); else if (known[1] === 0) bound = true;
+      }).observe(stage);
+    }
     // One that cannot come says so in its place, with the way to try again.
     const failed = () => {
       stage.classList.remove('is-loading');
@@ -867,13 +972,14 @@
     const reload = () => {
       stage.querySelector('.agent-page-failed')?.remove();
       stage.classList.remove('is-failed'); stage.classList.add('is-loading');
-      loads = 0;
+      loads = 0; bound = false; moves = 0; settled = Infinity;
       load();
     };
     frame.addEventListener('load', () => {
       // An empty frame reports a load of its own when it enters the page.
       if (!frame.getAttribute('src')) return;
       stage.classList.remove('is-loading');
+      if (settled === Infinity) settled = Date.now() + PAGE_SETTLE_MS;
       // The frame loads again when its answer moves in the page (the live
       // answer joining the history). Past its address's time that load
       // found nothing: it gets a new address.

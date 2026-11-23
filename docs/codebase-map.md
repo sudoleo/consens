@@ -14186,12 +14186,15 @@ geteilt wird eine Seite nicht.
 - **`agent_vm_tools.share`:** legt `page: "html"` am Dateidatensatz ab (kein
   Office-Preview für HTML); `public_file` gibt es dem Browser, nie dem Modell.
   Ergebnis `shown_as: "page"` mit `PAGE_NOTE`, sonst `shown_as: "download"`
-  mit `PAGE_REFUSED_NOTE` und dem Grund. Dieselbe HTML-Datei (derselbe Pfad)
+  mit `PAGE_REFUSED_NOTE` und dem Grund. `PAGE_NOTE` nennt den Ort (unter dem
+  Text der Antwort): Der Agent teilt, bevor er schreibt, und Muse Ember
+  schrieb ohne diese Angabe „oben im Chat“. Dieselbe HTML-Datei (derselbe Pfad)
   noch einmal in derselben Nachricht geteilt ersetzt ihre frühere Fassung
   (`_replace_page` löscht sie): Unter der Antwort steht die Seite einmal, wie
   sie jetzt ist, nicht eine je Versuch. Die Werkzeug-Beschreibung und ein
   Faktsatz in `AGENT_VM_PROMPT` sagen es dem Agenten, samt der Größe des
-  Platzes (bis etwa 700 px breit, 420 bis 600 px hoch): Er baut für einen
+  Platzes (bis etwa 700 px breit, so hoch wie der Inhalt, 120 bis 3000 px;
+  ein an die Fensterhöhe gebundenes Layout 420 bis 600 px): Er baut für einen
   Rahmen, den er nicht sieht, und `tests/test_agent_pages.py` hält die Zahlen
   mit dem CSS zusammen. `AGENT_WORKSPACE_CLOSED_PROMPT` nennt die Seite unter
   dem, wofür der Arbeitsplatz da ist; sonst erführe ein Agent mit
@@ -14234,13 +14237,30 @@ geteilt wird eine Seite nicht.
   Rahmen gehen darf, bestimmt die Seite um ihn, und dieses Dokument erlaubt
   keine Rahmenadresse: Die Seite bleibt die Datei. Weißes Blatt
   (`color-scheme: light`): Eine Seite ohne eigenes Aussehen steht in beiden
-  Themen schwarz auf weiß. Hinter dem Text der Datei stehen ein paar Zeilen
+  Themen schwarz auf weiß. Eine Seite, die `color-scheme: light dark` erklärt
+  oder `prefers-color-scheme` abfragt, folgt der Einstellung des Geräts, nicht
+  dem Thema der App: Chromium reicht das `color-scheme` eines Rahmens nicht
+  als `prefers-color-scheme` in sein Dokument (Probe 23.11.2026). Hinter dem
+  Text der Datei stehen ein paar Zeilen
   Skript (`_STAY`): Ein Klick auf einen Link zu einem anderen Dokument tut
   nichts, statt den Rahmen leer zu lassen; ein Link innerhalb der Seite
   (`#…`) geht über `location.hash` dorthin (im Rahmen löst der Browser `#end`
   gegen die Adresse des Dokuments darum auf), und die eigenen Handler der
   Seite arbeiten wie geschrieben. Das ist Komfort
-  für den Leser, kein Teil des Schutzes.
+  für den Leser, kein Teil des Schutzes. Dahinter `_FIT`: Die Seite sagt dem
+  Fenster um sie, wie hoch ihr Inhalt ist (`top.postMessage({consensPage:
+  {height}}, '*')`), weil der Chat nicht in sie sehen kann. Zwei Maße: `box`,
+  die Höhe des `<html>`-Kastens, also was der Fluss der Seite braucht und das
+  einzige Maß, das kleiner als der Rahmen sein kann; `full`
+  (`scrollHeight`) reicht bis zu dem, was außerhalb des Flusses liegt, ist
+  aber nie kleiner als der Rahmen. Wuchs die Seite wegen `full`, bleibt sie
+  dort, bis sich ihr Fluss ändert, sonst nähme das kleinere `box` die Höhe
+  zurück und beide wechselten sich endlos ab. Gemessen wird sofort und bei
+  `load` (nicht über `requestAnimationFrame`: Für eine Seite, die noch nicht
+  auf dem Bildschirm ist, zeichnet der Browser keine Frames, und die Höhe
+  soll vorher da sein), danach über `ResizeObserver`, `resize` und Klicks.
+  Auch das ist Komfort: Die Zahl einer Seite gilt nur in den Grenzen des
+  Chats (unten „Im Browser“).
 - **Keine andere Route liefert eine Datei des Chats als Dokument:**
   `download_file` gibt HTML, XHTML, SVG und XML als
   `application/octet-stream` mit `Content-Disposition: attachment` aus
@@ -14253,12 +14273,40 @@ geteilt wird eine Seite nicht.
   Löschfrage öffnet in der Figur (`sync`). `pageCard`: `<iframe
   sandbox="allow-scripts" referrerpolicy="no-referrer">` mit dem Dateinamen
   als `aria-label` (kein `title`: den zeichnet `tooltip.js` als Tooltip, der
-  über der benutzten Seite läge) in `.agent-page-stage`, deren Platz von
-  Anfang an feststeht
-  (Breite der Antwort, 16:10, mindestens 420 px, höchstens 600 px; die App
-  kann nicht in die Seite sehen, eine längere scrollt innen), bis zum Laden
-  im Skelett-Ton. `pageAddress` holt die Adresse erst, wenn der Platz in
-  Sichtnähe kommt (`whenNear`), nimmt nur `/agent/pages/…` an und merkt sich
+  über der benutzten Seite läge) in `.agent-page-stage`, deren Platz mit
+  dem Startmaß beginnt (Breite der Antwort, 16:10, mindestens 420 px,
+  höchstens 600 px), bis zum Laden im Skelett-Ton. **Die Höhe folgt dem
+  Inhalt:** Die Seite meldet ihre Inhaltshöhe (`_FIT`), `fit` in `pageCard`
+  gibt dem Platz diese Höhe (`.is-fitted`, `--agent-page-height`, im CSS auf
+  120 bis 3000 px begrenzt). So steht die Seite ganz in der Antwort, ohne
+  zweite Scrollleiste im Chat und ohne leeres Blatt unter wenig Inhalt; nur
+  eine längere scrollt innen. Gehört
+  wird nur das Dokument im Rahmen einer Seite dieses Moduls
+  (`event.source.parent === frame.contentWindow`) und nur eine positive
+  Zahl. Was unter der Seite steht, bewegt sich mit ihrer Höhe, darum drei
+  Regeln. (1) Solange sie ankommt, bis `PAGE_SETTLE_MS` (2 s) nach dem Laden
+  oder nach einer Breitenänderung, darf sie die Höhe bis zu
+  `PAGE_SETTLE_MOVES`-mal (5) nennen (eine Schrift, ein spät gezeichnetes
+  Diagramm). (2) Nennt sie darüber hinaus weiter andere, ist ihr Layout an
+  die Fensterhöhe gebunden (`min-height: 100vh` mit Inhalt darunter wächst
+  mit jeder Höhe, die der Rahmen bekommt): Sie behält das Startmaß und
+  scrollt innen wie in einem Fenster. Jede übernommene Höhe hält das Ankommen
+  `PAGE_ANSWER_MS` (1 s) länger offen, damit eine solche Seite auch auf einem
+  langsamen Gerät erkannt wird. (3) Danach folgt der Platz nur,
+  solange der Nutzer in der Seite ist (Zeiger darüber oder Fokus darin: ein
+  Umschalter, der mehr zeigt, ein Regler, der Zeilen ergänzt). Ändert sich
+  die Seite von selbst, wartet die Höhe (`later`), bis er zu ihr kommt
+  (`pointerenter`, oder das Fenster verliert den Fokus an den Rahmen), damit
+  ein Chat beim Lesen nicht springt. Die Höhe, mit der eine Seite ankam,
+  merkt sich der Browser je Datei mit der Breite (`localStorage`
+  `agentPageHeights`, die letzten 60, Höhe 0 für „behält das Startmaß“),
+  nicht eine, die erst das Bedienen ergab: Sie lädt, wie sie geteilt wurde.
+  Für einen temporären Chat nur für diesen Besuch (`pageHeightsNow`), er
+  hinterlässt nichts im Browser. Wieder geöffnet steht die Seite bei
+  gleicher Breite (± `PAGE_WIDTH_SLACK`) schon vor dem Laden in ihrer Höhe,
+  gelesen im ersten `ResizeObserver`-Aufruf des Platzes, also vor dem ersten
+  Bild. „Reload page“ lässt sie neu ankommen. `pageAddress` holt die Adresse
+  erst, wenn der Platz in Sichtnähe kommt (`whenNear`), nimmt nur `/agent/pages/…` an und merkt sich
   ihre Zeit: Lädt der Rahmen später noch einmal (die Live-Antwort rückt beim
   Follow-up in den Verlauf, `liveTurn.take`), bekommt er nach Ablauf eine
   neue. Scheitert es, steht „Page couldn’t load · Retry“ im Platz, der
@@ -14282,9 +14330,12 @@ geteilt wird eine Seite nicht.
   `tests/e2e/test_agent_page_sandbox.py` (echte Route und Middleware im
   Browser: Eine Seite, die Elternseite, Speicher, Cookies und jeden Netzweg
   versucht, erreicht nichts, auch direkt geöffnet; Tastatur hinein und
-  heraus), `tests/e2e/test_agent_page_frontend.py` (Platz springt nicht,
-  Bedienung, Bühne, Download, nach Neuladen wieder; die laufende App
-  antwortet unter dem Pfad mit der Sandbox).
+  heraus; die Seite sagt dem Fenster um sie nur ihre Höhe),
+  `tests/e2e/test_agent_page_frontend.py` (Platz so hoch wie der Inhalt und
+  wächst unter der Hand des Nutzers, wieder geöffnet vor dem Laden in dieser
+  Höhe, an die Fensterhöhe gebunden bleibt im Startmaß, eine Änderung von
+  selbst wartet auf den Nutzer, Bedienung, Bühne, Download, nach Neuladen
+  wieder; die laufende App antwortet unter dem Pfad mit der Sandbox).
 
 ## Agent-Laufoberfläche: Rendering, Aktivität, Composer (2026-09-30)
 

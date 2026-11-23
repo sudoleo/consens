@@ -176,8 +176,10 @@ def test_the_document_holds_the_file_as_text_of_one_attribute():
     frame = Frame()
     frame.feed(body)
     assert frame.title == 'a"><script>alert(1)</script>.html'
-    # After it, the few lines that keep a click on a link from emptying the frame.
-    assert frame.srcdoc == hostile + '\n' + html_page._STAY and "preventDefault" in html_page._STAY
+    # After it, the few lines that keep a click on a link from emptying the
+    # frame, and the ones that tell the chat how tall the page is.
+    assert frame.srcdoc == hostile + '\n' + html_page._STAY + html_page._FIT
+    assert "preventDefault" in html_page._STAY and "consensPage:{height:h}" in html_page._FIT
 
 
 def test_the_prompt_names_the_place_the_app_gives_a_page():
@@ -188,10 +190,15 @@ def test_the_prompt_names_the_place_the_app_gives_a_page():
 
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     css = Path(__file__).resolve().parents[1] / 'static' / 'css'
-    field = re.search(r'\.agent-page-stage \{([^}]*)\}', (css / 'agent-workspace.css').read_text(encoding='utf-8')).group(1)
+    sheet = (css / 'agent-workspace.css').read_text(encoding='utf-8')
+    field = re.search(r'\.agent-page-stage \{([^}]*)\}', sheet).group(1)
+    fitted = re.search(r'\.agent-page-stage\.is-fitted \{([^}]*)\}', sheet).group(1)
     assert 'aspect-ratio: 16 / 10' in field and 'min-height: 420px' in field and 'max-height: 600px' in field
+    assert 'height: var(--agent-page-height)' in fitted and 'min-height: 120px' in fitted and 'max-height: 3000px' in fitted
     assert '--app-container-width: 704px' in (css / 'layout.css').read_text(encoding='utf-8')
-    assert "up to about 700 px and a phone's width on a phone, and 420 to 600 px high" in AGENT_VM_PROMPT
+    assert ("up to about 700 px and a phone's width on a phone, and as tall as its content, from 120 to 3000 px; "
+            "a longer page scrolls inside that place, a layout bound to the window's height gets 420 to 600 px"
+            ) in AGENT_VM_PROMPT
 
 
 def test_a_shared_answer_and_a_mail_carry_no_page():

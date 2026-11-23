@@ -1,6 +1,6 @@
-"""A page the agent shared, in the built app: it runs in the answer, in a
-place that has its size before it loads, opens larger on the stage and
-comes back when the chat is opened again. The app's APIs are mocked; the
+"""A page the agent shared, in the built app: it runs in the answer at the
+height of its content, opens larger on the stage and comes back when the chat
+is opened again, at that height before it loads. The app's APIs are mocked; the
 page's document and headers are the ones the route sends
 (app/core/html_page.py), under the app's real page policy. That the page
 reaches nothing is test_agent_page_sandbox.py."""
@@ -39,9 +39,44 @@ FILES = [
      'origin': {'source': 'vm', 'path': '/home/agent/chats/x/results.csv'}, **STAMP},
 ]
 ANSWER = 'Hier ist das interaktive Diagramm. Mit dem Regler wählst du, wie viele Modelle es zeigt.'
+# Laid out against the window's height with more under it: every height the
+# frame gets makes the page that much taller again.
+BOUND = """<!doctype html><meta charset="utf-8"><title>Landing</title>
+<style>body { margin: 0; font: 16px system-ui } .hero { min-height: 100vh; background: #10231a; color: #fff }</style>
+<div class="hero"><h1>Hero</h1></div><p>More under it.</p><p id="end">The end.</p>"""
+# Changes by itself (grow(), called by the test in place of a timer of the page's).
+LATE = """<!doctype html><meta charset="utf-8"><title>Late</title>
+<style>body { margin: 0; font: 16px system-ui } p { margin: 0; height: 150px }</style>
+<p id="first">First.</p><div id="more"></div>
+<script>window.grow = () => { document.getElementById('more').innerHTML = '<p>More.</p><p id="last">Last.</p>'; };</script>"""
+BOX = """() => {
+  const box = el => { const r = el.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height), Math.round(r.width)]; };
+  return { stage: box(document.querySelector('.agent-page-stage')),
+           below: box(document.querySelector('#agentAnswerBody ~ .agent-answer-documents')), scroll: scrollY };
+}"""
 
 
-def _open(browser, server, width, *, dark=False, hold=False):
+def _start(width):
+    """The height of a page's place before the page has said its own."""
+    return max(420, min(600, round(width * 10 / 16)))
+
+
+def _inside(page):
+    """The page's own window and content, as the page sees them, once its
+    window has the height of its place: a frame of another origin learns of
+    its new size a moment after the chat gave it."""
+    html = page.frame_locator('.agent-page-frame').frame_locator('iframe').locator('html')
+    for _ in range(100):
+        place = page.evaluate("() => Math.round(document.querySelector('.agent-page-stage').getBoundingClientRect().height)")
+        view, full, content = html.evaluate(
+            '() => [innerHeight, document.documentElement.scrollHeight, Math.ceil(document.documentElement.getBoundingClientRect().height)]')
+        if view == place:
+            return view, full, content
+        page.wait_for_timeout(50)
+    raise AssertionError(f"The page's window is {view} px high in a place of {place} px")
+
+
+def _open(browser, server, width, *, dark=False, hold=False, source=SOURCE):
     context, page = _real_firebase_page(browser, server, has_touch=width < 700)
     errors, asked, held = [], [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
@@ -63,9 +98,9 @@ def _open(browser, server, width, *, dark=False, hold=False):
     def document(route):
         # A frame sends no sign-in of the account with its request.
         assert 'authorization' not in route.request.headers
-        answer = dict(status=200, body=html_page.document(SOURCE, 'benchmark-interaktiv.html'),
+        answer = dict(status=200, body=html_page.document(source, 'benchmark-interaktiv.html'),
                       headers={**html_page.HEADERS, 'Content-Type': html_page.CONTENT_TYPE})
-        if hold and not held:
+        if (hold() if callable(hold) else hold) and not held:
             held.append(lambda: route.fulfill(**answer))
         else:
             route.fulfill(**answer)
@@ -90,7 +125,7 @@ def _inner(page, outer='.agent-page-frame'):
 
 
 @pytest.mark.parametrize('width,dark', [(1440, False), (1440, True), (390, False)])
-def test_a_shared_page_runs_in_the_answer_in_a_place_that_never_moves(browser, phase4_server, width, dark):
+def test_a_shared_page_runs_in_the_answer_at_the_height_of_its_content(browser, phase4_server, width, dark):
     context, page, errors, asked, held = _open(browser, phase4_server, width, dark=dark, hold=True)
     try:
         slot = page.locator('#agentAnswerBody ~ .agent-answer-pages')
@@ -103,32 +138,30 @@ def test_a_shared_page_runs_in_the_answer_in_a_place_that_never_moves(browser, p
         # The other file of the turn stays a row to download, under the page.
         rows = page.locator('#agentAnswerBody ~ .agent-answer-documents .agent-file-row .agent-file-name')
         expect(rows).to_have_text(['results.csv'])
-        # While the page is on its way its place waits at its full size.
+        # While the page is on its way its place waits: the answer's width at
+        # 16:10, never under 420 px or over 600 px high.
         expect(stage).to_have_class('agent-page-stage is-loading')
         for _ in range(100):
             if held:
                 break
             page.wait_for_timeout(50)
         assert held, 'The frame never asked for its page'
-        before = page.evaluate("""() => {
-          const box = el => { const r = el.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height), Math.round(r.width)]; };
-          return { stage: box(document.querySelector('.agent-page-stage')),
-                   below: box(document.querySelector('#agentAnswerBody ~ .agent-answer-documents')), scroll: scrollY };
-        }""")
+        before = page.evaluate(BOX)
+        assert before['stage'][1] == _start(before['stage'][2]), before
         held[0]()
         inner = _inner(page)
         expect(inner.locator('#o')).to_have_text('2 models')
-        expect(stage).to_have_class('agent-page-stage')
-        after = page.evaluate("""() => {
-          const box = el => { const r = el.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height), Math.round(r.width)]; };
-          return { stage: box(document.querySelector('.agent-page-stage')),
-                   below: box(document.querySelector('#agentAnswerBody ~ .agent-answer-documents')), scroll: scrollY };
-        }""")
-        assert after == before, (before, after)
-        # Its place: the answer's width, 16:10, never under 420 px or over 600 px high.
-        top, height, wide = after['stage']
-        assert height == max(420, min(600, round(wide * 10 / 16))), after
-        assert height == 420 if width < 700 else 420 <= height <= 600
+        # Loaded, the place is as tall as the page's content: the page stands
+        # in the answer whole, with nothing left to scroll inside and no
+        # empty sheet under it. What is under it follows; the place itself
+        # and the chat stay where they were.
+        expect(stage).to_have_class('agent-page-stage is-fitted')
+        after = page.evaluate(BOX)
+        view, full, content = _inside(page)
+        assert after['stage'][1] == content == view and full <= view + 1, (after, view, full, content)
+        assert 120 <= after['stage'][1] < before['stage'][1], (before, after)
+        assert (after['stage'][0], after['stage'][2], after['scroll']) == (before['stage'][0], before['stage'][2], before['scroll'])
+        assert after['below'][0] - after['stage'][1] == before['below'][0] - before['stage'][1], (before, after)
         # The page works: its own controls, by pointer and by keys.
         inner.locator('#n').focus()
         page.keyboard.press('ArrowRight')
@@ -136,6 +169,12 @@ def test_a_shared_page_runs_in_the_answer_in_a_place_that_never_moves(browser, p
         inner.locator('#b').click()
         expect(inner.locator('#o')).to_have_text('6 models')
         expect(inner.locator('.bar')).to_have_count(6)
+        # It grew under the user's hand, and its place with it.
+        page.wait_for_function(f"() => document.querySelector('.agent-page-stage').getBoundingClientRect().height > {after['stage'][1] + 60}")
+        grown = page.evaluate(BOX)
+        view, full, content = _inside(page)
+        assert grown['stage'][1] == content == view and full <= view + 1, (grown, view, full, content)
+        assert grown['stage'][0] == after['stage'][0] and grown['scroll'] == after['scroll']
         # Tab leaves the page for the line under it.
         page.keyboard.press('Tab')
         assert 'agent-page-open' in page.evaluate('document.activeElement.className')
@@ -144,6 +183,91 @@ def test_a_shared_page_runs_in_the_answer_in_a_place_that_never_moves(browser, p
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert len(asked) == 1
         _shot(page, f'agent-page-{width}-{"dark" if dark else "light"}')
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_a_page_opened_again_stands_at_its_height_before_it_loads(browser, phase4_server):
+    held_back = {'on': False}
+    context, page, errors, asked, held = _open(browser, phase4_server, 1440, hold=lambda: held_back['on'])
+    try:
+        stage = page.locator('#agentAnswerBody ~ .agent-answer-pages .agent-page-stage')
+        expect(_inner(page).locator('#o')).to_have_text('2 models')
+        expect(stage).to_have_class('agent-page-stage is-fitted')
+        first = page.evaluate(BOX)
+        kept = page.evaluate(f"JSON.parse(localStorage.getItem('agentPageHeights'))['{PAGE}']")
+        assert kept == [first['stage'][2], first['stage'][1]], (kept, first)
+        held_back['on'] = True
+        page.reload()
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        expect(page.locator('#agentModelDropdown')).to_be_enabled()
+        _show(page)
+        for _ in range(100):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        assert held, 'The frame never asked for its page'
+        # Still loading, and already where the loaded page will stand.
+        expect(stage).to_have_class('agent-page-stage is-loading is-fitted')
+        waiting = page.evaluate(BOX)
+        assert waiting == first, (first, waiting)
+        held[0]()
+        expect(_inner(page).locator('#o')).to_have_text('2 models')
+        expect(stage).to_have_class('agent-page-stage is-fitted')
+        page.wait_for_timeout(300)
+        assert page.evaluate(BOX) == first
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_a_page_laid_out_against_the_windows_height_keeps_the_place_it_starts_in(browser, phase4_server):
+    context, page, errors, asked, _ = _open(browser, phase4_server, 1440, source=BOUND)
+    try:
+        stage = page.locator('#agentAnswerBody ~ .agent-answer-pages .agent-page-stage')
+        expect(_inner(page).locator('#end')).to_have_count(1)
+        # Each height it got made it taller; it ends where every page starts,
+        # and what is longer scrolls inside as in a window.
+        page.wait_for_function(f"() => (JSON.parse(localStorage.getItem('agentPageHeights') || '{{}}')['{PAGE}'] || [])[1] === 0")
+        expect(stage).to_have_class('agent-page-stage')
+        box = page.evaluate(BOX)
+        assert box['stage'][1] == _start(box['stage'][2]), box
+        view, full, _ = _inside(page)
+        assert view == box['stage'][1] and full > view
+        page.wait_for_timeout(400)
+        assert page.evaluate(BOX) == box
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_a_page_that_changes_by_itself_moves_nothing_until_the_user_comes_to_it(browser, phase4_server):
+    context, page, errors, asked, _ = _open(browser, phase4_server, 1440, source=LATE)
+    try:
+        stage = page.locator('#agentAnswerBody ~ .agent-answer-pages .agent-page-stage')
+        inner = _inner(page)
+        expect(inner.locator('#first')).to_have_count(1)
+        expect(stage).to_have_class('agent-page-stage is-fitted')
+        settled = page.evaluate(BOX)
+        assert settled['stage'][1] == 150, settled
+        # It has arrived (PAGE_SETTLE_MS after its load). The pointer is
+        # elsewhere and the page grows on its own: the chat under it stays
+        # put, the page scrolls inside for now.
+        page.mouse.move(5, 5)
+        page.wait_for_timeout(2300)
+        inner.locator('html').evaluate('() => grow()')
+        expect(inner.locator('#last')).to_have_count(1)
+        page.wait_for_timeout(400)
+        assert page.evaluate(BOX) == settled
+        view, full, _ = _inside(page)
+        assert view == 150 and full == 450
+        # The user comes to the page: now it takes its height.
+        page.locator('.agent-page-frame').hover()
+        page.wait_for_function("() => document.querySelector('.agent-page-stage').getBoundingClientRect().height === 450")
+        view, full, content = _inside(page)
+        assert view == content == 450 and full <= view + 1
         assert not errors, errors
     finally:
         context.close()

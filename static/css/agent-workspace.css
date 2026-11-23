@@ -334,12 +334,14 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 
 /* ---- A page the agent shared (vm_share_file of an HTML file) ----
    It runs in a frame under the answer text (agent-workspace.js pageCard).
-   The frame's place has its size from the first frame on, so nothing moves
-   when the page loads: the app cannot look into the page to measure it. The
-   place is the answer's width at 16:10, at least 420 px high (a phone) and
-   at most 600 px; a longer page scrolls inside, and the stage shows it at
-   the window's size. The page brings its own look: one without any stands
-   on the white sheet it expects, in both themes. The name and the actions
+   The frame's place starts at the answer's width at 16:10, at least 420 px
+   high (a phone) and at most 600 px. Once the page has said how tall its
+   content is (.is-fitted), the place is that tall, so the page stands in
+   the answer whole, without a scrollbar of its own inside the chat's; only
+   one past the upper bound scrolls inside, and the stage shows it at the
+   window's size. A page laid out against the window's height keeps the
+   starting place. The page brings its own look: one without any stands on
+   the white sheet it expects, in both themes. The name and the actions
    under it are the picture's line. */
 .agent-answer-pages { display: flex; flex-direction: column; gap: 18px; margin: 18px 0 22px; min-width: 0; }
 .agent-answer-pages[hidden] { display: none; }
@@ -348,6 +350,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   position: relative; width: 100%; aspect-ratio: 16 / 10; min-height: 420px; max-height: 600px;
   border-radius: var(--radius-sm, 10px); background: #fff; overflow: hidden;
 }
+.agent-page-stage.is-fitted { aspect-ratio: auto; height: var(--agent-page-height); min-height: 120px; max-height: 3000px; }
 .agent-page-stage::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent);

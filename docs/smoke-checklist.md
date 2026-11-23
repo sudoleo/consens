@@ -1500,18 +1500,25 @@ Server.
 - [ ] Agent mit Arbeitsplatz: „Bau mir ein interaktives Diagramm als HTML“ →
       er teilt eine `.html` mit `vm_share_file`; unter der Antwort läuft die
       Seite (Regler, Umschalter, Klicks wirken), nicht im Browser des
-      Arbeitsplatzes. Ihr Platz steht schon vor dem Laden in voller Höhe,
-      nichts springt; darunter Name, „Open larger“, Download, ⋯ („Reload page“,
-      „Remove…“).
+      Arbeitsplatzes. Sie steht ganz in der Antwort, so hoch wie ihr Inhalt
+      (120 bis 3000 px): keine zweite Scrollleiste, kein leeres Feld unter
+      einer kurzen Seite; darunter Name, „Open larger“, Download, ⋯ („Reload
+      page“, „Remove…“).
+- [ ] Ein Umschalter oder Regler in der Seite, der mehr Inhalt zeigt: Der
+      Platz wächst mit, der Chat darüber bleibt stehen. Eine Seite mit
+      `min-height: 100vh` und Inhalt darunter bleibt im Startmaß (420 bis
+      600 px) und scrollt innen.
 - [ ] „Open larger“ zeigt dieselbe Seite fast fensterfüllend; Download dort und
       unter der Antwort liefert die `.html`; Schließen gibt den Fokus zurück.
       Tab führt in die Seite hinein und wieder heraus.
-- [ ] Chat neu laden und wieder öffnen: Die Seite ist wieder da. Follow-up
+- [ ] Chat neu laden und wieder öffnen: Die Seite ist wieder da, und ihr
+      Platz hat schon vor dem Laden ihre Höhe (nichts darunter springt). Follow-up
       senden: Die Seite der vorigen Antwort lädt neu und bleibt bedienbar.
 - [ ] Eine HTML-Datei mit `<script src="https://…">` oder fremden Bildern
       bleibt ein Download; der Agent nennt den Grund oder teilt eine Fassung,
       die alles in der Datei trägt (dann steht nur diese eine unter der Antwort).
-- [ ] Hell und dunkel, Handy (Platz 420 px hoch, kein seitliches Scrollen),
+- [ ] Hell und dunkel, Handy (die Seite steht in voller Höhe im Chat, der
+      Finger scrollt den Chat und bleibt nicht im Rahmen hängen),
       Deutsch („Größer öffnen“, „Seite neu laden“). Ein Link in der Seite zu
       einer anderen Adresse tut nichts, die Seite bleibt stehen.
 - [ ] In DevTools: Die Antwort von `/agent/pages/…` trägt

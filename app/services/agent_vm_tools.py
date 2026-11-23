@@ -116,10 +116,11 @@ READ_CHARS = 16_000
 # (AgentFiles.save).
 SHARE_BYTES = 5 * 1024 * 1024
 # What vm_share_file says of an HTML file the chat runs as a page, and of
-# one it does not (html_page.refusal gives the reason).
-PAGE_NOTE = ("The app shows it in the chat as a page the user can use, with the file to download beside it. It "
-             "runs there without the network, from what the file itself contains. Do not link it or say where it "
-             "appears.")
+# one it does not (html_page.refusal gives the reason). The page's place is
+# named: an agent shares before it writes, and one that was only told not
+# to say where the page appears told the user to look above its text.
+PAGE_NOTE = ("The app shows it under the text of your answer as a page the user can use, with the file to download "
+             "beside it. It runs there without the network, from what the file itself contains. Do not link it.")
 PAGE_REFUSED_NOTE = ("The app shows it with your answer as a download. It does not run in the chat as a page: {reason} "
                      "Do not link it or say where it appears.")
 # The preview of a shared Office file (_office_preview): a PDF larger than

@@ -127,7 +127,7 @@ HOST_PAGE = """<!doctype html><meta charset="utf-8"><title>The app</title>
   document.cookie = 'session=SECRET-COOKIE; path=/';
   window.secret = 'SECRET-VALUE';
   window.heard = [];
-  addEventListener('message', event => heard.push([event.origin, String(event.data)]));
+  addEventListener('message', event => heard.push([event.origin, typeof event.data === 'string' ? event.data : JSON.stringify(event.data)]));
 </script>
 <iframe id="page" sandbox="allow-scripts" referrerpolicy="no-referrer" title="page" style="width:800px;height:500px"></iframe>
 <script>
@@ -248,8 +248,13 @@ def test_a_page_in_the_chat_runs_and_reaches_nothing_of_the_app_or_the_network(b
         frame = page.frame_locator('#page').frame_locator('iframe')
         report = _report(frame)
         _confined(report)
-        # The page said hello to the window around it: a message, from no origin.
-        assert page.evaluate('heard') == [['null', 'hello from the page']]
+        # The page said hello to the window around it, and how tall it is
+        # (html_page._FIT): messages, from no origin, that carry nothing else.
+        heard = page.evaluate('heard')
+        assert ['null', 'hello from the page'] in heard and {origin for origin, _ in heard} == {'null'}
+        heights = [json.loads(said) for _, said in heard if said != 'hello from the page']
+        assert heights and all(list(said) == ['consensPage'] and list(said['consensPage']) == ['height']
+                               and said['consensPage']['height'] > 0 for said in heights), heard
         # Its own script ran, its attempts to leave did not: the page still
         # stands there, the app's page is where it was, and nothing opened,
         # asked or saved.

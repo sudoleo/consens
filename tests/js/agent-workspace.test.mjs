@@ -301,6 +301,95 @@ describe('private Agent workspace', () => {
       expect(stage.querySelector('.agent-page-failed')).toBeNull();
       dom.window.close();
     });
+
+    // The page says how tall its content is (html_page.py _FIT); what that
+    // may move in the chat is decided here.
+    it('gives the page the height it says, hears only the page in its own frame, and lets a chat being read stand still', async () => {
+      const { window, document, dom } = boot({ files: [PAGE] });
+      const watched = watching(window), sized = [];
+      window.ResizeObserver = class { constructor(callback) { sized.push(callback); } observe() {} disconnect() {} };
+      window.fetch = vi.fn(async url => url.endsWith('/page')
+        ? { ok: true, json: async () => ({ url: '/agent/pages/address-1', expires_in: 300 }) } : reply([PAGE]));
+      // From an earlier visit: this page's height at this width.
+      window.localStorage.setItem('agentPageHeights', JSON.stringify({ [PAGE.id]: [700, 640] }));
+      await window.App.agentWorkspace.refresh(CHAT);
+      const stage = document.querySelector('.agent-page-stage'), frame = stage.querySelector('iframe');
+      const place = () => [stage.classList.contains('is-fitted'), stage.style.getPropertyValue('--agent-page-height')];
+      const kept = () => JSON.parse(window.localStorage.getItem('agentPageHeights'))[PAGE.id];
+      const around = { close() {} };
+      Object.defineProperty(frame, 'contentWindow', { configurable: true, value: around });
+      const say = (data, source = { parent: around }) => {
+        const event = new window.Event('message');
+        Object.defineProperties(event, { data: { value: data }, source: { value: source } });
+        window.dispatchEvent(event);
+      };
+      // Its place gets a width: it stands at the kept height before it loads.
+      expect(place()).toEqual([false, '']);
+      Object.defineProperty(stage, 'clientWidth', { configurable: true, value: 704 });
+      sized[0]();
+      expect(place()).toEqual([true, '640px']);
+      watched[0].callback([{ target: stage.parentNode, isIntersecting: true }]);
+      await vi.waitFor(() => expect(frame.getAttribute('src')).toBe('/agent/pages/address-1'));
+      frame.dispatchEvent(new window.Event('load'));
+      // The page arrives and says its height: its place takes it, and the browser keeps it.
+      say({ consensPage: { height: 880.4 } });
+      expect([place(), kept()]).toEqual([[true, '880px'], [704, 880]]);
+      // Not the page in this frame, or not a height: nothing changes.
+      for (const [data, source] of [[{ consensPage: { height: 300 } }, { parent: {} }], [{ consensPage: { height: 300 } }, { parent: window }],
+        [{ consensPage: { height: 300 } }, null], [{ consensPage: { height: '300' } }], [{ consensPage: { height: -5 } }],
+        [{ consensPage: { height: NaN } }], [{ height: 300 }], ['300'], [null]]) {
+        say(data, ...(source === undefined ? [] : [source]));
+      }
+      expect(place()).toEqual([true, '880px']);
+      // Settled, and the user is elsewhere: a page that changes by itself
+      // waits, so nothing under it moves while the chat is read.
+      const now = window.Date.now;
+      window.Date.now = () => now() + 5000;
+      say({ consensPage: { height: 1200 } });
+      expect(place()).toEqual([true, '880px']);
+      // The user comes to the page: now it has its height. Kept for the
+      // next visit is the height it arrived at: it loads as it was shared.
+      frame.dispatchEvent(new window.Event('pointerenter'));
+      expect([place(), kept()]).toEqual([[true, '1200px'], [704, 880]]);
+      window.Date.now = now;
+      // Loaded anew, it answers every height with another: it is laid out
+      // against the frame's own height and keeps the place every page starts in.
+      [...document.querySelectorAll('.agent-page [role=menuitem]')].find(item => item.textContent === 'Reload page').click();
+      for (const height of [500, 600, 700, 800, 900]) say({ consensPage: { height } });
+      expect(place()).toEqual([true, '900px']);
+      say({ consensPage: { height: 1000 } });
+      expect([place(), kept()]).toEqual([[false, ''], [704, 0]]);
+      say({ consensPage: { height: 640 } });
+      expect(place()).toEqual([false, '']);
+      dom.window.close();
+    });
+
+    it('starts a page that never settled in its starting place, and one of another width without a kept height', async () => {
+      for (const [stored, width, expected, temporary] of [[[704, 0], 704, [false, '']], [[390, 900], 704, [true, '880px']],
+        [[390, 900], 704, [true, '880px'], true]]) {
+        const { window, document, dom } = boot({ files: [PAGE] });
+        const sized = [];
+        watching(window);
+        window.ResizeObserver = class { constructor(callback) { sized.push(callback); } observe() {} disconnect() {} };
+        window.localStorage.setItem('agentPageHeights', JSON.stringify({ [PAGE.id]: stored, broken: 5 }));
+        if (temporary) window.App.temporaryChat = { token: chat => chat === CHAT ? 'temporary' : '' };
+        await window.App.agentWorkspace.refresh(CHAT);
+        const stage = document.querySelector('.agent-page-stage'), frame = stage.querySelector('iframe');
+        const around = { close() {} };
+        Object.defineProperty(frame, 'contentWindow', { configurable: true, value: around });
+        Object.defineProperty(stage, 'clientWidth', { configurable: true, value: width });
+        sized[0]();
+        expect([stage.classList.contains('is-fitted'), stage.style.getPropertyValue('--agent-page-height')]).toEqual([false, '']);
+        const event = new window.Event('message');
+        Object.defineProperties(event, { data: { value: { consensPage: { height: 880 } } }, source: { value: { parent: around } } });
+        window.dispatchEvent(event);
+        expect([stage.classList.contains('is-fitted'), stage.style.getPropertyValue('--agent-page-height')]).toEqual(expected);
+        // A temporary chat leaves nothing in the browser, a page's height either.
+        expect(JSON.parse(window.localStorage.getItem('agentPageHeights'))[PAGE.id])
+          .toEqual(expected[0] && !temporary ? [704, 880] : stored);
+        dom.window.close();
+      }
+    });
   });
 
   it('describes Gmail imports of the turn by subject and sender instead of message IDs', async () => {

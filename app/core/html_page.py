@@ -198,13 +198,36 @@ _STAY = ("<script>addEventListener('click',function(e){var a=e.target&&e.target.
          "if(/^javascript:/i.test(h))return;e.preventDefault();"
          "if(h.charAt(0)==='#')try{location.hash=h}catch(x){}},true)</script>")
 
+# Added after it as well. The chat cannot look into the page, so the page
+# says how tall its content is and the chat gives its frame that height
+# (agent-workspace.js pageCard, which bounds it): the page then stands in the
+# answer whole, without a second scrollbar. ``box`` is what the page's flow
+# takes, the only measure that can be less than the frame; ``full`` reaches
+# what lies outside the flow but is never less than the frame. A page that
+# grew for ``full`` stays there until its flow changes: else the smaller
+# ``box`` would take the height back, and the two would trade places for
+# ever. Measured at once and on load, not on a frame of animation: a browser
+# draws no frames for a page that is not on screen yet, and the height is
+# wanted before it gets there. A convenience like _STAY: a page whose script
+# says something else gets the height it says, within the chat's bounds.
+_FIT = ("<script>(function(){var d=document.documentElement,last=0,asked=0,was=0,due=0;"
+        "function fit(){due=0;var view=innerHeight,box=Math.ceil(d.getBoundingClientRect().height),"
+        "full=d.scrollHeight,h;if(full>view+1){h=Math.max(full,box);asked=h;was=box}"
+        "else if(asked&&Math.abs(view-asked)<2&&box===was)return;else{h=box;asked=0}"
+        "if(h===last||!(h>0))return;last=h;try{top.postMessage({consensPage:{height:h}},'*')}catch(x){}}"
+        "function soon(){if(!due)due=setTimeout(fit,30)}"
+        "if(window.ResizeObserver){var o=new ResizeObserver(soon);o.observe(d);"
+        "if(document.body)o.observe(document.body)}"
+        "addEventListener('load',fit);addEventListener('resize',soon);"
+        "addEventListener('click',soon,true);fit()})()</script>")
+
 
 def document(source, name) -> bytes:
     """The answer's body: the file as the ``srcdoc`` of a sandboxed frame
     that fills a document of ours. The frame inherits this document's policy
     and sandbox, and the document names no address a frame of it may go to."""
     title = html.escape(str(name or "Page"), quote=True)
-    source = source + "\n" + _STAY
+    source = source + "\n" + _STAY + _FIT
     return (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
         '<meta name="color-scheme" content="light"><title>' + title + "</title>"
