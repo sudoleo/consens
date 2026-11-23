@@ -940,14 +940,18 @@ class DelegationLoop(AgentLoop):
 
     def _workspace_prompt(self):
         """The workspace's blocks of the system prompt, each after a blank line."""
-        from app.services import agent_github
+        from app.services import agent_apps, agent_github
         from app.services.prompt_defaults import (AGENT_GITHUB_IMPORT_PROMPT, AGENT_GITHUB_PROMPT, AGENT_PLAN_PROMPT,
-                                                  AGENT_VM_PROMPT)
+                                                  AGENT_SERVER_AS_APP, AGENT_SERVER_IN_BROWSER, AGENT_VM_PROMPT)
         # GitHub (agent_github.py): the tools come with the VM, so the prompt does too;
         # without the app only the import of public repositories. The plan of
         # a long task (agent_plan.py) comes with the VM, where tasks run long.
         github = AGENT_GITHUB_PROMPT if agent_github.configured() else AGENT_GITHUB_IMPORT_PROMPT
-        return "".join("\n\n" + block for block in (AGENT_VM_PROMPT, github, AGENT_PLAN_PROMPT))
+        # With a host for apps, what the agent serves goes to the user's own
+        # browser (vm_show_app), and the prompt says so in the same sentence.
+        workspace = (AGENT_VM_PROMPT.replace(AGENT_SERVER_IN_BROWSER, AGENT_SERVER_AS_APP) if agent_apps.host()
+                     else AGENT_VM_PROMPT)
+        return "".join("\n\n" + block for block in (workspace, github, AGENT_PLAN_PROMPT))
 
     def _workspace_tool_list(self):
         """The workspace's tools: the VM's, the browser and GitHub among them, and the plan."""

@@ -14443,7 +14443,27 @@ einer eigenen Adresse, solange ihr Hintergrundprozess läuft.
   der Prozess läuft und der Port antwortet (`app_command`, bis `APP_TRIES`
   Versuche im Sekundenabstand), sonst sagt der Fehler dem Agenten, was fehlt.
   Aktivität: `app_shown`, `app_port`, `app_path`, `app_title`, `process`,
-  `ends_at`.
+  `ends_at`. Ein gelungener Aufruf hebt „idle“ für das Konto auf
+  (`agent_app_tunnel.expect`): Ein Tab, der offen blieb, während die App
+  unten war, fragt von selbst weiter (der Client eines Dev-Servers tut das,
+  um neu zu laden) und findet nach dem Neustart ohne neuen Klick zurück.
+- **Nicht zusätzlich im Browser des Arbeitsplatzes** (`agent_browser.py`
+  `shown_as_app`, `APP_IN_OWN_BROWSER`, `BrowserArgsWithApps`): Mit
+  `AGENT_APP_HOST` öffnet `browser` `open` mit `for_user` keine Adresse des
+  eigenen Servers mehr als Karte; der Agent liest, dass `vm_show_app` sie
+  zum Nutzer bringt, und öffnet sie ohne `for_user` weiter für den eigenen
+  Blick. Eine einzelne HTML-Datei, die im Chat laufen kann, geht wie zuvor
+  dorthin. Der eine Satz in `AGENT_VM_PROMPT`, der sagt, wo sich zeigt, was
+  einen eigenen Server braucht, wird dann ausgetauscht
+  (`AGENT_SERVER_IN_BROWSER` → `AGENT_SERVER_AS_APP`,
+  `DelegationLoop._workspace_prompt`): Prompt und Werkzeug sagen dasselbe.
+  Max: Der Browser ist für Seiten, die der Agent bedient, nicht für das, was
+  er dem Nutzer baut.
+- **Im echten Browser geprüft** (2026-11-23, Test-Sprite, App-Host lokal):
+  Vite 8.3.8 (150 Module, 156 Anfragen) und Next.js 16.4.6 laden, sind
+  bedienbar und übernehmen eine Änderung am Code ohne Neuladen (HMR bzw.
+  Fast Refresh über den WebSocket); nach dem Ende des Prozesses kommt die
+  Hinweisseite, und die Nachfragen des offenen Tabs wecken die VM nicht.
 - **„localhost“ auf einer Sprite** (Probe 2026-11-23): `/etc/hosts` nennt
   `fdf::1` vor `127.0.0.1`. Ein Server, der sich an den Namen bindet (Nodes
   Dev-Server), lauscht nur auf `fdf::1`; curl, das „localhost“ selbst als
@@ -14470,8 +14490,9 @@ einer eigenen Adresse, solange ihr Hintergrundprozess läuft.
 - **Grenzen:** eine App je Browser zugleich; kein öffentliches Teilen; der
   Neustart kostet eine Nachricht an den Agenten; consens.io selbst ließe
   sich so nur mit einem Test-Projekt statt der Prod-Schlüssel entwickeln.
-  Noch nicht in Prod geprüft: `AGENT_APP_HOST` setzen, Deploy, ein echter
-  Lauf mit Vite/Next am Handy.
+  Noch nicht in Prod geprüft: `AGENT_APP_HOST` setzen, Deploy, ein Lauf mit
+  einem echten Agenten (ob er `vm_show_app` von selbst wählt) und der Blick
+  am Handy.
 - Tests: `tests/test_agent_app_proxy.py` (die ganze Strecke mit dem echten
   `app_tunnel.py` als Prozess, einem Web- und einem WebSocket-Server:
   Token und Sitzung, Host-Trennung, Kopfzeilen, Körper in beide Richtungen,

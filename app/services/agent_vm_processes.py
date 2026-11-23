@@ -613,7 +613,7 @@ class ProcessTools:
     def show(self, args, *, cancellation, report=None):
         """vm_show_app: the card only for a process that runs and a port
         that answers, so the user never opens one that shows nothing."""
-        from app.services import agent_apps
+        from app.services import agent_app_tunnel, agent_apps
         self.vm._start(cancellation, change=False)
         code, text = self._run(app_command(process_dir(args.id), args.port, APP_TRIES), cancellation,
                                APP_TRIES * 8 + SETTLE_SECONDS + 30, idempotent=True)
@@ -627,6 +627,10 @@ class ProcessTools:
             raise ValueError(f"Nothing answers on port {args.port} of the workspace. Read the process's output "
                              "(vm_process_output) for the port it listens on and whether it is up, then show it.")
         self.shown[args.id] = ends
+        # A tab the user left open on the app while it was down asks again
+        # by itself (a dev server's client does, to reload once it is back):
+        # the app answers it from now on, before any new click on the card.
+        agent_app_tunnel.expect(self.vm.loop.uid)
         until = f", until {time.strftime('%H:%M', time.gmtime(ends))} UTC" if ends else ""
         return self.vm.session.announce({"shown_as": "app", "id": args.id, "port": args.port,
                                          "path": agent_apps.start_path(args.path),

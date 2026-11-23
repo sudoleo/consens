@@ -143,5 +143,6 @@ def open_url(token: str) -> str:
     """The address the new tab loads. Plain http only for a host on this
     machine (a developer's server); everywhere else the cookie needs HTTPS."""
     name = host()
-    local = name.split(":", 1)[0] in {"localhost", "127.0.0.1"} or name.endswith(".localhost")
+    bare = name.split(":", 1)[0]
+    local = bare in {"localhost", "127.0.0.1"} or bare.endswith(".localhost")
     return f"{'http' if local else 'https'}://{name}{OPEN_PATH}?t={token}"

@@ -527,7 +527,12 @@ def test_an_app_goes_on_a_card_once_its_process_runs_and_its_port_answers(store,
         app_line("running", started, 1800, 200, "chat-1"), 0, 1.0)
     script = Agent([[("vm_show_app", {"id": PID, "port": 3000, "path": "/app", "title": "Todo   app"})]])
     loop = vm_loop(store, script)
+    # A tab the user left open while the app was down is answered without the VM (agent_app_tunnel._idle).
+    from app.services import agent_app_tunnel
+    agent_app_tunnel._idle.add(UID)
     events = list(loop.run())
+    # Shown again, the app answers that tab by itself: its dev server's client reloads it.
+    assert UID not in agent_app_tunnel._idle
     assert "vm_show_app" in script.offered[0]
     shown = results(loop)[0]
     assert (shown["shown_as"], shown["id"], shown["port"], shown["path"]) == ("app", PID, 3000, "/app")

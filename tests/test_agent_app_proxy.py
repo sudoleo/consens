@@ -282,6 +282,11 @@ def test_the_host_is_only_what_reads_as_one(monkeypatch):
                             ("", ""), ("https://apps.example.com", ""), ("apps.example.com/x", "")):
         monkeypatch.setenv("AGENT_APP_HOST", value)
         assert agent_apps.host() == expected
+    # Plain http only where the host is this machine (a developer's server).
+    for value, scheme in (("apps.example.com", "https"), ("localhost:8765", "http"), ("apps.localhost:8765", "http"),
+                          ("127.0.0.1:8765", "http"), ("notlocalhost.example:8765", "https")):
+        monkeypatch.setenv("AGENT_APP_HOST", value)
+        assert agent_apps.open_url("T") == f"{scheme}://{value}{agent_apps.OPEN_PATH}?t=T"
 
 
 # --- The host ------------------------------------------------------------------

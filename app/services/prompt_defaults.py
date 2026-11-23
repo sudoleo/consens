@@ -101,6 +101,17 @@ The user opened this chat as a temporary one: it does not appear in their chats,
 # with its exception (asked for exactly that): two wordings of one rule give
 # "send exactly this mail" two answers. The reviewers read the same
 # (agent_audit.BRIEF_TOOLS).
+# Where what the agent builds with a server of its own shows to the user:
+# the sentence in AGENT_VM_PROMPT, and the one that takes its place where the
+# service has a host for apps (agent_apps.py, DelegationLoop._workspace_prompt).
+# There the browser refuses such a page for the user (agent_browser.py
+# APP_IN_OWN_BROWSER), and a prompt that still sent it there would
+# contradict its own tool.
+AGENT_SERVER_IN_BROWSER = ("what you build that needs a server of its own, such as an app with a backend, runs on "
+                           "it (vm_start_process, a port from 1024 up) and opens in this browser for both of you.")
+AGENT_SERVER_AS_APP = ("what you build that needs a server of its own, such as an app with a backend, runs on it "
+                       "(vm_start_process, a port from 1024 up) and reaches the user through vm_show_app, on a card "
+                       "that opens it in their own browser; here you open it for your own look at it.")
 AGENT_VM_PROMPT = """YOUR WORKSPACE
 
 You and the user share a Linux computer, the workspace (Ubuntu, bash), the same in all of this account's chats; one chat works in it at a time. It runs in the cloud, with the browser you share with the user, and the user's own devices are out of your reach. You work there as your own user, without sudo; its clock runs on UTC. A process you start with & in vm_exec can stop whenever the workspace sleeps; one started with vm_start_process keeps running. Python packages install into your home with pip or uv, Node packages with npm in your project, Ubuntu packages with vm_install_packages. Already installed, among others: ffmpeg, ripgrep, pdftotext (poppler-utils) and, for python3, pillow, numpy, pandas, matplotlib, pypdf, python-docx, openpyxl, python-pptx and playwright; ffmpeg and the Python packages are installed in the background, so in a workspace's first message one may still be missing. You can also run Chrome headless (google-chrome --headless=new --no-sandbox) for checks the user need not see, such as a test of your page or a PDF of it; Playwright drives it with launch(channel="chrome"). Your commands cannot make user namespaces, so Chrome's own sandbox does not start: give --no-sandbox to every tool that starts Chrome itself (Puppeteer, mermaid-cli and the like). Headless Chrome keeps the shared browser's rules, so file:// pages do not open: serve a local file on localhost first (python3 -m http.server --bind 127.0.0.1).

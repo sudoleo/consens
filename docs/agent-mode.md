@@ -4298,10 +4298,16 @@ klügsten sind“):
 - **Neustart über den Agenten.** Ist der Prozess zu Ende, schickt „Start
   again“ dem Agenten eine Nachricht. Nur er weiß, was die App zum Start
   braucht (Abhängigkeiten, Build, Umgebung); ein blindes Wiederholen des
-  Befehls scheitert genau dann, wenn es darauf ankommt.
-- **Fakten statt Regeln im Prompt.** Der Agent erfährt die Karte aus der
-  Beschreibung des Werkzeugs und aus seinem Ergebnis, kein neuer Block im
-  Systemprompt.
+  Befehls scheitert genau dann, wenn es darauf ankommt. Zeigt der Agent die
+  App danach wieder, findet ein offen gebliebener Tab von selbst zurück.
+- **Ein Ort je Sache.** Was der Agent dem Nutzer baut, zeigt er nicht auch
+  noch im Browser des Arbeitsplatzes: Mit einem Host für Apps öffnet
+  `for_user` dort keine Adresse des eigenen Servers mehr, das Werkzeug nennt
+  `vm_show_app`. Für den eigenen Blick öffnet der Agent sie weiter.
+- **Fakten statt Regeln im Prompt.** Kein neuer Block im Systemprompt: Der
+  eine Satz, der sagt, wo sich zeigt, was einen eigenen Server braucht,
+  nennt mit einem Host für Apps die Karte statt des Browsers. Den Rest
+  erfährt der Agent aus der Beschreibung des Werkzeugs und seinem Ergebnis.
 
 Einrichtung: `AGENT_APP_HOST=typeonai.onrender.com` am Dienst setzen. Ab dann
 antwortet diese Adresse nur noch für Apps (und `/health/…`), nicht mehr als

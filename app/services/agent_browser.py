@@ -313,6 +313,26 @@ LOCAL_DOWNLOAD = "download takes a file on the web: what your workspace serves i
 PAGE_CHECK_SECONDS = 5
 PAGE_IN_CHAT = ("This page needs nothing from outside itself, so it does not open for the user in the browser: share "
                 "its file with vm_share_file and it runs in the chat under your answer, where the user uses it.")
+# What the agent's own server serves reaches the user in their own browser
+# where the service has a host for apps (vm_show_app, agent_apps.py), on a
+# card of its own. So it does not open for them in this browser as well: the
+# browser is for pages the agent works on, not for what it builds for the
+# user (Max), and in their own browser the user tests it at full speed and on
+# the phone. Without for_user the page opens here as before, for the agent's
+# own look at it.
+APP_IN_OWN_BROWSER = ("What your own server serves does not open for the user in this browser: vm_show_app with its "
+                      "background process (vm_start_process) and port puts it on a card with your answer that "
+                      "opens it in their own browser. Without for_user it opens here for your own look at it.")
+# for_user with a host for apps: what a server of the agent's own serves goes another way.
+FOR_USER_WITH_APPS = (
+    "open: true when the user is to look at or use this page themselves in the browser, such as a website: the "
+    "chat then shows it on a card, where they open it live. What your own server serves does not open this way: "
+    "one HTML file that needs nothing from outside itself runs in the chat once you share it with vm_share_file, "
+    "and an app that needs its server goes to the user with vm_show_app.")
+
+
+class BrowserArgsWithApps(BrowserArgs):
+    for_user: bool = Field(default=False, description=FOR_USER_WITH_APPS)
 # After a download a site refused, where vm_save_picture is (agent_vm_tools.py):
 # on 2026-11-01 Wikimedia refused twelve picture downloads with 429 and 400,
 # and the agent waited 25 and 30 s for it, while the server's own fetch of
@@ -373,6 +393,23 @@ def page_file(url):
         return False
     return (canonical_host(parts.hostname or "") in LOCAL_HOSTS
             and parts.path.lower().endswith((".html", ".htm")))
+
+
+def own_server(url):
+    """Whether ``url`` is on the agent's own server (http://localhost:3000/…)."""
+    try:
+        parts = urlsplit(check_url(url))
+    except ValueError:
+        return False
+    return canonical_host(parts.hostname or "") in LOCAL_HOSTS
+
+
+def shown_as_app(url):
+    """Whether a page of the agent's own server goes to the user through
+    vm_show_app instead of a card of this browser: where the service has a
+    host for apps (agent_apps.host)."""
+    from app.services import agent_apps
+    return bool(agent_apps.host()) and own_server(url)
 
 
 def page_command(url):
@@ -440,6 +477,7 @@ class BrowserTools:
         self.keys_read = False
 
     def tools(self):
+        from app.services import agent_apps
         return [ReadOnlyTool(
             "browser", "Use the browser you share with the user, a Chrome in your workspace that they see live "
                        "and can take over, signed in where the user signed in; http://localhost:<port> there is your "
@@ -453,7 +491,8 @@ class BrowserTools:
                        "comes into your chat folder's downloads folder. A page you open with for_user stands on a "
                        "card in the chat, its picture renewed as you work, and the user opens it live from there; "
                        "the pages you read or work on yourself show only as steps of your work.",
-            BrowserArgs, self.call, activity=self._activity, reports=True),
+            BrowserArgsWithApps if agent_apps.host() else BrowserArgs, self.call, activity=self._activity,
+            reports=True),
             # Where the browser is logged in (agent_workspace.note_sign_in).
             ReadOnlyTool(
                 "note_sign_in", "Keep the list of sites the browser is logged in to: after a sign-in worked, when "
@@ -746,8 +785,11 @@ class BrowserTools:
         if args.action == "open" and args.for_user and page_file(request["url"]):
             if self._runs_in_chat(request["url"], cancellation):
                 raise ValueError(PAGE_IN_CHAT)
-            # Its card, now that the page is one for the browser (_activity).
-            report({"for_user": True})
+            if not shown_as_app(request["url"]):
+                # Its card, now that the page is one for the browser (_activity).
+                report({"for_user": True})
+        if args.action == "open" and args.for_user and shown_as_app(request["url"]):
+            raise ValueError(APP_IN_OWN_BROWSER)
         upload = None
         timeout = CALL_SECONDS + (args.seconds if args.action == "wait" else 0)
         left = self.vm.loop.answer_time_left() if hasattr(self.vm.loop, "answer_time_left") else None
@@ -1013,9 +1055,11 @@ class BrowserTools:
             # The page's card in the chat (agent-activity.js showsPage). A
             # page that may run in the chat instead gets it once the call
             # found it does not (call reports it), and keeps it once opened;
-            # a refused one (result {"error"}) never.
+            # a refused one (result {"error"}) never. A page that goes to
+            # the user through vm_show_app never gets this card.
             opened = isinstance(result, dict) and "error" not in result
-            if args.for_user and (opened or not page_file(args.url)):
+            withheld = page_file(args.url) or shown_as_app(args.url)
+            if args.for_user and (opened or not withheld):
                 fields["for_user"] = True
         elif args.ref:
             fields["ref"] = args.ref

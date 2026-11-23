@@ -1541,6 +1541,11 @@ Server.
 - [ ] Prozess stoppen lassen, Tab neu laden → Hinweisseite „The app is not
       running“; die Karte zeigt nach einem Klick „Ended in the workspace“ und
       „Start again“, das dem Agenten „Start the app again.“ schickt.
+- [ ] Nach dem Neustart durch den Agenten lädt der offen gebliebene Tab von
+      selbst wieder, ohne neuen Klick auf die Karte.
+- [ ] Der Agent zeigt die App über die Karte, nicht als Seitenkarte des
+      Browsers im Arbeitsplatz (kein „opened in the browser“ für
+      `localhost`).
 - [ ] `https://<AGENT_APP_HOST>/app` ohne Sitzung zeigt die Hinweisseite,
       nicht consens.io; `/health/maintenance` antwortet.
 

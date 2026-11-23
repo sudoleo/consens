@@ -991,3 +991,67 @@ def test_a_temporary_chat_leaves_the_list_as_it_is(store, fake_vm):
     list(loop.run())
     assert results(loop)[0] == {"status": "kept", "note": agent_browser.SIGN_INS_KEPT_NOTE}
     assert agent_workspace.record(store.db, UID).get("sign_ins") is None
+
+
+def test_an_app_the_agent_serves_does_not_open_for_the_user_in_the_browser_with_a_host_for_apps(
+        store, fake_vm, monkeypatch):
+    """Where the service has a host for apps, what the agent's own server
+    serves reaches the user in their own browser (vm_show_app): the shared
+    browser does not show it to them on a card as well (Max: the browser is
+    for pages the agent works on, not for what it builds for the user). The
+    agent reads where it goes; for its own look the page opens as before."""
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    app = "http://localhost:3000/"
+    loop, browser = tools(store)
+    reported = []
+
+    def act(**fields):
+        args = BrowserArgs(**fields)
+        return args, browser.call(args, cancellation=ProviderCancellation(), report=reported.append)
+    with pytest.raises(ValueError, match="vm_show_app"):
+        act(action="open", url=app, for_user=True)
+    assert fake_vm.requests == [] and not any("for_user" in fields for fields in reported)
+    # No card for it, neither while the call ran nor after it was refused.
+    refused = BrowserArgs(action="open", url=app, for_user=True)
+    assert "for_user" not in browser._activity(refused, None)
+    assert "for_user" not in browser._activity(refused, {"error": agent_browser.APP_IN_OWN_BROWSER})
+    # The agent's own look at it, and a website for the user, as before.
+    act(action="open", url=app)
+    args, result = act(action="open", url="https://example.org/", for_user=True)
+    assert browser._activity(args, result)["for_user"] is True
+    assert [request["url"] for request in fake_vm.requests] == [app, "https://example.org/"]
+    # One HTML file that runs in the chat still goes there; one that loads
+    # from elsewhere is an app like any other page of the server.
+    page, loading = "http://localhost:3000/chart.html", "http://localhost:3000/dashboard.html"
+    fake_vm.commands[agent_browser.page_command(page)] = ([("stdout", b"<!doctype html><p>Chart</p>")], 0, .1)
+    fake_vm.commands[agent_browser.page_command(loading)] = (
+        [("stdout", b'<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>')], 0, .1)
+    with pytest.raises(ValueError, match="runs in the chat under your answer"):
+        act(action="open", url=page, for_user=True)
+    with pytest.raises(ValueError, match="vm_show_app"):
+        act(action="open", url=loading, for_user=True)
+    assert not any("for_user" in fields for fields in reported)
+    # The tool's own words for for_user name both ways; without a host for apps they name the browser.
+    described = {tool.name: tool for tool in browser.tools()}["browser"].arguments.model_json_schema()
+    assert "vm_show_app" in described["properties"]["for_user"]["description"]
+    monkeypatch.delenv("AGENT_APP_HOST")
+    plain = {tool.name: tool for tool in browser.tools()}["browser"].arguments.model_json_schema()
+    assert "vm_show_app" not in plain["properties"]["for_user"]["description"]
+    args, result = act(action="open", url=app, for_user=True)
+    assert browser._activity(args, result)["for_user"] is True
+
+
+def test_the_prompt_sends_an_app_where_its_tools_do(store, fake_vm, monkeypatch):
+    """One sentence of the workspace's prompt says where what the agent
+    builds with a server shows: in the shared browser, or with a host for
+    apps through vm_show_app. Never the browser's card where the browser
+    refuses it."""
+    from app.services import prompt_defaults
+    assert prompt_defaults.AGENT_VM_PROMPT.count(prompt_defaults.AGENT_SERVER_IN_BROWSER) == 1
+    loop, _ = tools(store)
+    monkeypatch.delenv("AGENT_APP_HOST", raising=False)
+    assert prompt_defaults.AGENT_SERVER_IN_BROWSER in loop._workspace_prompt()
+    monkeypatch.setenv("AGENT_APP_HOST", "apps.example.com")
+    prompt = loop._workspace_prompt()
+    assert prompt_defaults.AGENT_SERVER_AS_APP in prompt and "vm_show_app" in prompt
+    assert prompt_defaults.AGENT_SERVER_IN_BROWSER not in prompt
