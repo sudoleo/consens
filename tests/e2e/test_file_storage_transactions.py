@@ -40,6 +40,9 @@ def cloud_files(db, monkeypatch):
     # The client factory, not storage.Client: on a machine with the Firebase
     # Admin key file the factory takes from_service_account_json instead.
     monkeypatch.setattr(agent_files, "_storage_client", lambda: SimpleNamespace(bucket=lambda name: bucket))
+    # The process keeps one object store per configuration (shared_objects):
+    # without a fresh cache this test would write to an earlier test's bucket.
+    monkeypatch.setattr(agent_files, "_SHARED_OBJECTS", {})
     return agent_files.AgentFiles(db), bucket
 
 
@@ -55,6 +58,9 @@ def test_native_cloud_upload_quota_foreign_download_and_delete_retry(native_db, 
     monkeypatch.setattr(agent_files, "MAX_FILES", 1)
     def upload_worker():
         worker_files = agent_files.AgentFiles(db)
+        # A store of its own, as a worker in its own process has: on the
+        # shared one each worker would count the other's object I/O as well.
+        worker_files._objects = agent_files.PrivateObjects()
         object_attempts = []
         actual_put = worker_files.objects.put
         def observed_put(*args, **kwargs):

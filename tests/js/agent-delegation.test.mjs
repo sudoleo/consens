@@ -21,8 +21,7 @@ function bootNarrow(fetcher) {
     w.fetch = vi.fn(fetcher || (async () => ({ ok: true, json: async () => ({ agents: [agent()], status: "running" }) })));
   } });
 }
-// Lets the projection's first load land: its render would otherwise shut a
-// row that a click opened before the toggle event arrived.
+// Lets the projection's first load land before the test goes on.
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 function receive(w, data) {
   w.App.agentDelegation.receive({ metadata: { chatId }, auth: { uid: "owner" } }, { version: 1, chat_id: chatId, turn_id: turnId, agent: data });
@@ -354,6 +353,19 @@ describe("Agent sidebar", () => {
     root.open = true; root.dispatchEvent(new w.Event('toggle'));
     expect(d.querySelector('.agent-detail-skeleton')).toBe(null);
     expect(w.fetch.mock.calls.length).toBe(count);
+    dom.window.close();
+  });
+  it('keeps a row open that a click opened when a render comes before its toggle event', async () => {
+    const {window: w, document: d, dom} = boot();
+    receive(w, agent()); w.App.agentDelegation.project({chatId, turnId});
+    d.querySelector('.agent-inline-model').click();
+    await settle();
+    const row = d.querySelector('.agent-session');
+    row.querySelector('summary').click();
+    receive(w, agent(2));
+    expect(row.open).toBe(true);
+    await vi.waitFor(() => expect(row.textContent).toContain('Check the premise for Germany.'));
+    expect(row.open).toBe(true);
     dom.window.close();
   });
   it('updates the account allowance from the existing activity request', async () => {

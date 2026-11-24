@@ -15,6 +15,7 @@ message: the same page is as confined there, and the document shows nothing
 that anyone but the page framing it sends.
 """
 import json
+import re
 import socket
 import threading
 
@@ -251,6 +252,17 @@ def page_server():
         patch.undo()
 
 
+def _framed(page):
+    """The address the app's page gives its frame, once its request answered.
+
+    Not page.wait_for_function with a string: Playwright evaluates that again
+    on every poll, and this page's CSP refuses the eval once the first check
+    finds no address yet."""
+    frame = page.locator('#page')
+    expect(frame).to_have_attribute('src', re.compile(r'.'), timeout=30_000)
+    return frame.get_attribute('src')
+
+
 def _report(frame):
     out = frame.locator('#out')
     expect(out).to_contain_text('"done":true', timeout=40_000)
@@ -282,7 +294,7 @@ def test_a_page_in_the_chat_runs_and_reaches_nothing_of_the_app_or_the_network(b
     context.on('response', lambda response: answered.append(response.url))
     try:
         page.goto(f"{page_server['origin']}/host/{HOSTILE}")
-        page.wait_for_function("document.getElementById('page').getAttribute('src')")
+        _framed(page)
         frame = page.frame_locator('#page').frame_locator('iframe')
         report = _report(frame)
         _confined(report)
@@ -318,8 +330,7 @@ def test_the_page_is_as_confined_when_its_address_is_opened_by_itself(browser, p
     page = context.new_page()
     try:
         page.goto(f"{page_server['origin']}/host/{HOSTILE}")
-        page.wait_for_function("document.getElementById('page').getAttribute('src')")
-        address = page.evaluate("document.getElementById('page').getAttribute('src')")
+        address = _framed(page)
         page_server['hits'].clear()
         alone = context.new_page()
         response = alone.goto(page_server['origin'] + address)
@@ -393,7 +404,7 @@ def test_a_page_that_goes_elsewhere_reaches_no_other_address(browser, page_serve
     context.on('response', lambda response: answered.append(response.url))
     try:
         page.goto(f"{page_server['origin']}/host/{file_id}")
-        page.wait_for_function("document.getElementById('page').getAttribute('src')")
+        _framed(page)
         # Long enough for the page's own timer and the browser's refusal.
         page.wait_for_timeout(1500)
         assert [hit['via'] for hit in page_server['hits']] == ['control'], page_server['hits']

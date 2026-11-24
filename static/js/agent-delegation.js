@@ -940,6 +940,10 @@
         });
         row = { root, summary, title, role, state, usage, body };
         sidebar._rows.set(agent.id, row); sidebar._list.insertBefore(root, sidebar._workLog);
+        // Restored only here: a click opens the row (App.disclosure) before
+        // its toggle event records that in view.expanded, and a render in
+        // between (any event of a running turn) would shut it again.
+        root.open = view.expanded.has(agent.id);
       }
       row.root.dataset.status = agent.status;
       // The check row belongs at the end (before the work log); answer rows
@@ -970,7 +974,6 @@
       // A live call shows itself in words ("Working · 14s") and a counting
       // number, not in a travelling bar: the panel stays still while it works.
       row.usage.classList.toggle('is-loading', loading);
-      row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { if (agent.kind !== "check") loadRow(view, agent); renderDetail(row, view, agent); }
     }
     App.agentWorkLog?.render(sidebar._workLog, view);
