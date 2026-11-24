@@ -92,9 +92,17 @@
     options.get(dialog)?.onClose?.();
   }
 
-  function bind(dialog, config = {}) {
-    if (!dialog || options.has(dialog)) return;
-    options.set(dialog, config);
+  function bind(dialog, config) {
+    if (!dialog) return;
+    if (options.has(dialog)) {
+      // A dialog can be opened before its owner binds it: the login fallback
+      // (auth-bootstrap.js) opens #loginModal while firebase.js still loads,
+      // and open() binds it without settings. The owner's settings still
+      // count once it binds; a bare bind leaves them alone.
+      if (config) options.set(dialog, config);
+      return;
+    }
+    options.set(dialog, config || {});
 
     let pressedOnBackdrop = false;
     dialog.addEventListener("pointerdown", event => {
@@ -104,7 +112,7 @@
       const deliberate = pressedOnBackdrop && event.target === dialog;
       pressedOnBackdrop = false;
       if (!deliberate) return;
-      if (config.keepOpen?.()) return;
+      if (options.get(dialog)?.keepOpen?.()) return;
       close(dialog);
     });
     // Bubbling on the dialog: a control inside that uses Escape itself

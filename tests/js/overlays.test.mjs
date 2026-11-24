@@ -178,6 +178,30 @@ describe("App.modalDialog", () => {
     expect(document.activeElement).toBe(avatar);
   });
 
+  // The login fallback opens #loginModal before firebase.js binds it with
+  // keepOpen and onClose; those must still count once firebase.js binds.
+  it("takes the owner's settings when it binds a dialog that was opened bare", () => {
+    const { window, document } = boot(`
+      <button id="opener">Log in</button>
+      <dialog id="d" class="modal"><input id="field"><button id="inside">x</button></dialog>`);
+    const dialog = document.getElementById("d");
+    const { modalDialog } = window.App;
+    modalDialog.open(dialog, { opener: document.getElementById("opener") });
+    modalDialog.close(dialog);
+
+    const onClose = vi.fn();
+    modalDialog.bind(dialog, { keepOpen: () => Boolean(document.getElementById("field").value), onClose });
+    modalDialog.open(dialog);
+    modalDialog.bind(dialog);
+    document.getElementById("field").value = "max@example.com";
+    dialog.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+    dialog.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(dialog.open).toBe(true);
+
+    modalDialog.close(dialog);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("hands out the one drawn close cross (G3)", () => {
     const { window } = boot("");
     expect(window.App.closeIcon()).toContain('class="close-icon"');
