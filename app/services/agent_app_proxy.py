@@ -149,8 +149,16 @@ async def open_session(scope, send):
         return
     cookie = (f"{agent_apps.COOKIE}={agent_apps.issue_session(session)}; Path=/; Max-Age={agent_apps.SESSION_SECONDS}; "
               "HttpOnly; Secure; SameSite=Lax")
+    left = []
+    if held is not None and not same:
+        # The first answer cleared nothing (a browser that ignores it, or an
+        # address that starts here): this one clears, all but the cookie it
+        # sets, and ends the last app's cookies itself.
+        left = [(b"clear-site-data", b'"cache", "storage"'), *(
+            (b"set-cookie", f"{name}=; Path=/; Max-Age=0; Secure".encode("latin-1"))
+            for name in _cookies(scope) if name != agent_apps.COOKIE)]
     await _respond(send, 303, [
-        (b"location", path.encode("utf-8")), *OWN_HEADERS, (b"set-cookie", cookie.encode("ascii")),
+        (b"location", path.encode("utf-8")), *OWN_HEADERS, *left, (b"set-cookie", cookie.encode("ascii")),
         # The tab that opened this one (consens.io) is out of the app's reach.
         (b"cross-origin-opener-policy", b"same-origin"),
     ])
@@ -462,5 +470,10 @@ async def app(scope, receive, send):
     if session is None:
         await _page(scope, send, 403, _t("An app from a consens.io workspace", _language(scope)),
                     _t("Open it from its card in your chat on consens.io.", _language(scope)))
+        return
+    if _header(scope, b"service-worker") == "script":
+        # Registered under this one host, it would answer for every later
+        # app, the opening address included, before that could clear it.
+        await _respond(send, 403, OWN_HEADERS)
         return
     await _http(scope, receive, send, session, host)

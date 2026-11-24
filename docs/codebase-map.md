@@ -14519,7 +14519,13 @@ einer eigenen Adresse, solange ihr Hintergrundprozess läuft.
   vorher eine andere App offen (`app_key`: Konto, Chat des Prozesses, Port),
   kommt davor eine Antwort mit `Clear-Site-Data: "cache", "cookies",
   "storage"`: Unter dem einen Host würde sonst der Service Worker oder ein
-  gecachtes Skript der letzten App für die nächste antworten. Dieselbe App
+  gecachtes Skript der letzten App für die nächste antworten. Hält der zweite
+  Schritt (`s=1`) noch die Sitzung einer anderen App (der Browser ließ das
+  Abräumen aus, oder die Adresse beginnt beim zweiten Schritt), räumt er
+  selbst ab: `Clear-Site-Data: "cache", "storage"` und `Max-Age=0` für jedes
+  mitgeschickte Cookie außer dem eigenen. Einen Service Worker nimmt der Host
+  nie an (`Service-Worker: script` → 403, ohne Tunnel): Er finge schon die
+  Öffnungsadresse der nächsten App ab, bevor die abräumen könnte. Dieselbe App
   noch einmal behält ihren Speicher. `Cross-Origin-Opener-Policy:
   same-origin` trennt den Tab von dem, der ihn öffnete.
 - **Der Weg zur App** (`app/services/agent_app_tunnel.py`,

@@ -331,6 +331,37 @@ def test_opening_clears_what_another_app_left_then_sets_the_session(host, web):
     assert "clear-site-data" in host.get(f"{agent_apps.OPEN_PATH}?t={other}").headers
 
 
+def test_a_second_step_that_still_holds_another_apps_session_clears_it_itself(host, web):
+    # The first answer's clearing did not happen: a browser that ignored it,
+    # or an address that starts at the second step. What the last app
+    # stored goes all the same, its cookies too, which would go on to the next.
+    sign_in(host, web, chat="chat-1")
+    host.cookies.set("sid", "the-last-apps", domain=HOST)
+    other = agent_apps.issue_open("someone-else", web, "/", agent_apps.app_key("someone-else", "chat-9", web))
+    second = host.get(f"{agent_apps.OPEN_PATH}?t={other}&s=1")
+    assert second.status_code == 303 and second.headers["location"] == "/"
+    assert second.headers["clear-site-data"] == '"cache", "storage"'
+    cookies = second.headers.get_list("set-cookie")
+    assert any(cookie.startswith("sid=;") and "Max-Age=0" in cookie for cookie in cookies)
+    session = [cookie for cookie in cookies if cookie.startswith(agent_apps.COOKIE + "=")]
+    assert len(session) == 1 and "Max-Age=0" not in session[0]
+    assert "sid" not in host.cookies
+    # A clean browser's second step (the first one cleared) clears nothing more.
+    host.cookies.clear()
+    _first, clean = sign_in(host, web, chat="chat-2")
+    assert "clear-site-data" not in clean.headers
+
+
+def test_no_app_registers_a_service_worker_here(host, web):
+    # One would answer for every later app under this one host, before the
+    # opening address could clear it: it is never fetched from the app.
+    sign_in(host, web)
+    refused = host.get("/sw.js", headers={"service-worker": "script"})
+    assert refused.status_code == 403
+    assert not host.commands
+    assert host.get("/headers").status_code == 200
+
+
 def test_an_address_that_is_not_ours_opens_nothing(host):
     page = host.get(f"{agent_apps.OPEN_PATH}?t={'A' * 120}")
     assert page.status_code == 403 and "no longer valid" in page.text and "set-cookie" not in page.headers
