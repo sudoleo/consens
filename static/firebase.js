@@ -1861,8 +1861,9 @@ const SIGNED_IN_RETURN = (() => {
 // (notification_delivery._agent_chat_url): once signed
 // in, the chat opens; signed out, the login comes first.
 (function openChatFromLink() {
-  // A Google login on a phone leaves through a redirect and comes back to a
-  // bare /app: the chat waits in this tab for ten minutes.
+  // A login on this page reloads it to a bare /app (continueSignedIn), a
+  // Google login on a phone leaves through a redirect and comes back to one:
+  // the chat waits in this tab for ten minutes.
   const KEY = "consensio:open-chat";
   const valid = value => /^[A-Za-z0-9_]{1,100}$/.test(value || "");
   const url = new URL(window.location.href);
@@ -1884,16 +1885,22 @@ const SIGNED_IN_RETURN = (() => {
   }
   if (!bookmarkId) return;
   let handled = false;
+  let signedInHere = false;
   onAuthStateChanged(auth, user => {
     if (handled) return;
     if (!user) {
       if (!fromLink) return;
+      signedInHere = true;
       showAuthModal("login");
       loginNoticeEl.textContent = "Log in to open this chat.";
       return;
     }
     handled = true;
-    try { sessionStorage.removeItem(KEY); } catch (_) { /* private mode */ }
+    // Signed in on this page: Firebase reports it before continueSignedIn()
+    // reloads, and the fresh page opens the chat from KEY.
+    if (!signedInHere) {
+      try { sessionStorage.removeItem(KEY); } catch (_) { /* private mode */ }
+    }
     window.openBookmark?.(bookmarkId);
   });
 })();

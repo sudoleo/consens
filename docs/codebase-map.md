@@ -11988,8 +11988,9 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   oder Ziel, als Mail mit „Stop emails“ und als Telegram-Nachricht mit
   Link-Knöpfen; `resource_id` = Watch, `run_id` = Turn; der Chat-Link ist
   `/app?chat=<bookmark_id>`, den `firebase.js openChatFromLink` öffnet; er
-  wartet zehn Minuten in `sessionStorage` `consensio:open-chat`, damit ein
-  Google-Login per Weiterleitung auf dem Handy ihn nicht verliert). Felder:
+  wartet zehn Minuten in `sessionStorage` `consensio:open-chat`, damit ihn
+  weder das Neuladen nach einem Login auf der Seite (`continueSignedIn`) noch
+  ein Google-Login per Weiterleitung auf dem Handy verliert). Felder:
   `kind`, `channel`, `uid` (Owner, leer bei Topic), `resource_id`, `run_id`,
   `recipient_id` (UID oder Follower-Dokument-ID, keine E-Mail), `payload` (nur
   Frage, Scores, Change-Summary, Richtung; kein Consensus-Volltext),
