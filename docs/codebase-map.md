@@ -8045,7 +8045,13 @@ das auf). Die Live-Ansicht wartet auf eine festgefahrene VM mit dem Zustand
 `repairing` (`routers/agent_workspace.py::_repairing`, solange
 `agent_vm.checking` oder `agent_workspace.healing`) und endet sonst mit
 `stuck` und Close-Code 4503, von wo der Nutzer einen neuen Rechner starten
-kann; Details `docs/agent-mode.md`, „Sofort da“ und „Neuer Rechner“. Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+kann; Details `docs/agent-mode.md`, „Sofort da“ und „Neuer Rechner“. Eine
+Nachricht, deren Start die festgefahrene VM trifft, wartet seit 2026-11-24
+ebenso auf die Reparatur und öffnet die VM danach ein zweites Mal
+(`VMSession.repaired` für Werkbank und Browser,
+`agent_workspace.await_repair`, höchstens `REPAIR_WAIT_SECONDS`; ihre eigene
+Sperre hält den Restore nicht auf, `in_use(besides=…)`; nur solange von ihr
+noch nichts in der VM lief; der Schritt meldet `repairing`). Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
 Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
 Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
 Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder

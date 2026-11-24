@@ -1549,6 +1549,27 @@ Anfrage). Der Ablauf:
   nie zurück.
 - Nie unter einer Nachricht (`in_use`, höchstens 10 min gewartet). Nach einem
   Restore frühestens eine Stunde später wieder (`HEAL_SECONDS`).
+- Die Nachricht, die die festgefahrene VM beim Start trifft, wartet auf diese
+  Reparatur und arbeitet danach weiter (`VMSession.repaired`,
+  `agent_workspace.await_repair`). Prod 2026-11-24, 15:15 UTC: Die erste
+  Nachricht nach einer Nacht bekam nach 43 s „not available“ und antwortete
+  ohne Arbeitsplatz, der Restore war zwei Minuten später fertig, und der
+  Nutzer musste die Nachricht noch einmal schicken. Seither öffnet der Start
+  der Werkbank wie der des Browsers die VM nach der Reparatur ein zweites
+  Mal. Die Sperre der wartenden Nachricht hält den Restore dabei nicht auf
+  (`in_use(besides=…)`); das gilt nur, solange von dieser Nachricht noch
+  nichts in der VM lief (`started`), denn sonst nähme der Restore ihre
+  eigene Arbeit mit. Gewartet wird einmal je Nachricht, höchstens
+  `REPAIR_WAIT_SECONDS` = 7 min und nie in die Zeit hinein, die die Antwort
+  braucht. Arbeitet nichts mehr an der VM (keine Probe, keine Heilung, etwa
+  weil kein Checkpoint zurückführen darf), geht die Nachricht sofort ohne
+  Arbeitsplatz weiter wie zuvor. Der wartende Schritt meldet `repairing`
+  und die Schätzung `START_SECONDS["repair"]` = 150 s; über dem Balken
+  stehen die Schritte der Live-Ansicht („Trying to start it once more…“).
+  Nach einem Restore liest die Nachricht selbst `HEALED_NOTE`. Im Log:
+  `Agent VM did not start, waiting for its repair` und `Agent VM repair
+  waited seconds=… reached=…`; die Zeit steht als Phase `repair` in
+  `agent_vm.phases` der Nachricht.
 - Der Restore ist selbst eine Anfrage an die festgefahrene VM und kann
   dieselbe 502 bekommen (Prod 2026-11-20, 20:17 UTC: `restore: HTTP 502` nach
   48 s; die Heilung gab nach diesem einen Versuch auf und war für eine Stunde
@@ -1692,7 +1713,8 @@ geändert hat:
   Weg mit `starting`.
 - **Reparatur in der Ansicht** (`_repairing`): Bekommt die Ansicht die 502
   des Gateways, endet sie nicht mit „not reachable“, sondern sagt
-  `repairing` mit einer Schätzung (`REPAIR_SECONDS` = 150 s) und wartet, bis
+  `repairing` mit einer Schätzung (`REPAIR_SECONDS` = 150 s,
+  `agent_workspace.START_SECONDS["repair"]`) und wartet, bis
   die VM wieder erreicht wird. Läuft keine Probe und keine Heilung mehr oder
   sind `REPAIR_WAIT_SECONDS` = 7 min um, sagt sie `stuck` und schließt mit
   4503. Von dort kann der Nutzer es später noch einmal versuchen oder einen

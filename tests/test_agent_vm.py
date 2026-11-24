@@ -678,6 +678,8 @@ def test_a_vm_the_gateway_called_unresponsive_is_asked_once_across_browser_bench
         agent_vm.mark_unresponsive(name, 502)  # as SpritesBackend does
         raise VMUnavailable("read: HTTP 502", 502)
     monkeypatch.setattr(_FakeBackend, "ensure", unresponsive)
+    # The first start waits for the VM's second answer (VMSession.repaired), which changes nothing here.
+    monkeypatch.setattr(agent_vm, "WATCH_SECONDS", .01)
     loop = vm_loop(store, Agent([[("browser", {"action": "read"})], [("vm_exec", {"command": "ls"})]]))
     list(loop.run())
     assert len(tried) == 1 and results(loop)[1] == {"error": VM_UNAVAILABLE}
@@ -687,6 +689,124 @@ def test_a_vm_the_gateway_called_unresponsive_is_asked_once_across_browser_bench
     turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
     assert turn["agent_vm"]["unavailable_reason"] == "bench: unresponsive: HTTP 502"
+
+
+def stuck_once(monkeypatch):
+    """The provider's gateway answers the next start with 502 once, and the
+    probe after it too (SpritesBackend marks the VM each time): stuck, until
+    a restore starts it."""
+    refusals = [1]
+    real = _FakeBackend.ensure
+
+    def ensure(self, name, rules=None):
+        if refusals[0]:
+            refusals[0] -= 1
+            self.vm.calls.append(("ensure", name))
+            agent_vm.mark_unresponsive(name, 502)
+            raise VMUnavailable("read: HTTP 502", 502)
+        return real(self, name, rules)
+
+    def reach(self, name):
+        # Long enough for the waiting step to say what it waits for (VMSession._wait).
+        time.sleep(.4)
+        agent_vm.mark_unresponsive(name, 502)
+        raise VMUnavailable("wake: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "ensure", ensure)
+    monkeypatch.setattr(_FakeBackend, "reach", reach, raising=False)
+    monkeypatch.setattr(agent_vm, "WATCH_SECONDS", .01)
+    monkeypatch.setattr(agent_workspace, "REPAIR_POLL_SECONDS", .01)
+
+
+def test_a_message_that_meets_the_stuck_vm_waits_for_its_repair_and_works_on(store, fake_vm, monkeypatch):
+    """Prod 2026-11-24 15:15 UTC: the first message after a night met the VM
+    the provider did not start, answered without its workspace after 43 s,
+    and the restore was done two minutes later, for the message the user had
+    to send again. The start waits for the repair (VMSession.repaired): the
+    heal goes under the waiting message's own lease, which ran nothing
+    there yet, and the message is told of the restore like any after one."""
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    checkpoint = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]["checkpoint"]
+    stuck_once(monkeypatch)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]),
+                   chat_id=loop.chat_id, request_id="two")
+    events = list(loop.run())
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    first, second = results(loop)
+    assert "error" not in first and "error" not in second
+    assert first["workspace_note"] == agent_workspace.HEALED_NOTE and "workspace_note" not in second
+    assert [call for call in fake_vm.calls if call[0] == "restore"] == [("restore", NAME, checkpoint)]
+    assert agent_vm.unresponsive_status(NAME) is None and not agent_workspace.repairing(UID)
+    assert "unavailable" not in turn["agent_vm"] and "repair" in turn["agent_vm"]["phases"]
+    # The waiting step said so, for the chat's line over its bar.
+    assert True in [event.get("repairing") for event in tool_events(events, "vm_exec")]
+    # The chat's next message is not told again.
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=loop.chat_id, request_id="three")
+    list(loop.run())
+    assert "workspace_note" not in results(loop)[0]
+
+
+def test_a_repair_that_does_not_come_leaves_the_message_without_its_workspace(store, fake_vm, monkeypatch):
+    """No checkpoint the workspace may go back to (a new VM, a chat deleted
+    since): nothing repairs it, and the message goes on without it at once
+    instead of waiting REPAIR_WAIT_SECONDS for nothing. A message whose
+    calls already ran in the workspace never waits: the restore would take
+    its own work."""
+    stuck_once(monkeypatch)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]))
+    started = time.monotonic()
+    list(loop.run())
+    assert time.monotonic() - started < 10
+    assert results(loop) == [{"error": VM_UNAVAILABLE}] * 2
+    assert not [call for call in fake_vm.calls if call[0] == "restore"]
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["agent_vm"]["unavailable_reason"] == "bench: read: HTTP 502"
+    session = vm_loop(store, Agent(), request_id="ran-already").vm_tools.session
+    session.started = True
+    waited = []
+    monkeypatch.setattr(agent_workspace, "await_repair", lambda *args, **kwargs: waited.append(args) or True)
+    assert session.repaired(VMUnavailable("read: HTTP 502", 502), ProviderCancellation()) is False
+    assert session.repaired(VMUnavailable("read"), ProviderCancellation()) is False and not waited
+
+
+def test_the_wait_for_a_repair_ends_with_whatever_works_on_the_vm(store, monkeypatch):
+    """await_repair: nothing to wait for when this process does not know the
+    VM as unresponsive or nothing works on it; while its watch, probe or
+    heal runs the message waits, at most its time, and its own lease does
+    not count as use of the workspace meanwhile (heal, in_use)."""
+    chat, _ = pending(store)
+    agent_workspace.claim(store, UID, chat, "waiting", provider="fake")
+    assert agent_workspace.in_use(store, UID) is True
+    assert agent_workspace.in_use(store, UID, besides=("waiting",)) is False
+    assert agent_workspace.in_use(store, UID, besides=("another",)) is True
+    assert agent_workspace.await_repair(store, UID, "waiting") is False
+    agent_vm.mark_unresponsive(NAME, 502)
+    assert agent_workspace.await_repair(store, UID, "waiting") is False
+    clock, seen = Clock(), []
+
+    def wait(seconds):
+        seen.append(agent_workspace._awaiting_repair(UID))
+        clock.now += 100
+
+    def restored(seconds):
+        wait(seconds)
+        if len(seen) == 2:
+            # The restore started the VM, then the heal ended.
+            agent_vm.forget_unresponsive(NAME)
+            agent_workspace._healing.pop(UID, None)
+    agent_workspace._healing[UID] = threading.current_thread()
+    assert agent_workspace.await_repair(store, UID, "waiting", clock=clock, sleep=restored) is True
+    assert seen == [("waiting",)] * 2 and not agent_workspace.repairing(UID)
+    # Out of time: the message's own (never into the time the answer needs), or the repair's.
+    agent_vm.mark_unresponsive(NAME, 502)
+    agent_workspace._healing[UID] = threading.current_thread()
+    seen.clear()
+    assert agent_workspace.await_repair(store, UID, "waiting", clock=clock, sleep=wait, seconds=150) is False
+    assert len(seen) == 2
+    seen.clear()
+    assert agent_workspace.await_repair(store, UID, "waiting", clock=clock, sleep=wait) is False
+    assert len(seen) == 5 and agent_workspace.REPAIR_WAIT_SECONDS == 420
 
 
 def test_a_start_uses_the_vm_again_once_its_probe_reaches_it(store, fake_vm, monkeypatch):

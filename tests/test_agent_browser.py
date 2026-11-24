@@ -744,6 +744,37 @@ def test_a_browser_vm_the_gateway_calls_unresponsive_is_off_for_the_message(stor
     assert len(opened) == 1
 
 
+def test_a_browser_whose_vm_did_not_start_waits_for_its_repair_and_opens_it_again(store, fake_vm, monkeypatch):
+    """Prod 2026-11-24: the first message after a night met the VM the
+    provider did not start, and the browser was off for it, though the
+    restore was done two minutes later. The warm-up waits for the repair
+    once (VMSession.repaired) and opens the VM a second time; a second
+    refusal turns the browser off as before."""
+    opened, waited, refusals = [], [], [1]
+    real = agent_workspace.open_workspace
+
+    def open_workspace(vm, uid, cancellation=None, **kwargs):
+        opened.append(uid)
+        if refusals[0]:
+            refusals[0] -= 1
+            raise agent_vm.VMUnavailable("read: HTTP 502", 502)
+        return real(vm, uid, cancellation, **kwargs)
+    monkeypatch.setattr(agent_workspace, "open_workspace", open_workspace)
+    monkeypatch.setattr(agent_workspace, "await_repair",
+                        lambda store, uid, turn, cancellation=None, **kwargs: waited.append(turn) or True)
+    loop, browser = tools(store)
+    call(browser, action="read")
+    assert len(opened) == 2 and waited == [loop.turn_id]
+    assert browser.ready is True and browser.off is False and fake_vm.warmed == [BROWSER]
+    # One wait per message: the VM that does not start after it either is not waited for again.
+    loop.vm_tools.session.close()
+    loop, browser = tools(store)
+    refusals[0] = 2
+    with pytest.raises(ValueError):
+        call(browser, action="read")
+    assert len(opened) == 4 and waited[1:] == [loop.turn_id] and browser.off is True
+
+
 def test_the_warm_up_brings_the_network_counters_before_the_agents_commands(store, fake_vm, monkeypatch):
     """In a new boot the first reading of the counters is only where
     counting starts (workspace_guard.merge_net): read once, at the end of a

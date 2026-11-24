@@ -1082,10 +1082,15 @@
   // (start-progress.js steps): the browser needs the VM
   // and Chrome, the other tools the chat's folder and the message's restore
   // point too (VMSession: claim, prepare, open_chat, checkpoint). Real work only.
+  // ``repairing``: the provider did not start the workspace, and the step
+  // waits while the server asks it again and sets it back to its last
+  // restore point (VMSession.repaired), in the live view's own words
+  // (workspace-view.js).
   const START_STEPS = {
     bench: ['Waking your workspace in the cloud…', 'Checking its tools and settings…',
       'Opening this chat’s folder…', 'Saving a restore point…'],
     browser: ['Waking your workspace in the cloud…', 'Checking its tools and settings…', 'Starting Chrome…'],
+    repair: ['Trying to start it once more…', 'Going back to its last restore point…', 'Starting it again…'],
   };
   function starting(item) {
     return Boolean(item && item.status === 'running' && !item.started_at && item.starting_until
@@ -2103,7 +2108,8 @@
           if (item.kind === 'hold') updateHold(p, item.item);
           if (item.kind === 'start') {
             p._progress.set(item.item.starting_until);
-            p._progress.steps?.(START_STEPS[item.item.name === 'browser' ? 'browser' : 'bench']);
+            p._progress.steps?.(START_STEPS[item.item.repairing ? 'repair'
+              : item.item.name === 'browser' ? 'browser' : 'bench']);
           }
           place(item, p);
           continue;

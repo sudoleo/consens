@@ -193,10 +193,12 @@ VERSION = _version()
 # 40 s: a new account's provisioning took 95-109 s in all, Prod 2026-11-07
 # to 11-09), the tools after a new version (7 s), a VM waking from cold with
 # Chrome starting (median 15 s after a pause) or from warm (5 s), Chrome's
-# start in the live view. Only what the user is told: the chat's step and
-# the live view count the time left down (start_until); no start waits for
-# them.
-START_SECONDS = {"setup": 65, "install": 45, "update": 10, "cold": 15, "warm": 5, "chrome": 8}
+# start in the live view, and the repair of a VM the provider did not start
+# (the second answer of its gateway, one restore and the start after it,
+# about 50 s each: await_repair, the live view's "repairing"). Only what the
+# user is told: the chat's step and the live view count the time left down
+# (start_until); no start waits for them.
+START_SECONDS = {"setup": 65, "install": 45, "update": 10, "cold": 15, "warm": 5, "chrome": 8, "repair": 150}
 # The phases only the browser goes through: the workbench is ready before them.
 BROWSER_PHASES = frozenset({"install", "chrome"})
 # A start whose end nobody said is forgotten this long after its estimate.
@@ -503,14 +505,18 @@ def held_by(db, uid, now=None):
     return _held_by_other(record(db, uid).get("lease"), None, now or _now())
 
 
-def in_use(store, uid, now=None):
+def in_use(store, uid, now=None, *, besides=()):
     """Whether a chat's message may be using the workspace now: its lease
     holds, or the chat named by the lease, also one past its time, still
     runs a response (its run lock, ``agent_lock_until``, which the running
     response keeps moving on). A restore never goes under a running agent,
-    also when its lease ran out."""
+    also when its lease ran out. ``besides``: the messages (turn ids) whose
+    lease does not count, as they wait for the repair itself and ran nothing
+    in the workspace yet (await_repair)."""
     now = now or _now()
     lease = record(store.db, uid).get("lease")
+    if isinstance(lease, dict) and lease.get("turn_id") in besides:
+        return False
     if _held_by_other(lease, None, now):
         return True
     if not isinstance(lease, dict) or not lease.get("chat_id"):
@@ -1550,7 +1556,8 @@ def record_checkpoint(db, uid, checkpoint, taken):
 # after that checkpoint, which a message takes before its own commands, so
 # at most that message's changes; the files it shared stay in the chat.
 # Only a checkpoint that may still bring the workspace back (restorable),
-# never under a message (in_use: waited for, at most HEAL_WAIT_SECONDS),
+# never under a message (in_use: waited for, at most HEAL_WAIT_SECONDS; one
+# that waits for this repair itself does not count, await_repair),
 # and after one that restored it not again for HEAL_SECONDS in this process.
 # The restore is the stuck VM's own request and may meet the same gateway
 # answer (prod 2026-11-20: 502 after 48 s): it is tried HEAL_TRIES times, and
@@ -1603,7 +1610,7 @@ def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
     store = AgentRunStore(db)
     try:
         deadline = clock() + HEAL_WAIT_SECONDS
-        while in_use(store, uid):
+        while in_use(store, uid, besides=_awaiting_repair(uid)):
             if clock() >= deadline:
                 logging.warning("Agent workspace stuck, still in use")
                 return False
@@ -1632,6 +1639,65 @@ def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
         return False
     logging.warning("Agent workspace was stuck and went back to its newest checkpoint")
     return True
+
+
+# A message that meets the VM the provider did not start waits for its
+# repair instead of answering without its workspace (prod 2026-11-24: the
+# first message after a night got "not available" after 43 s, the restore
+# was done two minutes later, and the user had to send it again). The check
+# and the heal run as for any start (open_workspace: agent_vm.watch,
+# heal_later); the waiting message's own lease does not hold the restore up
+# (in_use ``besides``), which is safe only while nothing of the message ran
+# in the workspace (VMSession.repaired). At most REPAIR_WAIT_SECONDS: the
+# second answer and three tries of a restore.
+REPAIR_WAIT_SECONDS = 420
+REPAIR_POLL_SECONDS = 0.5
+# Per account: the messages (turn ids) waiting for its workspace's repair.
+_repair_waits: dict[str, list] = {}
+_repair_lock = threading.Lock()
+
+
+def _awaiting_repair(uid):
+    with _repair_lock:
+        return tuple(_repair_waits.get(uid) or ())
+
+
+def repairing(uid):
+    """Whether a message waits for the repair of the account's workspace now."""
+    return bool(_awaiting_repair(uid))
+
+
+def await_repair(store, uid, turn_id, cancellation=None, *, seconds=None, clock=time.monotonic, sleep=time.sleep):
+    """The message ``turn_id`` waits while the account's VM, which the
+    provider did not start, is asked again and, stuck, restored. Returns
+    whether the VM answers again after that. False at once when this process
+    does not know it as unresponsive or nothing works on it (no probe, no
+    watch, no heal: a heal's pause, or no checkpoint to go back to), and
+    after ``seconds`` (at most REPAIR_WAIT_SECONDS). The heal counts as
+    running until it told the chats (mark_restored), so the message that
+    waited reads its note."""
+    name = agent_vm.workspace_name(uid)
+    if agent_vm.unresponsive_status(name) is None:
+        return False
+    limit = REPAIR_WAIT_SECONDS if seconds is None else min(REPAIR_WAIT_SECONDS, seconds)
+    deadline = clock() + max(0.0, limit)
+    with _repair_lock:
+        _repair_waits.setdefault(uid, []).append(turn_id)
+    try:
+        while agent_vm.checking(name) or healing(uid):
+            if clock() >= deadline:
+                return False
+            if cancellation is not None:
+                cancellation.raise_if_cancelled()
+            sleep(REPAIR_POLL_SECONDS)
+        return agent_vm.unresponsive_status(name) is None
+    finally:
+        with _repair_lock:
+            waits = _repair_waits.get(uid) or []
+            if turn_id in waits:
+                waits.remove(turn_id)
+            if not waits:
+                _repair_waits.pop(uid, None)
 
 
 HEAL_CHATS = 20

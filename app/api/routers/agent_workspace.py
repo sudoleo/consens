@@ -426,8 +426,8 @@ async def _waking(websocket, uid, seconds, start):
 # second answer and three tries of a restore, about 50 s each). What it is
 # told to expect, REPAIR_SECONDS, is the second answer, one restore and the
 # start after it.
-REPAIR_SECONDS = 150
-REPAIR_WAIT_SECONDS = 420
+REPAIR_SECONDS = agent_workspace.START_SECONDS["repair"]
+REPAIR_WAIT_SECONDS = agent_workspace.REPAIR_WAIT_SECONDS
 REPAIR_LOOK_SECONDS = 1.0
 # The state again this often: a view that is gone ends the wait.
 REPAIR_TELL_SECONDS = 10

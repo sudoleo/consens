@@ -479,10 +479,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       zurückgeholt…“ mit Restzeit und öffnet danach von selbst; im Log
       `restore failed attempt=N` je Versuch, am Ende `went back to its newest
       checkpoint` oder die Ansicht mit „… startet gerade nicht …“ und dem
-      Angebot eines neuen Rechners (nächster Punkt). Automatisiert:
+      Angebot eines neuen Rechners (nächster Punkt). Trifft stattdessen eine
+      Nachricht die festgefahrene VM (2026-11-24), wartet ihr Schritt mit
+      Balken und „Noch ein Startversuch…“ und arbeitet danach im Arbeitsplatz
+      weiter, statt ohne ihn zu antworten; im Log `Agent VM repair waited
+      seconds=… reached=True`. Automatisiert:
       `test_agent_workspace_view.py`, `test_agent_vm.py`,
-      `test_agent_workspace.py`, `workspace-view.test.mjs`,
-      `start-progress.test.mjs`.
+      `test_agent_browser.py`, `test_agent_workspace.py`,
+      `workspace-view.test.mjs`, `start-progress.test.mjs`.
 - [ ] Neuer Rechner für einen festgefahrenen Arbeitsplatz (2026-11-22, echter
       Provider; eine festgefahrene VM lässt sich nicht nachstellen, nur
       beobachten; `docs/agent-mode.md` „Neuer Rechner“): Endet die Ansicht mit

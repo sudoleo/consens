@@ -557,7 +557,14 @@ class BrowserTools:
                 if backend is None:
                     return
                 try:
-                    agent_workspace.open_workspace(backend, uid, cancellation, start=start, db=self._db())
+                    try:
+                        agent_workspace.open_workspace(backend, uid, cancellation, start=start, db=self._db())
+                    except agent_vm.VMUnavailable as exc:
+                        # A VM the provider did not start is waited for once
+                        # while it is repaired, then opened again.
+                        if not session.repaired(exc, cancellation, start):
+                            raise
+                        agent_workspace.open_workspace(backend, uid, cancellation, start=start, db=self._db())
                 except agent_vm.VMUnavailable as exc:
                     thread.refused = exc
                     raise
@@ -594,24 +601,38 @@ class BrowserTools:
         provider would keep Stop waiting up to CALL_SECONDS; the warm-up
         goes on by itself). Meanwhile the step says about when the
         browser's start ends (``starting_until``, the latest of the account's
-        starts: agent_workspace.start_until), and the chat counts it down."""
+        starts: agent_workspace.start_until), and the chat counts it down.
+        While the warm-up waits for the repair of a VM the provider did not
+        start (VMSession.repaired), the step says so and ``deadline`` does
+        not end the wait: the repair has its own limit. Returns whether it
+        waited for one (the call then counts its own time from after it)."""
         from app.services import agent_workspace
-        told = None
+        uid = self.vm.loop.uid
+        told = said = None
+        repaired = False
         try:
             while warming.is_alive():
                 cancellation.raise_if_cancelled()
                 # A workbench's start too: the warm-up waits for its setup (one computer).
-                until = agent_workspace.start_until(self.vm.loop.uid, agent_workspace.START_KINDS)
+                until = agent_workspace.start_until(uid, agent_workspace.START_KINDS)
                 if until is not None and until != told:
                     told = until
                     report({"starting_until": until.isoformat()})
+                waits = agent_workspace.repairing(uid)
+                repaired = repaired or waits
+                if waits and told is not None and not said:
+                    said = True
+                    report({"repairing": True})
                 rest = deadline - time.monotonic()
-                if rest <= 0:
-                    return
-                warming.join(min(WARM_POLL_SECONDS, rest))
+                if rest <= 0 and not waits:
+                    break
+                warming.join(WARM_POLL_SECONDS if waits else min(WARM_POLL_SECONDS, rest))
         finally:
             if told is not None:
                 report({"starting_until": None})
+            if said:
+                report({"repairing": None})
+        return repaired
 
     def _rest(self):
         """The message ended: the helper shortens the VM's wake hold to about
@@ -804,7 +825,12 @@ class BrowserTools:
         try:
             if not self.ready:
                 if warming is not None:
-                    self._await_warm(warming, deadline, report, cancellation)
+                    if self._await_warm(warming, deadline, report, cancellation):
+                        # The wait for the VM's repair was not this call's: its
+                        # time begins now, with what is left of the browser's start.
+                        left = self.vm.loop.answer_time_left() if hasattr(self.vm.loop, "answer_time_left") else None
+                        deadline = time.monotonic() + (timeout if left is None else max(0, min(timeout, int(left))))
+                        self._await_warm(warming, deadline, report, cancellation)
                     if warming.refused is not None:
                         raise self._unavailable(warming.refused, BROWSER_NOT_STARTED)
                 if deadline - time.monotonic() < MIN_COMMAND_SECONDS:

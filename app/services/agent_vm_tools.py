@@ -173,7 +173,8 @@ VM_UNAVAILABLE = ("The VM is not available right now. Continue without it for th
 # once more first; for anything else whether it ran is
 # not known, and the agent is told that fact. The provider's gateway saying
 # the VM does not respond (agent_vm.unresponsive, HTTP 502/503/504) turns it
-# off at once: each new try waits as long again.
+# off at once: each new try waits as long again. Only a message's start
+# that meets it waits for the VM's repair first (VMSession.repaired).
 MAX_FAILURES = 3
 VM_INTERRUPTED = "The connection to your workspace broke off during this call, so whether it ran is unknown."
 VM_NOT_REACHED = "Your workspace did not answer just now; nothing was changed."
@@ -638,6 +639,10 @@ class VMSession:
         # (``unavailable_reason``: the operation and the kind, never data).
         self.failures = 0
         self.unavailable_reason = None
+        # The one wait of this message for the repair of a VM the provider
+        # did not start (repaired): its outcome once it is over.
+        self._repair = None
+        self._repair_lock = threading.Lock()
         # For the turn's summary: seconds of each part of the start,
         # whether a VM was cold, the browser's calls and their seconds.
         self.phases = {}
@@ -718,7 +723,7 @@ class VMSession:
         left = self._answer_left()
         deadline = None if left is None else time.monotonic() + max(0.0, left - MIN_COMMAND_SECONDS)
         report = getattr(self.reporting, "report", None) if kinds else None
-        told = None
+        told = repairing = None
         try:
             while not job.done.wait(.1):
                 cancellation.raise_if_cancelled()
@@ -727,12 +732,18 @@ class VMSession:
                     if until is not None and until != told:
                         told = until
                         report({"starting_until": until.isoformat()})
+                    # The start waits for the VM's repair (repaired): the step says so.
+                    if told is not None and not repairing and agent_workspace.repairing(self.loop.uid):
+                        repairing = True
+                        report({"repairing": True})
                 if deadline is not None and time.monotonic() >= deadline:
                     raise ValueError(VM_NO_TIME)
         finally:
             # The step goes on as itself (a file's write has no start of its own to say).
             if told is not None:
                 report({"starting_until": None})
+            if repairing:
+                report({"repairing": None})
 
     def _took(self, phase, since):
         with self._lock:
@@ -841,9 +852,16 @@ class VMSession:
             self._go_on(cancellation)
             with self._lock:
                 self._bench_ran = True
-            agent_workspace.open_workspace(backend, self.loop.uid, cancellation, start=start,
-                                           db=getattr(getattr(self.loop, "store", None), "db", None),
-                                           timeout=self._answer_left())
+            db = getattr(getattr(self.loop, "store", None), "db", None)
+            try:
+                agent_workspace.open_workspace(backend, self.loop.uid, cancellation, start=start, db=db,
+                                               timeout=self._answer_left())
+            except agent_vm.VMUnavailable as exc:
+                if not self.repaired(exc, cancellation, start):
+                    raise
+                claim = self.claim
+                agent_workspace.open_workspace(backend, self.loop.uid, cancellation, start=start, db=db,
+                                               timeout=self._answer_left())
             status = getattr(backend, "statuses", {}).get(self.name)
             if status:
                 self.cold["workbench"] = status == "cold"
@@ -896,6 +914,52 @@ class VMSession:
             raise _StartFailed(f"bench: {type(exc).__name__}") from None
         finally:
             start.end()
+
+    def repaired(self, exc, cancellation, start=None):
+        """Whether the VM the provider did not start (``exc``: its gateway's
+        502, 503 or 504) answers again once the server asked it once more
+        and, stuck, restored it: the start waits for that
+        (agent_workspace.await_repair) and then opens the VM a second time,
+        instead of leaving the message without its workspace. Only before
+        anything of this message ran there (``started``): the restore goes
+        under this message's own lease, and would take its work. One wait
+        per message, which the workbench's start and the browser's share;
+        never into the time the answer needs. ``start`` (a Start) tells the
+        waiting step how long the repair should take. After a restore the
+        message is told like any that comes after one (announce)."""
+        from app.services import agent_workspace
+        store = getattr(self.loop, "store", None)
+        if not agent_vm.unresponsive(exc) or getattr(store, "db", None) is None:
+            return False
+        with self._repair_lock:
+            if self._repair is not None:
+                return self._repair
+            with self._lock:
+                if self.started or self._closed or self.state in {"unavailable", "busy"}:
+                    return False
+            left = self._answer_left()
+            if start is not None:
+                start.phase("repair")
+            began = time.monotonic()
+            logging.warning("Agent VM did not start, waiting for its repair %s", log_tag(self.loop))
+            repaired = agent_workspace.await_repair(
+                store, self.loop.uid, self.loop.turn_id, cancellation,
+                seconds=None if left is None else left - MIN_COMMAND_SECONDS)
+            logging.warning("Agent VM repair waited seconds=%.1f reached=%s %s", time.monotonic() - began, repaired,
+                            log_tag(self.loop))
+            self._took("repair", began)
+            if repaired and self.leased and self.backend is not None:
+                # Claimed anew, the message learns of the restore it waited for.
+                try:
+                    claim = agent_workspace.claim(store, self.loop.uid, self.loop.chat_id, self.loop.turn_id,
+                                                  provider=self.backend.provider)
+                    with self._lock:
+                        self.claim = claim
+                except Exception as error:
+                    logging.warning("Agent VM record failed category=%s %s", safe_exception(error),
+                                    log_tag(self.loop))
+            self._repair = repaired
+            return repaired
 
     def _checkpoint_start(self):
         with self._lock:

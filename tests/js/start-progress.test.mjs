@@ -155,6 +155,32 @@ describe("the bar where the user waits", () => {
     activity.dispose(host);
   });
 
+  it("names the repair while a workspace the provider did not start is brought back (2026-11-24)", () => {
+    // The step waits for the server's second try and the restore
+    // (VMSession.repaired): the line over the bar says that, in the live
+    // view's words, and the start's own steps once the workspace answers.
+    const { App, host, advance } = setup(["static/js/user-settings.js", "static/js/start-progress.js",
+      "static/js/agent-activity.js"]);
+    const activity = App.agentActivity;
+    const events = [];
+    const step = fields => ({ version: 1, kind: "tool", id: "completion:1:call_1/tool", name: "vm_exec",
+      command: "ls", status: "running", ...fields });
+    const render = () => activity.render(host, { running: true, status: "running", events });
+    activity.receive(events, step({ starting_until: new Date(NOW + 150_000).toISOString(), repairing: true }));
+    render();
+    advance(2_000);
+    const said = () => host.querySelector(".agent-progress .agent-start-progress .start-progress-step").textContent;
+    expect(said()).toBe("Trying to start it once more…");
+    advance(60_000);
+    render();
+    expect(said()).toBe("Going back to its last restore point…");
+    activity.receive(events, step({ repairing: null }));
+    render();
+    advance(1_000);
+    expect(said()).toBe("Waking your workspace in the cloud…");
+    activity.dispose(host);
+  });
+
   it("stands flush under a tool's line in the detailed lines, after the mark only under the calm one (2026-11-03)", () => {
     // Under "Listing the tabs" the bar stood a mark's
     // width in, though a tool's line has no mark.
