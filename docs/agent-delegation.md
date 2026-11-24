@@ -45,6 +45,10 @@ Konfiguration.
 - Seine Seiten zählen auf die 30 Lesevorgänge der Nachricht und je
   Helfer-Schritt auf `READS_PER_STEP` (`agent_read_source.helper_step`), nicht
   auf den Schritt des Agenten, der delegiert hat.
+- Agent und Helfer teilen einen `SourceReader`, haben aber je ein eigenes
+  Gespräch: Eine Seite, die ein anderer schon las, kommt beim ersten Mal mit
+  ihrem gespeicherten Text ohne neuen Abruf (`SourceReader._reader`), erst
+  danach `already_read`.
 
 ## Modell
 

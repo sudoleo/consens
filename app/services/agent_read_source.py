@@ -400,8 +400,10 @@ class SourceReader:
         self.reads = []
         self.lock = threading.Lock()
         self._steps = {}
-        # Read id -> the run's summaries when its text last went into the
-        # conversation (read): a summary since then has replaced that result.
+        # (Read id, reader) -> the reader's summaries when the read's text
+        # last went into its conversation (read): a summary since then has
+        # replaced that result. The agent and each helper (_reader) have a
+        # conversation of their own.
         self._summaries = {}
         self._user_urls = None
         # Straight from Exa in this message (the module's docstring). Decided
@@ -487,6 +489,13 @@ class SourceReader:
         step = helper_step.get()
         return self.loop.routing_steps if step is None else step
 
+    def _reader(self):
+        """Whose conversation a read's text goes to, with the summaries it
+        has had: (helper id, 0) for a helper, whose conversation is never
+        summarised, (None, the run's summaries) for the agent."""
+        step = helper_step.get()
+        return (None, self.loop.run_summaries) if step is None else (step.rsplit(":", 1)[0], 0)
+
     def room_for(self, count):
         """Whether ``count`` more reads fit this step's and this message's
         limits, so that reads run side by side (DelegationLoop._prefetch)
@@ -550,21 +559,28 @@ class SourceReader:
                                      "try it again; continue with what you have.")
             except ValueError as exc:
                 return {"status": "refused", "reason": str(exc)[:500]}
-            if tried is not None and self._summaries.get(tried["id"]) == loop.run_summaries:
+            reader, summaries = self._reader()
+            if tried is not None and self._summaries.get((tried["id"], reader)) == summaries:
                 return {"status": "already_read", "url": tried["url"],
                         "note": "You already read this source in this message; its text is in that earlier result."}
             if tried is not None:
-                # A summary of the run has replaced that result since
-                # (DelegationLoop._summarize): the text again, from memory.
-                self._summaries[tried["id"]] = loop.run_summaries
-                return {"status": "completed", "note": UNTRUSTED_NOTE + " Read earlier in this message; your summary "
-                        "of the work replaced that result.", "url": tried["url"], "title": tried.get("title") or "",
+                # Not in this reader's conversation: another one read it (the
+                # agent or a helper), or a summary of the run has replaced
+                # that result since (DelegationLoop._summarize). The text
+                # again, from memory.
+                seen = (tried["id"], reader) in self._summaries
+                self._summaries[(tried["id"], reader)] = summaries
+                earlier_note = (" Read earlier in this message; your summary of the work replaced that result."
+                                if seen else " Read earlier in this message by another session, the agent or a "
+                                "helper: this is its text.")
+                return {"status": "completed", "note": UNTRUSTED_NOTE + earlier_note,
+                        "url": tried["url"], "title": tried.get("title") or "",
                         "text_cut": bool(tried.get("truncated")), "untrusted_page_text": tried.get("text") or ""}
             record = {"id": len(self.reads) + 1, "url": entry["url"], "host": host_of(entry["url"]),
                       "title": entry["title"], "status": "running", "cited_by": entry["cited_by"],
                       **({"start": start} if start else {}), **({"fresh": True} if fresh else {})}
             self.reads.append(record)
-            self._summaries[record["id"]] = loop.run_summaries
+            self._summaries[(record["id"], reader)] = summaries
             step = self._step()
             self._steps[step] = self._steps.get(step, 0) + 1
         if not self.direct:

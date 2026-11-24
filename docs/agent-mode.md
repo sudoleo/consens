@@ -6559,7 +6559,8 @@ Helfers („OK“) wird verworfen.
   3) je Schritt; über den Helfer `READ_CONTENT_TOKENS` (4.000) je Seite
   (`max_uses: 1`, `max_content_tokens`); gespeichert bis `READ_TEXT_CHARS`
   (24.000 Zeichen). Derselbe Teil derselben Seite (auch über ihre
-  Weiterleitung) liefert `already_read` ohne neuen Abruf; ein anderer `start`
+  Weiterleitung) liefert `already_read` ohne neuen Abruf (je Gespräch: wer sie
+  noch nicht sah, Agent oder Helfer, bekommt ihren gespeicherten Text); ein anderer `start`
   oder `fresh` nach der gespeicherten Kopie ist ein neuer Abruf. Eine
   gescheiterte Seite wird nicht erneut versucht.
 - Zeit: Ein Abruf endet samt Weiterleitung und Ersatz-Helfer nach höchstens

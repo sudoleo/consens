@@ -252,6 +252,34 @@ def test_after_a_summary_of_the_run_a_page_read_before_comes_back_with_its_text(
     assert reader.read(ReadSourceArgs(url=CITED), cancellation=ProviderCancellation())["status"] == "already_read"
 
 
+def test_a_page_another_session_read_comes_with_its_text_once(store, monkeypatch, pages):
+    # The agent and its helpers share one reader, but each has a
+    # conversation of its own: what one read, the other has not seen.
+    fake_fetch(monkeypatch)
+    loop = chat_loop(store, Plan())
+    reader = loop.comparison.reader
+
+    def read(helper=None):
+        token = agent_read_source.helper_step.set(f"{helper}:0") if helper else None
+        try:
+            return reader.read(ReadSourceArgs(url=CITED), cancellation=ProviderCancellation())
+        finally:
+            if token is not None:
+                agent_read_source.helper_step.reset(token)
+
+    assert read()["status"] == "completed"
+    for helper in ("a" * 32, "b" * 32):
+        first = read(helper)
+        assert first["status"] == "completed" and first["untrusted_page_text"] == PAGE
+        assert "another session" in first["note"]
+        assert read(helper)["status"] == "already_read"
+    # A summary of the agent's run leaves the helpers' conversations as they were.
+    loop.run_summaries += 1
+    assert read("a" * 32)["status"] == "already_read"
+    assert "summary" in read()["note"]
+    assert len(pages.calls) == 1
+
+
 def test_a_start_that_is_no_number_is_refused_and_the_turn_goes_on(store, monkeypatch, pages):
     fake_fetch(monkeypatch)
     plan = Plan([[read_call(), read_call(start=[5]), read_call(start={"at": 5})]])
