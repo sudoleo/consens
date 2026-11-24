@@ -139,3 +139,41 @@ describe("a refused preparation in the Share dialog", () => {
     expect(document.getElementById("shareConfirmBtn").hidden).toBe(true);
   });
 });
+
+// The undo of a deleted chat runs out while another chat is open: its
+// prepared Share (the row's Share, the pill under its answer) stays.
+describe("deleting a chat", () => {
+  function deletion(onScreen) {
+    const { window: win } = loadScripts([], { base: false, body: '<div class="bookmark" data-id="gone"></div>' });
+    win.App = { showPopup: vi.fn() };
+    win.bookmarksData = [{ id: "gone" }, { id: "open" }];
+    win.currentBookmarkShareResultContext = { bookmarkId: onScreen, versionParts: [] };
+    win.clearPreparedBookmarkShareResult = vi.fn();
+    const deleteBookmark = Function("window", "document", "getComputedStyle", "matchMedia", "auth", "authState",
+      "bookmarkMutationKey", "deletingBookmarks", "deletedBookmarkKeys", "isCurrentAuthenticatedUser",
+      "enqueueBookmarkWrite", "fetch", "bookmarkDetailCache", "bookmarkViewCache", "openedBookmarkId",
+      "trackAppEvent", "console",
+      `${slice("async function deleteBookmark(", "window.deleteBookmark = deleteBookmark;")}
+      return deleteBookmark;`)(
+      win, win.document, element => win.getComputedStyle(element), () => ({ matches: true }),
+      { currentUser: { uid: "owner", getIdToken: async () => "token" } }, { generation: 1 },
+      (uid, id) => `${uid}:${id}`, new Map(), new Set(), () => true,
+      (_uid, _generation, _id, job) => Promise.resolve().then(job),
+      async () => ({ ok: true, status: 200, json: async () => ({}) }),
+      new Map(), new Map(), onScreen, () => {}, { error() {} });
+    return { win, deleteBookmark };
+  }
+
+  it("keeps the Share of the chat on screen when another one goes", async () => {
+    const { win, deleteBookmark } = deletion("open");
+    await deleteBookmark("gone");
+    expect(win.bookmarksData.map(item => item.id)).toEqual(["open"]);
+    expect(win.clearPreparedBookmarkShareResult).not.toHaveBeenCalled();
+  });
+
+  it("forgets the Share of the chat that goes", async () => {
+    const { win, deleteBookmark } = deletion("gone");
+    await deleteBookmark("gone");
+    expect(win.clearPreparedBookmarkShareResult).toHaveBeenCalled();
+  });
+});

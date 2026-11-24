@@ -3750,7 +3750,11 @@ async function deleteBookmark(bookmarkId) {
         window.clearResponseBoxes?.({ silent: true });
       }
       document.querySelectorAll(`.bookmark[data-id="${bookmarkId}"]`).forEach(el => el.remove());
-      window.clearPreparedBookmarkShareResult?.();
+      // Only its own: the chat on screen may be another one, and its Share
+      // is prepared once, when it opens.
+      if (window.currentBookmarkShareResultContext?.bookmarkId === bookmarkId) {
+        window.clearPreparedBookmarkShareResult?.();
+      }
       trackAppEvent("app_bookmark_deleted");
     } catch (error) {
       restore();
