@@ -7741,7 +7741,10 @@ SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Akti
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der
 Antwort, auch im Schlussschritt nach einem Limit (`_merged_wrap_up`), und kehrt erst ohne offene Karte zurück
 (`_one_hold` je Karte; ein Halt, der beim Schließen der entschiedenen Karte aufging, wird mit abgewartet, seit
-2026-11-06); `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
+2026-11-06); `_turn_elapsed` zieht `paused_seconds` und die offene Karte bis zur Entscheidung ab
+(`_hold_pause`, `hold_decided`). Während ein `delegate`-Aufruf auf Helfer wartet, nimmt `_await_call` eine
+entschiedene Karte gleich ab (`_take_decided_hold`), ihre Entscheidung gilt für den nächsten Aufruf der Runde
+(`call_pause`). Der Wächter liest
 `hold_decision` (`_receive_hold`, nach `_receive_notes`); läuft der Lauf im
 selben Prozess, geben `POST …/hold` und `…/notes` das Gespeicherte sofort an
 ihn (`agent_background.run_loop` → `DelegationLoop.receive`, seit

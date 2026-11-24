@@ -97,8 +97,13 @@ Suche), die 15 Minuten je Nachricht und die Antwortreserve: Muss die Antwort
 beginnen (`answer_time_left`), stoppt `_helper_report` den Helfer und meldet
 `stopped`. Ein Halt der Prüfer hält auch die Helfer vor ihrem nächsten Schritt
 und Aufruf an (`_helper_hold`). Die Entscheidung des Nutzers erreicht sie
-sofort, nicht erst über `_hold_wait` des Laufs, der ja im `delegate`-Aufruf auf
-sie wartet; ein Stopp oder 30 Minuten ohne Entscheidung beenden sie. Die eigene
+sofort; der Lauf, der im `delegate`-Aufruf auf sie wartet, nimmt die
+entschiedene Karte noch während des Aufrufs ab (`_take_decided_hold`). Ein
+weiterer Halt erscheint so gleich als eigene Karte und hält die Helfer wieder
+an, und die nächsten Aufrufe des Schritts erfahren von der Pause
+(`call_pause`). Die Pause zählt nur bis zur Entscheidung (`hold_decided`), die
+Arbeit der Helfer danach zählt auf die 15 Minuten. Ein Stopp oder 30 Minuten
+ohne Entscheidung beenden sie. Die eigene
 Karte des Agenten (`ask_user`) hält keinen Helfer an. Stop, Chatlöschung und Lease-Ablauf
 beenden alle Helfer über die gemeinsame Abbruchkette.
 

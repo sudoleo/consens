@@ -553,6 +553,14 @@ class DelegationLoop(AgentLoop):
         # decision was taken on (None: a page that does not say).
         self.hold_joins, self.hold_seen = [], None
         self.hold_started = 0.0
+        # When the user decided the open hold (_receive_hold, decide_unsaved),
+        # or None: its pause ends there, also where the run takes the
+        # decision only later (_hold_pause).
+        self.hold_decided = None
+        # A reviewer's halt the run took while a delegate call waited for
+        # its helpers (_take_decided_hold): its decision, for the batch's
+        # next call.
+        self.call_pause = None
         # The open hold could not be saved (_save_hold): its decision comes
         # in this process only (decide_unsaved).
         self.hold_unsaved = False
@@ -923,8 +931,16 @@ class DelegationLoop(AgentLoop):
         """The turn's running time, without the time it waited for the user
         on a reviewer's halt (request_hold)."""
         now = self.clock()
-        paused = self.paused_seconds + (now - self.hold_started if self.hold is not None else 0.0)
-        return now - self.turn_started - paused - self._gate_pause(now)
+        return now - self.turn_started - self.paused_seconds - self._hold_pause(now) - self._gate_pause(now)
+
+    def _hold_pause(self, now):
+        """Seconds the open hold paused the turn: until the user decided it,
+        not until the run takes the decision. Helpers go on at once
+        (_helper_hold); their work is no pause."""
+        if self.hold is None:
+            return 0.0
+        decided = self.hold_decided
+        return max((decided if decided is not None else now) - self.hold_started, 0.0)
 
     def _gate_pause(self, now):
         """Seconds the run waited for gate rounds, the wait at hand included."""
@@ -1648,10 +1664,10 @@ class DelegationLoop(AgentLoop):
     def _helper_hold(self, worker):
         """A reviewer's halt holds the helpers too: none starts a step or a
         call until the user decided (request_hold). The decision reaches them
-        at once: the run takes it (_hold_wait) only after the delegate call
-        that waits for these very helpers. A stop, or no decision within
-        ``hold_timeout``, ends the helper. The user's own card (ask_user)
-        holds none: the agent asked, the helpers' work goes on."""
+        at once, before the run, waiting in the delegate call for these very
+        helpers, takes the card (_take_decided_hold). A stop, or no decision
+        within ``hold_timeout``, ends the helper. The user's own card
+        (ask_user) holds none: the agent asked, the helpers' work goes on."""
         with self.condition:
             while True:
                 hold, decision = self.hold, self.hold_decision
@@ -2734,6 +2750,7 @@ class DelegationLoop(AgentLoop):
         try:
             while worker.is_alive():
                 yield from self._events()
+                yield from self._take_decided_hold()
                 worker.join(.1)
             yield from self._events()
             response, error = result.get()
@@ -2744,6 +2761,20 @@ class DelegationLoop(AgentLoop):
             if worker.is_alive():
                 self.cancellation.cancel()
                 worker.join()
+
+    def _take_decided_hold(self):
+        """A reviewer's halt the user decided while a delegate call waits for
+        its helpers: they went on at once (_helper_hold), and the run takes
+        the card now instead of after the call. A halt queued behind it
+        (request_hold) then opens as its own card and holds the helpers
+        too. Its decision counts for the batch's next call (call_pause)."""
+        with self.condition:
+            if (self.hold is None or self.hold_decision is None or self.hold.get("ask")
+                    or not any(worker.state in {"waiting", "working"} for worker in self.workers.values())):
+                return
+        decision = yield from self._hold_wait()
+        if decision is not None:
+            self.call_pause = "steer" if "steer" in (self.call_pause, decision) else self.call_pause or decision
 
     def _watch(self):
         from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
@@ -2810,6 +2841,7 @@ class DelegationLoop(AgentLoop):
                 hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
                         "timeout_seconds": self.hold_timeout}
                 self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
+                self.hold_decided = None
                 self.hold_unsaved = False
                 self.hold_joins, self.hold_seen = [], None
                 self.condition.notify_all()
@@ -2953,7 +2985,7 @@ class DelegationLoop(AgentLoop):
                         "at": datetime.now(timezone.utc).isoformat()}
                 self.notes_seen.add(note["id"])
                 self.notes.append(note)
-            self.hold_decision = action
+            self.hold_decision, self.hold_decided = action, self.clock()
             self.hold_choice = choice if action == "choose" else None
             self.hold_seen = revision
             self.condition.notify_all()
@@ -3061,7 +3093,7 @@ class DelegationLoop(AgentLoop):
         decision = (root or {}).get("hold_decision") or {}
         with self.condition:
             if self.hold is not None and self.hold_decision is None and decision.get("id") == self.hold["id"]:
-                self.hold_decision = decision.get("action")
+                self.hold_decision, self.hold_decided = decision.get("action"), self.clock()
                 self.hold_choice = decision.get("choice")
                 self.hold_seen = decision.get("revision")
                 self.condition.notify_all()
@@ -3209,10 +3241,10 @@ class DelegationLoop(AgentLoop):
                 if decision is None and self.clock() - self.hold_started >= self.hold_timeout:
                     decision = "timeout"
                 if decision is not None:
-                    waited = self.clock() - self.hold_started
+                    waited = self._hold_pause(self.clock())
                     self.paused_seconds += waited
                     choice, self.hold_choice = self.hold_choice, None
-                    self.hold = self.hold_decision = None
+                    self.hold = self.hold_decision = self.hold_decided = None
                     # Halts that joined the card after the revision the user
                     # decided on: they open as the next card (below).
                     seen, joins = self.hold_seen, self.hold_joins
@@ -3711,9 +3743,9 @@ class DelegationLoop(AgentLoop):
             self.answer_fixed = True
             late = self.hold if self.hold is not None and not self.hold.get("ask") else None
             if late is not None:
-                waited = self.clock() - self.hold_started
+                waited = self._hold_pause(self.clock())
                 self.paused_seconds += waited
-                self.hold = self.hold_decision = None
+                self.hold = self.hold_decision = self.hold_decided = None
         if late is not None:
             self._end_hold(late, "ended", waited)
         yield from self._show_answer(value)
@@ -4075,6 +4107,7 @@ class DelegationLoop(AgentLoop):
                         # was interrupted (CALL_AFTER_*). Each such call gets
                         # that as its result, the app's own text (``unrun``).
                         stopped, unrun = None, set()
+                        self.call_pause = None
                         # A browser call of this step that failed: the step's
                         # later browser calls do not run (CALL_AFTER_BROWSER_FAILURE).
                         browser_failed = False
@@ -4131,6 +4164,9 @@ class DelegationLoop(AgentLoop):
                             # pause that came after a call of this step ran,
                             # and a message the user sent now (_hurry).
                             paused = yield from self._hold_wait()
+                            # Or a card taken while the call before ran.
+                            taken, self.call_pause = self.call_pause, None
+                            paused = "steer" if "steer" in (paused, taken) else paused or taken
                             if paused == "steer" or self.hurried or (paused is not None and position):
                                 stopped = (HOLD_STEERED if paused == "steer" else CALL_AFTER_MESSAGE if self.hurried
                                            else CALL_AFTER_PAUSE)

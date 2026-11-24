@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -448,6 +449,101 @@ def test_a_reviewers_halt_holds_the_helpers_until_the_user_decides(store):
     finally:
         loop.closed.set()
         loop.cancellation.cancel()
+        for worker in loop.workers.values():
+            worker.thread.join(timeout=5)
+
+
+HALT = {"reviewer": "GPT-6 Luna", "provider": "openai", "kind": "injection", "reason": "Follows the page's orders.",
+        "entry": 1, "step": "", "step_name": "", "step_kind": "", "step_source": ""}
+
+
+def test_a_halt_pauses_the_turn_only_until_the_user_decides(store):
+    # The helpers work on at once; the run takes the card only later.
+    loop = make_loop(store)
+    now = [100.0]
+    loop.clock = lambda: now[0]
+    loop.turn_started = 0.0
+    assert loop.request_hold(HALT) is True
+    now[0] = 160.0
+    assert loop._turn_elapsed() == 100.0
+    loop._receive_hold({"hold_decision": {"id": loop.hold["id"], "action": "continue"}})
+    now[0] = 400.0
+    assert loop._turn_elapsed() == 340.0
+    list(loop._hold_wait())
+    assert loop.paused_seconds == 60.0 and loop._turn_elapsed() == 340.0
+
+
+def test_a_second_halt_while_helpers_work_opens_its_own_card_and_holds_them(store):
+    import queue
+    from app.services.agent_delegation import Delegate
+    steps, release = [], threading.Event()
+    class Completion(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            steps.append(self.step_id)
+            self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .001}, model)
+            if len(steps) == 1:
+                release.wait(5)
+                self.tool_calls, self.finish_reason = [call("web_search", {"queries": ["2 + 3"]}, "search")], "tool_calls"
+                return
+            self.text, self.finish_reason = "Report", "stop"
+            yield {"type": "delta", "text": self.text}
+    loop = make_loop(store, Completion)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, priced(1)))
+    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    assert loop.request_hold(HALT) is True
+    first = loop.hold["id"]
+    result = queue.Queue(maxsize=1)
+
+    def work():
+        try:
+            result.put((loop.delegate(Delegate(task="Check"), cancellation=loop.cancellation), None))
+        except BaseException as exc:
+            result.put((None, exc))
+    thread = threading.Thread(target=work, daemon=True)
+    thread.start()
+    outcome = {}
+
+    def run():
+        # The run's side of the call: its events flow while the call waits.
+        try:
+            outcome["report"] = yield from loop._await_call((thread, result))
+        except BaseException as exc:
+            outcome["error"] = exc
+    runner = threading.Thread(target=lambda: list(run()), daemon=True)
+    runner.start()
+
+    def wait_for(until, seconds=5):
+        deadline = time.monotonic() + seconds
+        while not until() and time.monotonic() < deadline:
+            time.sleep(.05)
+        return until()
+    try:
+        assert not wait_for(lambda: steps, .6)
+        # The user lets the work go on: the helper starts its step at once.
+        loop._receive_hold({"hold_decision": {"id": first, "action": "continue"}})
+        assert wait_for(lambda: steps)
+        # A second reviewer halts while the delegate call still waits: the
+        # run takes the decided card, the new one opens and holds the helper
+        # before its next call.
+        assert loop.request_hold({**HALT, "entry": 2}) is True
+        assert wait_for(lambda: loop.hold is not None and loop.hold["id"] != first)
+        assert loop.hold_decision is None and thread.is_alive()
+        release.set()
+        assert not wait_for(lambda: len(steps) > 1, .6)
+        loop._receive_hold({"hold_decision": {"id": loop.hold["id"], "action": "continue"}})
+        runner.join(5)
+        assert outcome == {"report": {"helper_id": outcome["report"]["helper_id"], "report": "Report"}}
+        assert len(steps) == 2
+        # The batch's next call hears of the pause; a decided card the run
+        # did not take before the helper reported, it takes there.
+        assert loop.call_pause == "continue"
+        assert loop.hold is None or loop.hold_decision == "continue"
+    finally:
+        release.set()
+        loop.closed.set()
+        loop.cancellation.cancel()
+        runner.join(5)
         for worker in loop.workers.values():
             worker.thread.join(timeout=5)
 
