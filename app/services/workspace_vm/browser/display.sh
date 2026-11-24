@@ -168,13 +168,20 @@ if ! runs "^openbox( |$)"; then
 fi
 # WebGL without a graphics card: Chrome no longer falls back to software
 # by itself, so maps, design tools and canvas apps did not start.
+# With that software card Chrome would also put every picture of a page
+# together on it, which is slower than doing so itself
+# (--disable-gpu-compositing; WebGL stays on the card). On a test Sprite a
+# click reached the screen after 29 ms on a still page and 116 ms under a
+# moving picture, Chrome drawing 44 pictures a second; without the card in
+# between after 16 and 33 ms at 60 a second, and a WebGL scene drew 60
+# instead of 52 a second.
 # A Chrome started with older flags is restarted once; the profile keeps
 # sign-ins and the session its tabs. Which flags it has says the marker this
 # script writes when it starts Chrome: Chrome rewrites its command line, so
 # a search for a flag in it never matched, and Chrome restarted on every
 # call. The rules' version counts as a flag: new rules restart Chrome once,
 # so that it starts under them. pipe-1: Chrome behind cdp.py.
-flags="webgl-1 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"
+flags="webgl-2 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"
 pid="$(browser_pid)"
 why=""
 started=""
@@ -212,7 +219,7 @@ if [ -z "$(browser_pid)" ]; then
   setsid nohup python3 "$here/cdp.py" "$cdp" google-chrome --user-data-dir="$profile" \
     --no-first-run --no-default-browser-check --start-maximized \
     --disable-dev-shm-usage --hide-crash-restore-bubble --password-store=basic \
-    --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader \
+    --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --disable-gpu-compositing \
     >>"$log" 2>&1 </dev/null 8>&- &
   echo "$flags" >"$dir/chrome-flags"
 fi

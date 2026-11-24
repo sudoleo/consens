@@ -1966,6 +1966,46 @@ ersten Druck (x11vnc an derselben Probe auch); nach etwa 17 verschiedenen
 solchen Zeichen vergibt TigerVNC Tasten neu (einzelne falsche Zeichen), wo
 x11vnc den Rest verschluckte.
 
+**Klick bis Bild (gemessen 2026-11-24):** Max empfand die Ansicht als träge
+(„als würde man von 30 Hertz auf 144 Hertz wechseln, nur noch krasser“).
+Gemessen an Test-Sprites von seinem Rechner aus, mit dem noVNC der App und
+ihren Einstellungen, einem lokalen Relais wie im Router, der Exec-API und
+`relay.py` (also ohne Cloudflare und Render): Eine Testseite färbt bei jedem
+Klick ein Quadrat um, gemessen wird vom Mausdruck bis zum umgefärbten
+Quadrat im Bild, im Stand, bei ganz neu gezeichneter Seite, beim Scrollen
+und über einem bewegten Bild; dazu in der VM selbst mit einem VNC-Client am
+Socket des X-Servers, ohne Netz. Mediane in ms:
+
+| | Stand | Seite neu | Scrollen | bewegtes Bild | MB/s beim Scrollen |
+|---|---|---|---|---|---|
+| in der VM, vorher | 29–36 | 34–42 | 65 | 111–116 | – |
+| in der VM, mit `--disable-gpu-compositing` | 16–25 | 19–28 | 33–49 | 33 | – |
+| von Max' Rechner, vorher | 60 | 101 | 107 | 176 | 3,9 |
+| mit `--disable-gpu-compositing` | 47 | 88 | 96 | 90 | 3,6 |
+| dazu `-FrameRate 60` | 39 | 84 | 99–112 | 100–114 | 4,6–6,4 |
+| Selkies 2.2.1 (H.264 in Streifen, WebSocket), mit dem Flag | 50 | 60 | 64–83 | 67–82 | 0,5 |
+
+Der größte Teil der Verzögerung entstand also in der VM: Chrome setzte die
+Seite auf der Software-Grafikkarte zusammen, die es für WebGL bekommt (44
+statt 60 Bilder/s). `--disable-gpu-compositing` (`display.sh`) behebt das,
+WebGL läuft weiter (Kontext, WebGL 2 und eine bewegte Szene geprüft: 60 statt
+52 Bilder/s, Klick 33 statt 74 ms). Im Stand liegt die Ansicht damit nahe an
+der Strecke selbst (19 ms hin und zurück plus ein Bild Wartezeit).
+`-FrameRate 60` bleibt aus: Es spart im Stand 8 ms, bringt bei Bewegung
+nichts und verdoppelt beim Scrollen fast die Datenmenge, die Render mit einer
+halben CPU weiterträgt (das Relais kostete auf Max' Rechner 40–50 ms CPU je
+MB). Der Rest bei Bewegung gehört den Kacheln: Ein Seitenwechsel sind
+0,4–1,4 MB, Scrollen echter Seiten 2–6 MB/s; eine auf 8 Mbit/s gedrosselte
+Leitung brachte 0,4 s je Seitenwechsel und Ausreißer bis 3,4 s. Selkies an
+demselben X-Server (Paket von GitHub, `selkies --encoder=h264enc-striped`,
+über einen Tunnel auf der Exec-API) kam mit einem Siebtel der Daten aus und
+war bei Bewegung 20–30 ms schneller, im Stand nicht. Ausgehendes UDP geht
+aus der Sprite (STUN-Antwort in 1 ms, der Port wechselt je Ziel: WebRTC
+bräuchte einen TURN-Vermittler). Seiten öffnen dauert in der VM so lange wie
+in einem Browser auf Max' Rechner (1,4–2,0 s). Nicht gemessen: der Weg über
+Render in Prod und ein echter Kaltstart (nach 15 Minuten Ruhe war die VM nur
+eingefroren, erstes Bild nach 1,75 s).
+
 Der Render-Prozess trägt jedes Bild weiter. uvicorn handelt dabei mit dem
 Browser permessage-deflate aus und komprimiert die JPEG-Daten noch einmal:
 am lokalen Proxy 73–97 ms CPU je MB statt 29–38 ohne. Render hat eine halbe
@@ -2985,10 +3025,13 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   Software-WebGL (`--use-gl=angle --use-angle=swiftshader
   --enable-unsafe-swiftshader`): Ohne Grafikkarte fällt Chrome nicht mehr von
   selbst darauf zurück, Karten, Design-Tools und Mal-Seiten starteten nicht
-  (jspaint meldete ein WebGL-Problem). Ein Chrome mit älteren Flags startet
-  `display.sh` einmal neu (Profil und Sitzung bleiben); welche Flags er hat,
-  sagt die Markierung `chrome-flags` (`webgl-1`), die `display.sh` beim Start
-  schreibt. Eine Suche nach dem Flag in der Befehlszeile traf nie (Chrome
+  (jspaint meldete ein WebGL-Problem). Mit dieser Software-Grafikkarte setzte
+  Chrome auch jedes Bild einer Seite auf ihr zusammen, was langsamer ist, als
+  es selbst zu tun: `--disable-gpu-compositing` nimmt sie dort heraus, WebGL
+  bleibt auf ihr (Zahlen unter „Klick bis Bild“). Ein Chrome mit älteren
+  Flags startet `display.sh` einmal neu (Profil und Sitzung bleiben); welche
+  Flags er hat, sagt die Markierung `chrome-flags` (`webgl-2`), die
+  `display.sh` beim Start schreibt. Eine Suche nach dem Flag in der Befehlszeile traf nie (Chrome
   schreibt sie um), und Chrome startete an der ersten Test-Sprite bei jedem
   Aufruf neu. Geprüft an eigenen Test-Browser-VMs (2026-10-28, danach
   gelöscht): `webgl:true WebGL 1.0 (OpenGL ES 2.0 Chromium)`, derselbe

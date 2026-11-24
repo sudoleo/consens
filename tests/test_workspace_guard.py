@@ -684,7 +684,7 @@ def test_chrome_starts_only_under_its_rules_and_restarts_once_for_new_ones():
     # A Chrome that runs under older rules ends too.
     assert rules < display.index('setsid nohup python3 "$here/cdp.py"') and "stop_chrome" in failed \
         and "exit 1" in failed
-    assert 'flags="webgl-1 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"' in display
+    assert 'flags="webgl-2 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"' in display
     assert "/etc/opt/chrome/policies/managed/consens.json" in harden and 'cmp -s "$here/policy.json"' in harden
     assert "dpkg-divert" in harden and "exit 1" in harden and "openbox --reconfigure" in harden
     # The browser's installation writes no policy of its own.

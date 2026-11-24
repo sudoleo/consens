@@ -1274,6 +1274,20 @@ def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():
     assert 'echo "$flags" >"$dir/chrome-flags"' in start
 
 
+def test_chrome_puts_a_page_together_itself_not_on_the_software_card():
+    """With software WebGL Chrome also composited every page on that card.
+    On a test Sprite (2026-11-24) a click then took 29 ms to reach the
+    screen on a still page and 116 ms under a moving picture, at 44
+    pictures a second; with --disable-gpu-compositing 16 and 33 ms at 60.
+    WebGL stays on the card (a scene drew 60 instead of 52 a second), and a
+    Chrome from before restarts once for it."""
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    start = display[display.index('setsid nohup python3 "$here/cdp.py"'):display.index('echo "$flags" >"$dir/chrome-flags"')]
+    assert "--disable-gpu-compositing" in start
+    assert "--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader" in start
+    assert 'flags="webgl-2 ' in display
+
+
 def test_the_screen_is_tigervnc_on_a_unix_socket_only():
     """Xvfb and x11vnc (polled, one picture per request of the view) showed
     about 13 whole pictures a second of a scrolling page, Xtigervnc 30 (test
