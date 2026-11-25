@@ -103,14 +103,22 @@
   // liest sich auch so, und "_" steht in Bezeichnern ("max_tokens"). Woerter
   // mit Adresse ("://", "](", "@") bleiben unangetastet.
   const BARE_SCRIPT_RE = /[\^_]\{/g;
-  const ADDRESS_WORD_RE = /\S*(?::\/\/|\]\(|@)\S*/g;
+  // Woerter einzeln pruefen: ein Muster "\S*(?:...)\S*" probiert in einem
+  // langen Wort ohne Adresse jeden Anfang bis zum Wortende durch.
+  const WORD_RE = /\S+/g;
+  const ADDRESS_RE = /:\/\/|\]\(|@/;
   const BASE_CHAR_RE = /[\p{L}\p{N}]/u;
   const SCRIPT_TOKEN_RE = /^(?:-?\d+|[\p{L}\p{N}])/u;
 
   // Ende der geschweiften Klammer, die bei "open" beginnt, in derselben Zeile.
+  // Diese und die Suche nach der oeffnenden runden Klammer gehen nur so weit,
+  // wie eine Kette lang sein darf: eine laengere verwirft wrapScriptChains
+  // ohnehin, und eine Suche bis zum Zeilenrand bei jeder Fundstelle hielt
+  // eine lange Zeile quadratisch lange an.
   function closingBrace(text, open) {
     let depth = 0;
-    for (let i = open; i < text.length && text[i] !== "\n"; i++) {
+    const last = Math.min(text.length, open + MAX_INLINE_MATH_CHARS + 1);
+    for (let i = open; i < last && text[i] !== "\n"; i++) {
       if (text[i] === "{") depth++;
       else if (text[i] === "}" && --depth === 0) return i + 1;
     }
@@ -119,7 +127,8 @@
 
   function openingParen(text, close, floor) {
     let depth = 0;
-    for (let i = close; i >= floor && text[i] !== "\n"; i--) {
+    const first = Math.max(floor, close - MAX_INLINE_MATH_CHARS);
+    for (let i = close; i >= first && text[i] !== "\n"; i--) {
       if (text[i] === ")") depth++;
       else if (text[i] === "(" && --depth === 0) return i;
     }
@@ -188,8 +197,9 @@
     let out = "";
     let cursor = 0;
     let match;
-    ADDRESS_WORD_RE.lastIndex = 0;
-    while ((match = ADDRESS_WORD_RE.exec(source)) !== null) {
+    WORD_RE.lastIndex = 0;
+    while ((match = WORD_RE.exec(source)) !== null) {
+      if (!ADDRESS_RE.test(match[0])) continue;
       out += wrapScriptChains(source.slice(cursor, match.index)) + match[0];
       cursor = match.index + match[0].length;
     }

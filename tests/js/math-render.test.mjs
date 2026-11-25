@@ -173,6 +173,11 @@ describe("ConsensusMath.prepareMarkdown", () => {
     math.prepareMarkdown("a [ x" + (" ".repeat(200) + "y").repeat(100));
     math.prepareMarkdown(String.raw`\[ x `.repeat(50000));
     math.prepareMarkdown(String.raw`\( \begin{align} `.repeat(20000));
+    // Hoch- und Tiefstellungen ohne Basis oder ohne Ende, und ein langes
+    // Wort ohne Leerzeichen: jede Stelle suchte bis zum Zeilen- oder Wortende.
+    math.prepareMarkdown("x)^{a}".repeat(12000));
+    math.prepareMarkdown("x_{".repeat(12000));
+    math.prepareMarkdown("a_{b}" + "y".repeat(40000));
     expect(performance.now() - started).toBeLessThan(2000);
 
     const source = String.raw`$$a$$ \[ b \] \( open \begin{align*} c_1 \end{align} \begin{CD} d_2`;
