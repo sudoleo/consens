@@ -1417,12 +1417,17 @@
   // the newest picture a later step on it brought
   // (agent_browser.PREVIEW_SECONDS), with the title and address that step's
   // page had.
-  // An app the agent showed (pinApp) stands there the same way: whichever
-  // of the two came last.
+  // An app the agent showed (pinApp) stands there the same way, until a
+  // page opened for the user after it takes its place. A page the agent
+  // opens for itself, as it does to look at its app, leaves the app's card:
+  // the app runs in the user's own browser, not in the one the agent uses.
   function pinPage(view, tools) {
-    const at = tools.findLastIndex(item => showsApp(item)
-      || (opensPage(item) && !['failed', 'cancelled'].includes(item.status)));
-    if (at >= 0 && showsApp(tools[at])) { pinApp(view, tools[at]); return; }
+    const opens = item => opensPage(item) && !['failed', 'cancelled'].includes(item.status);
+    const app = tools.findLastIndex(showsApp);
+    if (app >= 0 && app > tools.findLastIndex(item => opens(item) && showsPage(item))) {
+      pinApp(view, tools[app]); return;
+    }
+    const at = tools.findLastIndex(opens);
     if (at < 0 || !showsPage(tools[at])) {
       view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return;
     }

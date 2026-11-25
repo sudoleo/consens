@@ -162,6 +162,18 @@ describe("An app the agent serves, on a card", () => {
     expect(card.querySelector(".agent-page-open").textContent).toBe("Open");
   });
 
+  it("stays while the agent opens the app for its own look at it (AGENT_SERVER_AS_APP)", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, shown({ app_title: "Todo app" }));
+    activity.receive(events, { version: 1, kind: "tool", id: "completion:2:call_1/tool", name: "browser",
+      status: "succeeded", action: "open", url: "http://localhost:3000/app", title: "Todo app" });
+    activity.render(host, { running: false, status: "succeeded", events });
+    const pin = host.querySelector(".agent-page-pin");
+    expect(pin.hidden).toBe(false);
+    expect(pin.querySelector(".agent-app-card .agent-page-title").textContent).toBe("Todo app");
+  });
+
   it("gives its place to a page the agent opens for the user after it, and takes it back", () => {
     const { host, activity } = setup();
     const events = [];

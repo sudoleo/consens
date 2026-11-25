@@ -14562,6 +14562,10 @@ einer eigenen Adresse, solange ihr Hintergrundprozess läuft.
   während ein Tab seiner App offen blieb (das Cookie gilt weiter); ohne
   diese Prüfung legte `open_workspace` ihm eine neue VM an, die niemand
   abräumt.
+- **Die App-Karte** (`agent-activity.js` `pinPage`) bleibt stehen, wenn der
+  Agent danach eine Seite ohne `for_user` öffnet, etwa die App für den
+  eigenen Blick: Die App läuft im Browser des Nutzers, nicht in dem des
+  Agenten. Nur eine für den Nutzer geöffnete Seite nimmt ihren Platz.
 - **Was die App sieht** (`app/services/agent_app_proxy.py`): einen Browser
   auf ihrem eigenen Rechner. `Host` und `Origin` heißen `localhost:<port>`
   (Vites `allowedHosts` und Frameworks, die Origin gegen Host prüfen,
