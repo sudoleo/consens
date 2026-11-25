@@ -2997,7 +2997,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Balken. Zwei nebeneinander gezeichnete Abschnitte (`facingSections`)
     waren nie eine Tabelle und haben keine Zeile. Die Zellen hängen als
     `tableCells` an der Zeile und stehen in `CARRIED_PROPERTIES`, damit ein
-    Morph sie mitnimmt. CSV: Komma als Trenner, ein Wert mit Komma,
+    Morph sie mitnimmt. Eine Zelle über mehrere Spalten oder Zeilen
+    (`colspan`, `rowspan`) lässt die überspannten Plätze leer, jeder Wert
+    bleibt in seiner Spalte. CSV: Komma als Trenner, ein Wert mit Komma,
     Anführungszeichen oder Zeilenumbruch (`<br>` in der Zelle) in
     Anführungszeichen, eigene verdoppelt, Zeilen mit `\n`. Zum CSV-Text legt
     `App.answerCopy.write` dieselben Zellen als `<table>` (`text/html`) auf

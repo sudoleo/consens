@@ -105,6 +105,18 @@ describe("Copying a table", () => {
       "No risk from a rising CO₂ price,The outdoor unit needs room and can be heard"].join("\n"));
   });
 
+  it("keeps every value in its column where a cell spans rows or columns", async () => {
+    const view = render(["<table><thead><tr><th>Region</th><th>Product</th><th>Sales</th></tr></thead><tbody>",
+      '<tr><td rowspan="2">North</td><td>Pump</td><td>12</td></tr>',
+      "<tr><td>Boiler</td><td>7</td></tr>",
+      '<tr><td colspan="2">Total</td><td>19</td></tr>',
+      "</tbody></table>"].join(""));
+    expect(view.output.querySelector("td[rowspan]")).not.toBeNull();
+    expect(await copied(view, "csv")).toBe("Region,Product,Sales\nNorth,Pump,12\n,Boiler,7\nTotal,,19");
+    expect(await copied(view, "markdown")).toBe(
+      "| Region | Product | Sales |\n| --- | --- | --- |\n| North | Pump | 12 |\n|  | Boiler | 7 |\n| Total |  | 19 |");
+  });
+
   it("copies a table with bars or a timeline without what was drawn into it", async () => {
     const bars = render("| Heating | Cost |\n|---|---|\n| **Heat pump** | 1.380 € |\n| Gas | 2.050 € |\n| Oil | 2.300 € |\n");
     expect(bars.output.querySelectorAll(".md-bar")).toHaveLength(3);

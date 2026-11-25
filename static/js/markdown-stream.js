@@ -668,13 +668,28 @@ function cellWords(node, markdown) {
 
 // The table as written: its rows of cells, the first one the heading, as
 // text and as Markdown, and how each column is aligned. A cell across
-// several columns leaves the others empty.
+// several columns or rows leaves the others empty, so every value stays in
+// its column.
 function tableCells(table) {
   const rows = Array.from(table.rows || []);
-  const read = markdown => rows.map(row => Array.from(row.cells).flatMap(cell => {
-    const words = cellWords(cell, markdown).split("\n").map(line => line.trim()).join("\n").trim();
-    return [words, ...Array(Math.max(0, (cell.colSpan || 1) - 1)).fill("")];
-  }));
+  const read = markdown => {
+    const grid = rows.map(() => []);
+    rows.forEach((row, at) => {
+      let column = 0;
+      for (const cell of Array.from(row.cells)) {
+        while (grid[at][column] !== undefined) column += 1;
+        const words = cellWords(cell, markdown).split("\n").map(line => line.trim()).join("\n").trim();
+        const across = Math.max(1, cell.colSpan || 1);
+        // rowspan="0" (to the end of its section) is taken to the table's end.
+        const down = Math.min(cell.rowSpan === 0 ? rows.length : Math.max(1, cell.rowSpan || 1), rows.length - at);
+        for (let row = 0; row < down; row += 1) {
+          for (let step = 0; step < across; step += 1) grid[at + row][column + step] = row || step ? "" : words;
+        }
+        column += across;
+      }
+    });
+    return grid.map(cells => Array.from(cells, value => value ?? ""));
+  };
   const aligns = rows.length ? Array.from(rows[0].cells).flatMap(cell =>
     Array(cell.colSpan || 1).fill((cell.getAttribute("align") || "").toLowerCase())) : [];
   return { text: read(false), markdown: read(true), aligns };
