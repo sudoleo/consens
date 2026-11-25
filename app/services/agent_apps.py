@@ -43,7 +43,10 @@ COOKIE = "__Host-consens_app"
 OPEN_PATH = "/__consens/open"
 LOWEST_PORT, HIGHEST_PORT = 1024, 65535
 PATH_CHARS = 2000
-_TOKEN = re.compile(r"[A-Za-z0-9_=-]{80,2400}")
+# Room for the longest opening issue_open makes: a Firebase uid (128
+# characters at most) and a path of PATH_CHARS characters of four UTF-8
+# bytes each.
+_TOKEN = re.compile(r"[A-Za-z0-9_=-]{80,11000}")
 _HOST = re.compile(r"[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?(:\d{1,5})?")
 _KEY = re.compile(r"[a-f0-9]{16}")
 # Without a configured secret (a developer's machine, a test) the addresses
@@ -79,9 +82,20 @@ def start_path(path: str) -> str:
     and never consens.io's own path there."""
     path = str(path or "/")
     if (not path.startswith("/") or path.startswith("//") or "\\" in path or len(path) > PATH_CHARS
-            or any(ord(char) < 0x20 or ord(char) == 0x7f for char in path) or path.startswith(OPEN_PATH)):
+            or any(ord(char) < 0x20 or ord(char) == 0x7f for char in path) or path.startswith(OPEN_PATH)
+            or not _utf8(path)):
         return "/"
     return path
+
+
+def _utf8(text) -> bool:
+    """A lone surrogate (JSON allows one) has no UTF-8: such a path would
+    break the opening's payload (issue_open)."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _port(value) -> bool:
@@ -98,7 +112,8 @@ class Session:
 
 
 def issue_open(uid: str, port: int, path: str, key: str, *, now: float | None = None) -> str:
-    payload = json.dumps([uid, port, start_path(path), key], separators=(",", ":")).encode("utf-8")
+    # As UTF-8, not as \u escapes: an "ü" then costs two bytes, not six.
+    payload = json.dumps([uid, port, start_path(path), key], separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return _cipher(b"agent-app-open").encrypt_at_time(payload, int(time.time() if now is None else now)).decode("ascii")
 
 

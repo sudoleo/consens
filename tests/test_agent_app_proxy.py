@@ -271,10 +271,24 @@ def test_only_a_port_an_app_may_listen_on_is_issued(port):
 @pytest.mark.parametrize("path,expected", [
     ("/", "/"), ("/app/x?y=1#z", "/app/x?y=1#z"), ("", "/"), ("app", "/"), ("//evil.example", "/"),
     ("https://evil.example", "/"), ("/\\evil.example", "/"), ("/a\nb", "/"),
-    (agent_apps.OPEN_PATH + "?t=x", "/"),
+    (agent_apps.OPEN_PATH + "?t=x", "/"), ("/a\ud800", "/"),
 ])
 def test_an_app_opens_at_a_path_of_its_own_host(path, expected):
     assert agent_apps.start_path(path) == expected
+
+
+@pytest.mark.parametrize("path", [
+    # The tool's longest path (vm_show_app), all umlauts: it opened as "This
+    # link is no longer valid" while each one took six characters.
+    "/" + "ü" * 499,
+    # The longest path the card may send, in characters of four bytes.
+    "/" + "😀" * (agent_apps.PATH_CHARS - 1),
+], ids=["tool-umlauts", "card-four-bytes"])
+def test_an_opening_holds_any_path_an_app_may_open_at(path):
+    uid = "u" * 128
+    key = agent_apps.app_key(uid, "chat", 3000)
+    session, opened = agent_apps.read_open(agent_apps.issue_open(uid, 3000, path, key))
+    assert (session.uid, opened) == (uid, path)
 
 
 def test_the_host_is_only_what_reads_as_one(monkeypatch):
