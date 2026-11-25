@@ -235,6 +235,15 @@ describe("ConsensusMath.prepareMarkdown", () => {
     expect(math.prepareMarkdown(source)).toBe(source);
   });
 
+  // Markdown kennt auch ~~~ als Zaun: der Code darin zeigte und kopierte
+  // sonst zusaetzliche Backslashes ("\\\(\\d\+\\\)").
+  it("fasst auch einen Codeblock mit ~~~ nicht an", () => {
+    const source = '~~~python\nre.compile(r"\\(\\d+\\)")\nx = a_{i} + $y^2$\n~~~\n\nDanach $x^2$.';
+    const prepared = math.prepareMarkdown(source);
+    expect(prepared.slice(0, prepared.indexOf("Danach"))).toBe(source.slice(0, source.indexOf("Danach")));
+    expect(throughMarkdown(prepared)).toContain(String.raw`Danach \(x^2\).`);
+  });
+
   it("laesst $$-Bloecke unveraendert durch", () => {
     const source = "$$\\frac{a}{b}$$";
     expect(throughMarkdown(math.prepareMarkdown(source))).toBe(source);

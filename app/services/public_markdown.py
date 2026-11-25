@@ -49,8 +49,9 @@ _TERMINAL_SOURCE_ORDER_RE = re.compile(
     r"(?:([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$))?",
     re.IGNORECASE,
 )
-# Fenced-Code-Blöcke und Inline-Code: dort keine Quellen-Tags ersetzen.
-_CODE_SEGMENT_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]*`)", re.DOTALL)
+# Fenced-Code-Blöcke (``` und ~~~) und Inline-Code: dort keine Quellen-Tags
+# ersetzen und keine Formel-Trenner schützen.
+_CODE_SEGMENT_RE = re.compile(r"(```.*?(?:```|$)|~~~.*?(?:~~~|$)|`[^`\n]*`)", re.DOTALL)
 # Markdown interpretiert die LaTeX-Delimiter \[, \], \( und \) als Escapes.
 # Verdoppeln erhaelt sie im HTML, damit KaTeX sie auf Share-Seiten findet.
 _MATH_DELIMITER_RE = re.compile(r"\\([\[\]()])")

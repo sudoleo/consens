@@ -230,7 +230,8 @@
 
   function prepareMarkdown(markdown) {
     // Code bleibt unangetastet: dort ist "$" ein Zeichen und kein Trenner.
-    const codeSegments = /(```[\s\S]*?(?:```|$)|`[^`\n]*`)/g;
+    // Markdown zaeunt Code mit ``` und mit ~~~ ein.
+    const codeSegments = /(```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`)/g;
     return String(markdown || "")
       .split(codeSegments)
       .map(function (part, index) {

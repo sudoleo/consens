@@ -19,6 +19,15 @@ def test_latex_in_bare_brackets_becomes_display_math_but_links_stay():
     assert "[S1]" in html
 
 
+def test_a_code_block_fenced_with_tildes_keeps_its_backslashes_and_tags():
+    from app.services.public_markdown import render_public_markdown
+    sources = [{"id": "S1", "url": "https://agency.example/report", "title": "Agency"}]
+    html = render_public_markdown('~~~python\nre.compile(r"\\(\\d+\\)")  # [S1]\n~~~\n\nPrices rose [S1].', sources)
+    code = html[html.index("<code"):html.index("</code>")]
+    assert 're.compile(r"\\(\\d+\\)")  # [S1]' in code
+    assert "#src-1" in html
+
+
 def test_chat_framing_around_a_published_answer_is_dropped_but_the_answer_stays():
     from app.services.public_markdown import lead_sentences, strip_chat_framing
 
