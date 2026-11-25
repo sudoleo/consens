@@ -31,7 +31,8 @@
 
   // "12.000 €", "€1,200.50", "4,6 t", "35 %": the amount and its unit. Both
   // thousands conventions occur; a lone separator before exactly three
-  // digits is read as thousands.
+  // digits is read as thousands after one to three digits that do not start
+  // with 0 ("0.125" and "1234.567" are decimals).
   const AMOUNT = /^([€$£¥]\s?)?(\d[\d.,\s]*)(\s?[^\d\s.,()+-][^\d()]{0,9})?$/;
 
   function parseAmount(text) {
@@ -53,7 +54,8 @@
       const mark = dot !== -1 ? "." : ",";
       const parts = digits.split(mark);
       if (parts.length > 2 && !thousands(parts)) return null;
-      digits = parts.length > 2 || parts[1].length === 3 ? parts.join("") : parts.join(".");
+      const grouped = parts.length > 2 || (parts[1].length === 3 && /^[1-9]\d{0,2}$/.test(parts[0]));
+      digits = grouped ? parts.join("") : parts.join(".");
     }
     const value = Number(digits);
     // "$1.2B": the currency and the size behind it are one unit together.

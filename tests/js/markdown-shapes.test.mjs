@@ -258,6 +258,17 @@ describe("Bars", () => {
       .toEqual(["100%", "50%", "25%"]);
   });
 
+  // A lone separator before three digits is thousands only after one to
+  // three digits that do not start with 0: "0.125" is a share, not 125.
+  it("reads a separator after a zero or four digits as the decimal mark", () => {
+    expect(widths(render(table(["Strategy", "Hit rate"], [["A", "0.5"], ["B", "0.25"], ["C", "0.125"]]))))
+      .toEqual(["100%", "50%", "25%"]);
+    expect(widths(render(table(["Strategie", "Quote"], [["A", "0,5"], ["B", "0,25"], ["C", "0,125"]]))))
+      .toEqual(["100%", "50%", "25%"]);
+    expect(widths(render(table(["Item", "Value"], [["A", "2469.134"], ["B", "1234.567"], ["C", "617.2835"]]))))
+      .toEqual(["100%", "50%", "25%"]);
+  });
+
   it("aligns a column with a typographic minus as numbers, without bars", () => {
     const output = render(table(["Since", "Deposit rate"], [["2020", "−0,50 %"], ["2022", "0,75 %"], ["2023", "4,00 %"]]));
     expect(output.querySelector("tbody td:last-child").classList.contains("is-numeric")).toBe(true);
