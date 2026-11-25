@@ -337,9 +337,15 @@ async def connect_upstream(url):
 
 def exec_url(uid):
     """The workspace awake with its tools up to date, and the exec address
-    of its tunnel command there (blocking: the provider's API)."""
+    of its tunnel command there (blocking: the provider's API). Refused
+    ("idle") for an account without a workspace record: one deleted while a
+    tab of its app stayed open, whose cookie still holds. open_workspace
+    would make it a new VM that nobody removes. Every account whose app ran
+    has the record (agent_workspace.claim)."""
     from app.core.security import db_firestore
     from app.services import agent_workspace
+    if db_firestore is not None and not agent_workspace.ref(db_firestore, uid).get().exists:
+        raise Refused("idle")
     vm = agent_vm.backend()
     if vm is None:
         raise agent_vm.VMUnavailable("no provider configured")
@@ -371,6 +377,10 @@ async def tunnel_for(uid):
         try:
             url = await asyncio.to_thread(exec_url, uid)
             upstream = await connect_upstream(url)
+        except Refused:
+            # Answered from here from now on, without asking the store again.
+            _idle.add(uid)
+            raise
         except Exception as exc:
             logging.warning("Agent app tunnel unavailable category=%s", safe_exception(exc))
             agent_vm.lose_contact(agent_vm.workspace_name(uid))

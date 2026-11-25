@@ -27,6 +27,8 @@ from app.services import agent_app_proxy, agent_app_tunnel, agent_apps, workspac
 TUNNEL_PY = Path(agent_app_tunnel.__file__).with_name("workspace_vm") / "workbench" / "app_tunnel.py"
 HOST = "apps.test"
 UID = "owner"
+# The real one: the host fixture replaces it.
+EXEC_URL = agent_app_tunnel.exec_url
 
 
 class Command:
@@ -456,6 +458,34 @@ def test_without_a_running_process_nothing_is_served_and_the_vm_is_left_alone(ho
     (processes / "abcd1234" / "exit_code").unlink()
     agent_app_tunnel.expect(UID)
     assert host.get("/headers").status_code == 200
+
+
+def test_an_account_deleted_with_its_app_open_gets_no_new_workspace(host, web, monkeypatch):
+    """A tab of the app left open after the account was deleted (its cookie
+    holds for SESSION_SECONDS) asks on and on: no VM is made anew for the
+    account, and the store is asked once."""
+    from types import SimpleNamespace
+
+    from app.core import security
+    from app.services import agent_vm, agent_workspace
+    sign_in(host, web)
+    asked = []
+
+    def ref(db, uid):
+        asked.append(uid)
+        return SimpleNamespace(get=lambda: SimpleNamespace(exists=False))
+
+    def backend():
+        raise AssertionError("a VM was asked for")
+    monkeypatch.setattr(agent_app_tunnel, "exec_url", EXEC_URL)
+    monkeypatch.setattr(security, "db_firestore", object())
+    monkeypatch.setattr(agent_workspace, "ref", ref)
+    monkeypatch.setattr(agent_vm, "backend", backend)
+    for _ in range(3):
+        page = host.get("/headers")
+        assert page.status_code == 503 and "not running" in page.text
+    assert asked == [UID]
+    assert not host.commands
 
 
 def test_a_workspace_the_safety_rules_closed_serves_no_app(host, web, monkeypatch):

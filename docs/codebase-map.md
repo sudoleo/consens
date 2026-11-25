@@ -14555,6 +14555,10 @@ einer eigenen Adresse, solange ihr Hintergrundprozess läuft.
   merkt sich „idle“ je Konto (`_idle`) und beantwortet weitere Anfragen ohne
   die VM, bis die App aus dem Chat neu geöffnet wird (`expect`): Ein offen
   gelassener Tab, der weiter fragt, hielte die VM sonst ungezählt wach.
+  Ebenso ein Konto ohne Arbeitsplatz-Datensatz (`exec_url`): gelöscht,
+  während ein Tab seiner App offen blieb (das Cookie gilt weiter); ohne
+  diese Prüfung legte `open_workspace` ihm eine neue VM an, die niemand
+  abräumt.
 - **Was die App sieht** (`app/services/agent_app_proxy.py`): einen Browser
   auf ihrem eigenen Rechner. `Host` und `Origin` heißen `localhost:<port>`
   (Vites `allowedHosts` und Frameworks, die Origin gegen Host prüfen,
