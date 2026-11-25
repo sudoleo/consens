@@ -272,6 +272,10 @@ const DEMO_RESPONSE_STREAM = { wordsPerTick: 2, tickMs: 55 };
 // Läuft hoch, sobald ein neuer Demo-Durchlauf startet, damit alte
 // Streaming-Timer aus einem vorherigen Lauf sauber abbrechen.
 let demoRunId = 0;
+// The run of the demo that plays (either one, from its first typed letter),
+// 0 once none does: New chat ends it.
+let playingDemo = 0;
+const demoPlaying = () => playingDemo !== 0 && playingDemo === demoRunId;
 
 // Zerlegt eine HTML-Antwort in Tokens: Tags bleiben ganz, Text wird in
 // Wörter/Whitespace gesplittet, damit beim schrittweisen Aufbau nie ein
@@ -323,7 +327,8 @@ function demoResponseMarkdown(html) {
 // Tags beim Zuweisen von innerHTML automatisch, daher bleibt das Markup gültig.
 function streamDemoInto(outputEl, html, runId, opts = {}) {
   return new Promise(resolve => {
-    if (!outputEl) { resolve(); return; }
+    // A box whose turn comes after the demo ended may hold a real answer.
+    if (!outputEl || runId !== demoRunId) { resolve(); return; }
     const wordsPerTick = opts.wordsPerTick || 3;
     const tickMs = opts.tickMs || 38;
     const tokens = tokenizeForStream(html || "");
@@ -398,6 +403,8 @@ async function typeIntoInput(inputEl, text, speed = 14, options = {}) {
   inputEl.value = "";
   inputEl.dispatchEvent(new Event("input", { bubbles: true }));
   for (let i = 0; i < text.length; i++) {
+    // The field is the reader's again once the demo ended (New chat).
+    if (options.live && !options.live()) return;
     inputEl.value += text[i];
     inputEl.dispatchEvent(new Event("input", { bubbles: true }));
     const jitter = Math.random() * 6 - 3;
@@ -699,6 +706,7 @@ async function runAgentDemoFlow() {
   const App = window.App;
   window.hideConsensusOutput?.();
   const runId = ++demoRunId;
+  playingDemo = runId;
   // Once agent-chat.js has let go of the demo (a run, a saved chat or a new
   // chat took the panel), nothing more is written into it.
   let shown = false;
@@ -709,8 +717,9 @@ async function runAgentDemoFlow() {
 
   const qi = document.getElementById("questionInput");
   if (DEMO_PHASES.preType && qi) {
-    await typeIntoInput(qi, DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars), DEMO_PHASES.typeSpeed);
+    await typeIntoInput(qi, DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars), DEMO_PHASES.typeSpeed, { live });
     await sleep(300);
+    if (!live()) return;
     qi.value = DEMO_SCENARIO_PROMPT;
     qi.dispatchEvent(new Event("input", { bubbles: true }));
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
@@ -908,15 +917,22 @@ async function runAgentDemoFlow() {
   // Demo results are a local preview: no bookmark, no vote, no telemetry.
   App.agentReview?.render(body, review, { key: DEMO_AGENT_ID, question: DEMO_SCENARIO_PROMPT, reveal: true });
   if (sendBtn) sendBtn.disabled = false;
+  if (playingDemo === runId) playingDemo = 0;
   showPostDemoLoginPrompt();
 }
 
-// A new chat leaves the demo: the scripted turn stops and the panel is released.
+// A new chat leaves the demo, while it types too: the scripted turn stops,
+// the panel is released, and no answer box is written into any more (a
+// real Compare run may already stand there).
 document.getElementById("newRunButton")?.addEventListener("click", () => {
-  if (!document.body.classList.contains("agent-demo-active")) return;
+  const agent = document.body.classList.contains("agent-demo-active");
+  if (!agent && !demoPlaying()) return;
   demoRunId++;
-  clearDemoAgentAnswer();
-  window.App.agentChat?.demoView?.(false);
+  playingDemo = 0;
+  if (agent) {
+    clearDemoAgentAnswer();
+    window.App.agentChat?.demoView?.(false);
+  }
   const sendBtn = document.getElementById("sendButton");
   if (sendBtn) sendBtn.disabled = false;
 });
@@ -950,6 +966,8 @@ async function runDemoFlow() {
   }
   window.enterDirectComparisonView?.();
   const runId = ++demoRunId;
+  playingDemo = runId;
+  const live = () => runId === demoRunId;
   const sendBtn = document.getElementById("sendButton");
   if (sendBtn) sendBtn.disabled = true;
   // A saved Consensus answer that was on screen leaves.
@@ -966,18 +984,21 @@ async function runDemoFlow() {
     await typeIntoInput(
       qiEl,
       DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars),
-      DEMO_PHASES.typeSpeed
+      DEMO_PHASES.typeSpeed,
+      { live }
     );
     // Die Eckdaten tippt niemand ab; sie werden eingefuegt. Deshalb erscheinen
     // sie in einem Zug, mit einer kurzen Pause davor, damit sichtbar bleibt,
     // dass Frage und Eckdaten zwei verschiedene Dinge sind.
     if (qiEl) {
       await sleep(340);
+      if (!live()) return;
       qiEl.value = DEMO_SCENARIO_PROMPT;
       qiEl.dispatchEvent(new Event("input", { bubbles: true }));
     }
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
   }
+  if (!live()) return;
 
   // Die fertig getippte Frage wird jetzt "abgeschickt": Sie wandert in den
   // Thread-Kopf und verschwindet wie bei einem echten Lauf aus dem Composer.
@@ -1002,7 +1023,7 @@ async function runDemoFlow() {
     new Promise(resolve => {
       const start = DEMO_STREAM_STARTS[model] ?? (activeDemoData.delays[model] || 1800);
       setTimeout(async () => {
-        const box = getBox(model);
+        const box = live() ? getBox(model) : null;
         const p = box?.querySelector(".collapsible-content");
         if (!p) { resolve(); return; }
         await streamDemoInto(p, activeDemoData.responses[model] || "", runId, DEMO_RESPONSE_STREAM);
@@ -1013,6 +1034,7 @@ async function runDemoFlow() {
   ));
 
   if (runId !== demoRunId) return;
+  playingDemo = 0;
 
   // Compare ends after the lineup's answers.
   window.setAgentModeStatus?.("complete");
