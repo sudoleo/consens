@@ -11,6 +11,13 @@ from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG, _choose_mode, _open_agent_level, _snapshot
 
+# Where an element stands once what moves it only for a moment has ended:
+# a transition on it or on a box around it (the menu's way in from 98 %)
+# shifts its drawn place by a few pixels, its layout not at all.
+SETTLED_X = """element => Promise.all(document.getAnimations()
+  .filter(a => a.effect?.target?.contains?.(element) && a.effect.getComputedTiming().endTime !== Infinity)
+  .map(a => a.finished.catch(() => null))).then(() => element.getBoundingClientRect().x)"""
+
 
 @pytest.mark.parametrize("width", [1280, 390])
 def test_without_a_reviewer_the_message_still_sends_unchecked(browser, phase4_server, width):
@@ -75,7 +82,7 @@ def test_reviewer_rows_carry_logos_and_the_menu_holds_still_while_choosing(brows
             # picker, which holds the menu.
             page.evaluate("() => { const models = document.querySelector('.composer-models');"
                           " models.style.maxWidth = `${models.getBoundingClientRect().width}px`; }")
-        left = menu.bounding_box()['x']
+        left = menu.evaluate(SETTLED_X)
         before = chip.bounding_box()
         # Another reviewer changes the chip's words and width under the menu;
         # neither the click nor the menu's own scroll may carry it along.
@@ -85,12 +92,12 @@ def test_reviewer_rows_carry_logos_and_the_menu_holds_still_while_choosing(brows
         after = chip.bounding_box()
         if full_row:
             assert after['x'] + after['width'] - (before['x'] + before['width']) > 8
-        assert abs(menu.bounding_box()['x'] - left) < 1
+        assert abs(menu.evaluate(SETTLED_X) - left) < 1
         menu.hover()
         page.mouse.wheel(0, 240)
         page.wait_for_function("() => document.querySelector('.agent-model-picker .model-picker-menu').scrollTop > 0")
         page.evaluate("() => new Promise(requestAnimationFrame)")
-        assert abs(menu.bounding_box()['x'] - left) < 1
+        assert abs(menu.evaluate(SETTLED_X) - left) < 1
     finally:
         context.close()
 

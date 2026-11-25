@@ -75,6 +75,13 @@ def _open(browser, server, width, *, dark=False):
       executionMode:'agent', question:'Welche Heizung ist am günstigsten?', consensus: answer,
       currentTurn:{id: turn, status:'completed', execution_mode:'agent', consensus: answer,
       agent_settings:{model_id:'deepseek/deepseek-v4.1-flash', file_ids:[]}}});""", [CHAT, TURN_TWO, ANSWER])
+    # Leaving the start screen the composer glides to the page's end, and the
+    # room it keeps under the answer follows once it has arrived (app-init.js
+    # syncThreadComposerReserve, one frame later): until then the page is
+    # taller than it stays, and a place read at its end is lost again.
+    page.wait_for_function("() => !document.body.classList.contains('composer-animating')"
+                           " && !document.body.classList.contains('composer-gliding')")
+    page.evaluate("() => new Promise(requestAnimationFrame)")
     return context, page, errors
 
 
