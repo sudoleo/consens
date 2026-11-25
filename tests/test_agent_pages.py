@@ -95,6 +95,13 @@ def test_a_file_that_needs_nothing_from_outside_is_a_page():
            b'<!-- <script src="https://old.example/x.js"></script> -->'
            b"<script>if (1 < 2) document.title = '<script src=lib.js>';</script><svg><use href=\"#g\"/></svg>")
     assert html_page.refusal(own) is None
+    # A library inside the file that fetches what its caller names, data it
+    # fetches from itself, and a window it opens ask for nothing.
+    inline = (b"<script>function get(url, init) { return fetch(url, init); }"
+              b"var x = new XMLHttpRequest(); x.open('GET', url, true);"
+              b"fetch('data:application/json,[1]'); fetch(URL.createObjectURL(blob));"
+              b"window.open('https://example.com/', '_blank'); const all = Array.from('./x');</script>")
+    assert html_page.refusal(inline) is None
     assert html_page.named('Chart.HTML') and html_page.named('a.htm') and not html_page.named('a.html.txt')
 
 
@@ -112,6 +119,14 @@ def test_a_file_that_needs_nothing_from_outside_is_a_page():
     (b'<script type="module">import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";</script>', 'd3@7'),
     (b'<script>const lib = await import("//esm.sh/three");</script>', '//esm.sh/three'),
     (b'<img src="&#104;ttps://example.com/a.png">', 'https://example.com/a.png'),
+    # What its script asks its server for while it runs: in the chat the
+    # page has no server, and connect-src 'none' would keep it out anyway.
+    (b"<script>fetch('data.json').then(r => r.json()).then(draw);</script>", 'data.json'),
+    (b'<script>const r = await fetch(`/api/items?limit=${n}`);</script>', '/api/items'),
+    (b'<script>const x = new XMLHttpRequest(); x.open("GET", "rows.csv");</script>', 'rows.csv'),
+    (b"<script>const s = new WebSocket('ws://localhost:8000/live');</script>", 'ws://localhost:8000/live'),
+    (b'<script>new EventSource("/events")</script>', '/events'),
+    (b'<script type="module">import { draw } from "./chart.js";</script>', './chart.js'),
 ])
 def test_a_file_that_loads_from_outside_is_refused_with_what_it_loads(markup, loaded):
     reason = html_page.refusal(b'<!doctype html><p>Chart</p>' + markup)
@@ -138,6 +153,8 @@ OPENINGS = {
     'css urls': lambda: b"<p style='" + b'url(' * 500_000 + b"'>",
     'spaces after url': lambda: b'<style>url(' + b' ' * 1_900_000 + b'</style>',
     'spaces after import': lambda: b'<script>' + b'import ' + b' ' * 1_900_000 + b'</script>',
+    'spaces after fetch': lambda: b'<script>' + b'fetch( ' * 300_000 + b'</script>',
+    'requests without an address': lambda: b'<script>' + b'.open("GET",' * 150_000 + b'</script>',
     'tags without end': lambda: b'<a x' * 500_000 + b'"',
     'comments without end': lambda: b'<!--' * 500_000,
     'quotes without end': lambda: b'<a ' + b"=' " * 600_000,

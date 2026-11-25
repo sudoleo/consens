@@ -73,7 +73,18 @@ _CLOSERS = {name: re.compile(rf"</{name}\b", re.IGNORECASE) for name in ("script
 # bounded: a file of nothing but "url(" or spaces costs one pass.
 _CSS_URL = re.compile(r"""url\(\s{0,40}(?:"([^"]{0,300})|'([^']{0,300})|([^)\s"']{1,300}))"""
                       r"""|@import\s{1,40}(?:"([^"]{0,300})|'([^']{0,300}))""", re.IGNORECASE)
-_MODULE = re.compile(r"""(?:\bfrom\s{0,40}|\bimport\s{0,40}\(?\s{0,40})["']((?:https?:)?//[^"'\s]{1,300})""")
+# A module from another address or from the page's own folder (./, ../, /):
+# in the chat the page has no address of its own, so neither loads.
+_MODULE = re.compile(r"""(?:\bfrom\s{0,40}|\bimport\s{0,40}\(?\s{0,40})["']((?:https?:)?//[^"'\s]{1,300}"""
+                     r"""|\.{0,2}/[^"'\s]{1,300})""")
+# What a script asks for while it runs, written as an address: data from its
+# server (fetch("data.json"), an XMLHttpRequest's open), a socket, a worker.
+# Only a written address counts: a library inside the file that fetches
+# whatever its caller names (fetch(url)) asks for nothing by itself.
+_REQUEST = re.compile(r"""(?:\bfetch|\bnew\s{1,40}(?:WebSocket|EventSource|Worker|SharedWorker)|\bimportScripts)"""
+                      r"""\s{0,40}\(\s{0,40}["'`]([^"'`\s]{1,300})"""
+                      r"""|\.open\(\s{0,40}["'](?:GET|POST|PUT|PATCH|DELETE|HEAD)["']\s{0,40},\s{0,40}"""
+                      r"""["'`]([^"'`\s]{1,300})""", re.IGNORECASE)
 # What an element loads, by attribute.
 _LOADS = {
     "script": ("src",), "img": ("src", "srcset"), "source": ("src", "srcset"), "video": ("src", "poster"),
@@ -172,6 +183,8 @@ def loads(source):
                 _css(inner, found)
             elif not attributes.get("src"):
                 found.extend(match.group(1) for match in _MODULE.finditer(inner))
+                found.extend(address for match in _REQUEST.finditer(inner)
+                             if (address := _elsewhere(match.group(1) or match.group(2))))
             if not closer:
                 break
             at = closer.end()
@@ -192,8 +205,8 @@ def refusal(raw):
     shown = ", ".join(address[:_ADDRESS_CHARS] for address in outside[:_NAMED_FIRST])
     more = len(outside) - _NAMED_FIRST
     return (f"it loads {shown}{f' and {more} more' if more > 0 else ''} from outside the file, and a page in the "
-            "chat runs without the network: scripts, styles, fonts and pictures have to be inside the file itself "
-            "(inline, pictures and fonts as data: URLs).")
+            "chat runs without the network: scripts, styles, fonts, pictures and data have to be inside the file "
+            "itself (inline, pictures and fonts as data: URLs).")
 
 
 # Added after the file's own text. A link to another document cannot open

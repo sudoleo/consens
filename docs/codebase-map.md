@@ -14260,7 +14260,15 @@ geteilt wird eine Seite nicht.
   nichts von außerhalb der Datei (`loads`: `script src`, Stylesheet-`link`,
   `img`/`source`/`video`/`audio`/`iframe`/`object`/`embed`, SVG-`image`/`use`,
   `url()`/`@import` in `<style>` und `style`-Attributen, Modul-Importe von einer
-  Adresse). `data:`, `blob:` und `#…` gelten als in der Datei, ein Link
+  Adresse oder aus dem eigenen Ordner, und was ein Skript zur Laufzeit an
+  einer ausgeschriebenen Adresse anfragt: `fetch("data.json")`, das `open`
+  eines XMLHttpRequest, `WebSocket`, `EventSource`, `Worker`). Nur eine
+  ausgeschriebene Adresse zählt: eine Bibliothek in der Datei, die holt, was
+  ihr Aufrufer nennt (`fetch(url)`), fragt selbst nichts an. Dieselbe
+  Prüfung entscheidet, ob eine Seite vom eigenen Server des Agenten (`browser
+  open` mit `for_user`) in den Chat gehört (`agent_browser._runs_in_chat`,
+  `PAGE_IN_CHAT`): Eine, die ihre Daten von dort holt, öffnet im Browser.
+  `data:`, `blob:` und `#…` gelten als in der Datei, ein Link
   (`a href`) ist kein Laden. `refusal` nennt dem Agenten den Grund als Satz
   mit den ersten drei Adressen. Die Prüfung ist eine Auskunft an den Agenten,
   nicht der Schutz. Sie liest in einem Durchgang, auch Markup aus lauter
