@@ -8367,7 +8367,8 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   das für bis zu drei offene Projekte `GET /projects/{id}/bookmarks` holt, und wartet darauf höchstens
   600 ms vor dem Einblenden (`App.bookmarkUi.addListRows`). Bringt eine Seite weniger als
   `BOOKMARK_MIN_NEW_ROWS` = 8 sichtbare Zeilen (ihre Chats liegen in zugeklappten Projekten), lädt
-  `loadBookmarks` von selbst bis zu `BOOKMARK_EXTRA_PAGES` = 2 weitere Seiten. Suche: der Projektname gehört zum
+  `loadBookmarks` von selbst bis zu `BOOKMARK_EXTRA_PAGES` = 2 weitere Seiten; scheitert eine davon, bleiben
+  die gezeigten Zeilen stehen und „Load more“ fragt sie erneut an. Suche: der Projektname gehört zum
   Suchtext jedes seiner Chats, solange das Feld Worte hat sind alle Projekte offen (Toggles
   `aria-disabled`), ein Projekt erscheint, wenn Name oder ein Chat trifft. **Neuer Chat in einem
   Projekt:** „New chat“ des Projekts klickt `#newRunButton` und merkt das Projekt (`arm`,

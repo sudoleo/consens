@@ -2950,7 +2950,9 @@ async function loadBookmarkConversationOnce(bookmarkId) {
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
       throw new Error("The account changed while this chat was loading.");
     }
-    const data = await response.json();
+    // A proxy's page in front of a restarting server is no JSON: its status
+    // still decides whether the chat is asked again.
+    const data = await window.App.readJson(response);
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
       throw new Error("The account changed while this chat was loading.");
     }
@@ -3298,6 +3300,16 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
   const requestId = ++bookmarksLoadRequestId;
   bookmarksLoading = true;
   const container = document.getElementById("bookmarksContainer");
+  let loadedPages = 0;
+  // The list as the pages that came draw it: "Load more" goes on from the
+  // last of them.
+  const settle = () => {
+    renderBookmarksLoadMore();
+    syncActiveBookmark();
+    window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
+    // The example questions predicted from the newest chats (composer-starters.js).
+    if (!append) window.App.composerStarters?.refresh?.();
+  };
   try {
     const idToken = await requestUser.getIdToken(false);
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
@@ -3343,6 +3355,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       else skeleton?.remove();
       bookmarksNextCursor = data.next_cursor || null;
       cursor = bookmarksNextCursor;
+      loadedPages += 1;
       // A page of chats that sit in closed projects shows almost nothing
       // (chat-projects.js): the next one comes too, a few at most, so
       // "Load more" never looks like a button that does nothing.
@@ -3351,18 +3364,20 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       if (sparse) extraPages += 1;
       more = Boolean(cursor) && (loadAll || sparse);
     } while (more);
-    renderBookmarksLoadMore();
-    syncActiveBookmark();
-    window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
-    // The example questions predicted from the newest chats (composer-starters.js).
-    if (!append) window.App.composerStarters?.refresh?.();
+    settle();
     return true;
   } catch (error) {
-    if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-      console.error("Error in loadBookmarks:", error);
-      if (!append || !window.bookmarksData?.length) renderBookmarksLoadError(container);
-      else window.App?.showPopup?.("More chats couldn’t be loaded.");
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
+    console.error("Error in loadBookmarks:", error);
+    // A page that came after another of this load (chats in closed
+    // projects) failed: the rows of the first stay, and "Load more" asks
+    // for the rest again.
+    if (loadedPages) {
+      settle();
+      return true;
     }
+    if (!append || !window.bookmarksData?.length) renderBookmarksLoadError(container);
+    else window.App?.showPopup?.("More chats couldn’t be loaded.");
     return false;
   } finally {
     if (requestId === bookmarksLoadRequestId) bookmarksLoading = false;
