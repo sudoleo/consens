@@ -344,7 +344,8 @@
 
   function basisFromContext(context) {
     if (context?.config.executionMode === "agent" && ["failed", "canceled"].includes(context.status)) {
-      return normalizeBasis(context.basis);
+      // A stopped message stays in its chat (agent-chat.js keepStoppedChat).
+      return normalizeBasis(context.completedBasis || context.basis);
     }
     if (!context || context.status !== "succeeded") return null;
     return normalizeBasis(context.completedBasis);

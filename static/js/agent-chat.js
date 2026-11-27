@@ -936,7 +936,7 @@
       : (running ? "" : wrapUpNotice(state.completedTurn)),
       { streaming: running && !state.text && !settled });
     // A finished turn is what the next message continues (setCompletedBasis).
-    markLiveTurn(running ? null : state.completedTurn);
+    markLiveTurn(running ? null : state.completedTurn || context.metadata.stoppedTurn || null);
     // A message that never left (offline, refused before it started) is
     // back in the box and says so: no "Failed after 0s" above that line.
     const unsent = !running && context.status === "failed" && !context.metadata.requestSent;
@@ -2551,10 +2551,48 @@
     else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     // Only the person's Stop ends the turn; a logout or account switch
     // leaves it running to its saved answer.
-    if (reason === "user" && context.metadata.requestSent) stopOnServer(context);
-    else forgetPending(context);
+    if (reason === "user" && context.metadata.requestSent) {
+      stopOnServer(context);
+      keepStoppedChat(context);
+    } else forgetPending(context);
     restoreUnsentDraft(context);
     flushQueue(context, reason);
+  }
+  // A stopped message that reached the server is a turn of its chat there,
+  // saved with the chat's sidebar entry (routers/agent.py _save_interrupted).
+  // So the chat stays the one on screen, as a reload shows it: the next
+  // message continues it, with the stopped one above it, and the row is the
+  // chat's saved row with its menu at once. Without its turn id the turn
+  // may not have started: the chat goes on from the message before. A
+  // temporary chat starts anew instead (send()).
+  function keepStoppedChat(context) {
+    const chatId = context.metadata.chatId;
+    if (!chatId || context.config.temporary) return;
+    const turnId = String(context.metadata.agentTurnId || "");
+    const turn = turnId ? {
+      id: turnId, turn_id: turnId, question: context.question, consensus: context.consensus.streamText || "",
+      status: "failed", error_code: "cancelled", mode: "Agent", execution_mode: "agent",
+      agent_activity: structuredCopy(context.metadata.agentActivity || []), attachments: context.attachmentMeta || [],
+      ...(context.metadata.agentReview ? { agent_review: structuredCopy(context.metadata.agentReview) } : {}),
+      created_at: new Date(context.startedAt || context.createdAt || Date.now()).toISOString(),
+      failed_at: new Date().toISOString(),
+    } : null;
+    // The live surface moves up into the history as it is (markLiveTurn).
+    context.metadata.stoppedTurn = turn;
+    registry.setCompletedBasis(context.runId, {
+      runId: context.runId, bookmarkId: context.bookmark.id, chatId, turnId, executionMode: "agent",
+      question: turn ? context.question : context.basis?.question || "",
+      consensus: turn ? turn.consensus : context.basis?.consensus || "",
+      currentTurn: turn || context.basis?.currentTurn || null,
+      historyTurns: turn ? context.historyTurns : context.basis?.historyTurns || [],
+      title: context.bookmark.title, bookmarkMeta: context.basis?.bookmarkMeta || null,
+    });
+    if (!document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(context.runId)}"]`)) return;
+    context.bookmark.uiReady = true; // run-view.ensureRunRow must not recreate the run row
+    App.bookmarkUi?.settleStopped?.({ id: context.bookmark.id, title: context.bookmark.title || context.question,
+      query: context.question, mode: "Agent", timestamp: new Date().toISOString(),
+      ...(context.config.projectId ? { project_id: context.config.projectId } : {}),
+      responses: { consensus: turn?.consensus || "" } }, context.runId);
   }
   // After a reload: follow this tab's turns that were still running. Also
   // when the mode switch stands on Compare: a turn that may wait for

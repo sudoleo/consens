@@ -610,6 +610,92 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         context.close()
 
 
+def test_a_stopped_message_stays_one_chat_that_can_be_deleted(browser, phase4_server):
+    """Stop, the pencil, Send again: one chat in the sidebar, which its menu
+    deletes without a reload (agent-chat.js keepStoppedChat)."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    created, deleted = [], []
+    try:
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda route: _json(route, CATALOG))
+
+        def chats(route):
+            if route.request.method == "POST":
+                created.append(route.request.post_data_json)
+            _json(route, {"chat": {"id": "a" * 32}})
+        page.route("**/chats", chats)
+        page.route("**/agent/chats/*/requests/*/stop", lambda route: _json(route, {"status": "stopping"}))
+
+        def bookmark(route):
+            assert route.request.method == "DELETE", route.request.method
+            deleted.append(route.request.post_data_json)
+            _json(route, {"status": "success", "message": "Bookmark deleted."})
+        page.route("**/bookmark", bookmark)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        # Each message works until it is stopped.
+        page.evaluate("""() => {
+          const original = window.fetch;
+          window.__agentBodies = [];
+          window.fetch = async (url, options) => {
+            if (url !== '/agent') return original(url, options);
+            const body = JSON.parse(options.body);
+            window.__agentBodies.push(body);
+            const encoder = new TextEncoder();
+            const frame = (type, data) => encoder.encode('event: ' + type + '\\ndata: ' + JSON.stringify(data) + '\\n\\n');
+            return new Response(new ReadableStream({ start(controller) {
+              controller.enqueue(frame('accepted', { chat_id: body.chat_id, turn_id: String(window.__agentBodies.length).repeat(32) }));
+              controller.enqueue(frame('delta', { text: 'Half of an SVG' }));
+              options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
+            }}), {headers: {'Content-Type': 'text/event-stream'}});
+          };
+        }""")
+        page.locator("#questionInput").fill("Gemini Neon please: Generate an SVG of a pelican riding a bicycle")
+        page.locator("#sendButton").click()
+        expect(page.locator(".run-entry-status")).to_have_text("Working")
+        page.wait_for_function("() => App.runRegistry.visible()?.metadata.agentTurnId")
+        # The send button's duplicate-gesture guard.
+        page.wait_for_function("() => Date.now() - App.runRegistry.visible().startedAt > 800")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'canceled'")
+        rows = page.locator("#bookmarksContainer .bookmark")
+        expect(rows).to_have_count(1)
+        expect(page.locator(".bookmark.run-entry")).to_have_count(0)
+        expect(rows.first.locator(".bookmark-menu-button")).to_have_count(1)
+
+        page.locator("#threadAsk .thread-ask-edit").click()
+        field = page.locator("#questionInput")
+        expect(field).to_have_value("Gemini Neon please: Generate an SVG of a pelican riding a bicycle")
+        field.fill("Qwen4 please: Generate an SVG of a pelican riding a bicycle")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => window.__agentBodies.length === 2")
+        first, second = page.evaluate("() => window.__agentBodies")
+        assert len(created) == 1, created
+        assert second["chat_id"] == first["chat_id"] == "a" * 32
+        assert second["bookmark_id"] == first["bookmark_id"]
+        expect(rows).to_have_count(1)
+        expect(page.locator(".run-entry-status")).to_have_text("Working")
+        # The stopped message stands above the new one, as a reload shows it.
+        expect(page.locator("#threadHistory .thread-history-question-text")).to_have_text(
+            "Gemini Neon please: Generate an SVG of a pelican riding a bicycle")
+        page.wait_for_function("() => Date.now() - App.runRegistry.visible().startedAt > 800")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'canceled'")
+
+        row = rows.first
+        row.hover()
+        row.locator(".bookmark-menu-button").click()
+        page.locator('.bookmark-menu-item[data-action="delete"]').click()
+        expect(page.locator("#bookmarksContainer .bookmark:not(.is-undo-pending)")).to_have_count(0)
+        # Undo's few seconds pass; the deletion names the chat, whose entry
+        # the stop may not have saved yet.
+        page.wait_for_function("() => document.querySelectorAll('#bookmarksContainer .bookmark').length === 0", timeout=15000)
+        assert deleted == [{"id_token": deleted[0]["id_token"], "bookmarkId": first["bookmark_id"], "chatId": "a" * 32}], deleted
+    finally:
+        context.close()
+
+
 def test_small_viewport_long_model_and_missing_reasoning(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:

@@ -96,6 +96,9 @@ class BookmarkDeleteRequest(BaseModel):
 
     id_token: StrictStr = Field(min_length=1, max_length=20_000)
     bookmarkId: StrictStr = Field(min_length=1, max_length=100)
+    # The chat of a message stopped a moment ago (static/firebase.js
+    # deleteBookmark): used only while its entry is not saved yet.
+    chatId: StrictStr | None = Field(default=None, max_length=32)
 
 
 def _clean_previous_question(value):
@@ -1368,6 +1371,11 @@ def delete_bookmark(data: BookmarkDeleteRequest):
     except Exception:
         raise HTTPException(status_code=500, detail="Error deleting bookmark")
     chat_id = str(bound.get("chat_id") or "")
+    if not snapshot.exists and data.get("chatId"):
+        # A stopped Agent message saves its chat's entry once the stop has
+        # settled (routers/agent.py _save_interrupted). Deleted before that,
+        # the chat goes now, and that late save finds no active chat.
+        chat_id = str(data["chatId"])
     queued = False
     if CHAT_ID_RE.fullmatch(chat_id):
         try:

@@ -1420,7 +1420,7 @@ class RecordingChatStore:
         return self.error is None
 
 
-def _delete_bookmark(bookmark_ref, chat_store):
+def _delete_bookmark(bookmark_ref, chat_store, chat_id=None):
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(bookmarks_router.router)
@@ -1432,7 +1432,8 @@ def _delete_bookmark(bookmark_ref, chat_store):
         return TestClient(app).request(
             "DELETE",
             "/bookmark",
-            json={"id_token": "token", "bookmarkId": bookmark_ref.id},
+            json={"id_token": "token", "bookmarkId": bookmark_ref.id,
+                  **({"chatId": chat_id} if chat_id else {})},
         )
 
 
@@ -1446,6 +1447,31 @@ def test_deleting_a_chat_bookmark_also_deletes_its_chat():
     assert response.status_code == 200
     assert bookmark_ref.deleted is True
     assert chat_store.deleted == [("uid-1", chat_id)]
+
+
+def test_a_stopped_chat_deleted_before_its_entry_is_saved_goes_by_its_id():
+    # The page offers Delete as soon as a message is stopped; the stop saves
+    # the chat's entry only once it settled (routers/agent.py).
+    chat_id = "c" * 32
+    bookmark_ref = DeletableBookmarkRef("b_agent_stopped", None)
+    chat_store = RecordingChatStore()
+
+    response = _delete_bookmark(bookmark_ref, chat_store, chat_id=chat_id)
+
+    assert response.status_code == 200
+    assert chat_store.queued == [("uid-1", chat_id)]
+    assert chat_store.deleted == [("uid-1", chat_id)]
+
+
+def test_a_saved_entry_deletes_its_own_chat_whatever_chat_the_page_names():
+    bound, named = "c" * 32, "d" * 32
+    bookmark_ref = DeletableBookmarkRef("chat_bookmark", {"query": "Q", "chat_id": bound})
+    chat_store = RecordingChatStore()
+
+    response = _delete_bookmark(bookmark_ref, chat_store, chat_id=named)
+
+    assert response.status_code == 200
+    assert chat_store.queued == [("uid-1", bound)]
 
 
 def test_deleting_a_legacy_bookmark_touches_no_chat():

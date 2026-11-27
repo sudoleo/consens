@@ -3661,6 +3661,10 @@ async function deleteBookmark(bookmarkId) {
   window.App.runRegistry?.cancelActionsForBookmark?.(bookmarkId, "bookmark_deleted");
   const contexts = (window.App.runRegistry?.list?.() || []).filter(item => item.bookmark?.id === bookmarkId);
   contexts.forEach(context => { context.bookmark.deleting = true; });
+  // A message stopped a moment ago may not have its entry saved yet
+  // (settleStoppedRunBookmark): the server then deletes its chat by this
+  // id, and the stop's late save finds the chat gone.
+  const chatId = contexts.map(context => context.metadata?.chatId).find(Boolean) || "";
   const metaIndex = (window.bookmarksData || []).findIndex(item => item.id === bookmarkId);
   const meta = window.bookmarksData?.[metaIndex];
   window.bookmarksData = (window.bookmarksData || []).filter(item => item.id !== bookmarkId);
@@ -3711,7 +3715,7 @@ async function deleteBookmark(bookmarkId) {
       const res = await fetch("/bookmark", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token, bookmarkId }),
+        body: JSON.stringify({ id_token, bookmarkId, ...(chatId ? { chatId } : {}) }),
         keepalive: true
       });
       const data = await res.json().catch(() => ({}));
@@ -4348,8 +4352,22 @@ function addListRows(items) {
   window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
 }
 
+// A stopped Agent message (agent-chat.js keepStoppedChat): the server saves
+// its chat's entry with the stopped turn, so the run's row is that entry at
+// once, with the menu a reload gives it. A chat already in the list keeps
+// its saved details.
+function settleStoppedRunBookmark(bookmark, runId) {
+  const meta = bookmarkMeta(bookmark);
+  if (!meta.id || !bookmarkWriteAllowed(auth.currentUser?.uid || null, meta.id)) return;
+  if (!window.bookmarksData) window.bookmarksData = [];
+  const saved = window.bookmarksData.find(item => item.id === meta.id);
+  if (!saved) window.bookmarksData.unshift(meta);
+  replacePendingBookmarkWithReady(saved || meta, runId);
+}
+
 window.App.bookmarkUi = Object.freeze({
   finalizeRun: finalizeRegistryRunBookmark,
+  settleStopped: settleStoppedRunBookmark,
   addListRows,
   replacePendingBookmarkWithReady,
   insertSoftly: insertBookmarkRowSoftly,
