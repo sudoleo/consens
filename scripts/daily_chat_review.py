@@ -15,8 +15,9 @@ The scheduled task runs unattended, so every step is one fixed command that
 collect   every turn of an external account since the last saved run (the
           first run looks back 26 hours) as compact JSON: question, how the
           agent handled it (phases, wait for the answer's first token,
-          models, failures, tool calls and refused ones, answer check), its
-          Watch (proposed, started, or a scheduled run), answer excerpt, cost;
+          models, failures, tool calls and refused ones, answer check and
+          each reviewer's part in it), its Watch (proposed, started, or a
+          scheduled run with its earlier looks), answer excerpt, cost;
           per account the share of its daily allowance it spent; plus counted
           server warnings of the same window.
           Users appear as pseudonyms (U + hash), never with e-mail or ID.
@@ -108,6 +109,49 @@ def model_name(model) -> str:
     return str(name or "?").split("/")[-1]
 
 
+# A reviewer's final round (agent_audit.FinalRequest): "final", its "hedge",
+# and a "repair"; a live round's repair starts before the answer's end.
+FINAL_ROUNDS = ("final", "hedge")
+
+
+def searches(step: dict) -> int:
+    usage = step.get("usage") if isinstance(step.get("usage"), dict) else {}
+    return usage.get("web_search_requests") or 0
+
+
+def reviewer_check(reviewers: list, answer_end) -> dict:
+    """Per reviewer model, what of the check after the answer is its part:
+    when it ended (``after_answer_seconds``), how long its final round
+    waited (a live round still running) and took, how soon that round's
+    first token came, where it ran and how often the reviewer searched.
+    The turn's ``check_after_answer_seconds`` names no model; this tells
+    which one held the check up and whether it was the provider or the
+    reviewer's own research."""
+    out = {}
+    for name in sorted({model_name(s.get("model")) for s in reviewers}):
+        calls = [s for s in reviewers if model_name(s.get("model")) == name]
+        entry = {}
+        ended = [s["settled_at"] for s in calls if s.get("settled_at")]
+        if answer_end and ended and max(ended) > answer_end:
+            entry["after_answer_seconds"] = seconds(answer_end, max(ended))
+        final = [s for s in calls if s.get("round") in FINAL_ROUNDS or (
+            s.get("round") == "repair" and answer_end and s.get("created_at") and s["created_at"] >= answer_end)]
+        if final:
+            first = min(final, key=lambda s: s["created_at"])
+            if answer_end:
+                entry["final_waited_seconds"] = max(0, seconds(answer_end, first["created_at"]))
+            last = max((s for s in final if s.get("settled_at")), key=lambda s: s["settled_at"], default=None)
+            if last:
+                entry["final_seconds"] = seconds(first["created_at"], last["settled_at"])
+                if last.get("endpoint"):
+                    entry["final_endpoint"] = last["endpoint"]
+            if first.get("first_token_at"):
+                entry["final_first_token_seconds"] = seconds(first["created_at"], first["first_token_at"])
+        entry["searches"] = sum(searches(s) for s in calls)
+        out[name] = entry
+    return out
+
+
 def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
     """How the agent handled the turn, from its receipts (content-free).
 
@@ -157,6 +201,7 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
     if reviewers:
         flow["reviewer_calls"] = len(reviewers)
         flow["reviewer_models"] = dict(Counter(model_name(s.get("model")) for s in reviewers))
+        flow["reviewer_check"] = reviewer_check(reviewers, answer_end)
     if judges:
         flow["judge_calls"] = len(judges)
         flow["judge_timeouts"] = sum(1 for s in judges if s.get("settled_at") and s.get("status") != "succeeded"
@@ -172,6 +217,11 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
     usage = turn.get("agent_usage") or {}
     flow["cost_usd"] = round((usage.get("estimated_cost_nano_usd") or 0) / 1e9, 3)
     flow["web_searches"] = usage.get("web_search_requests") or 0
+    # The agent's own searches (its Exa receipts, "service:" steps, and any
+    # of its chat steps); the rest of web_searches is the other models'
+    # (reviewers, compared models, helpers).
+    flow["agent_searches"] = sum(searches(s) for s in steps
+                                 if s["kind"] == "chat" or str(s.get("step", "")).startswith("service:"))
     flow["total_seconds"] = seconds(t0, turn.get("completed_at") or turn.get("failed_at") or turn.get("updated_at"))
     return flow
 
@@ -234,9 +284,12 @@ def turn_tools(turn_ref) -> dict:
     return out
 
 
-def watch_summary(turn_id: str, turn: dict, started: dict) -> dict:
+def watch_summary(turn_id: str, turn: dict, started: dict, record: dict | None = None) -> dict:
     """The turn's part in a Watch: one it proposed (and whether the user
-    started it), or this turn being a scheduled run of one."""
+    started it), or this turn being a scheduled run of one. ``record``: the
+    run's Watch (agent_watches): since when it exists, its status now and
+    what its earlier looks found. Without them a question its first look
+    already asked at the start reads as one asked a week too late."""
     from app.services.agent_watches import _outcome
     out = {}
     proposal = turn.get("agent_watch")
@@ -247,6 +300,13 @@ def watch_summary(turn_id: str, turn: dict, started: dict) -> dict:
     # carries ``watch_run`` in its settings (routers/agent.py _quiet_watch_run).
     if (turn.get("agent_settings") or {}).get("watch_run"):
         out["scheduled_run"] = _outcome(turn)[0]
+        if record:
+            created = turn.get("created_at")
+            out["watch_since"] = local(record.get("created_at"))
+            out["watch_status"] = record.get("status")
+            out["earlier_looks"] = [look.get("outcome") for look in record.get("looks") or []
+                                    if hasattr(look.get("at"), "astimezone") and hasattr(created, "astimezone")
+                                    and look["at"] < created]
     return out
 
 
@@ -310,7 +370,7 @@ def cmd_collect(args) -> int:
     from app.services import agent_budget_config, agent_quota
     accounts, own = external_accounts()
     budget_config, days = agent_budget_config.get_config(db), utc_days(since, now)
-    turns, newest, allowance = [], since, {}
+    turns, newest, allowance, watches = [], since, {}, {}
     for uid, (created, providers) in accounts.items():
         user = db.collection("users").document(uid)
         chats = list(user.collection("chats").where("updated_at", ">", since).stream())
@@ -354,7 +414,11 @@ def cmd_collect(args) -> int:
                     "flow": {**turn_flow(turn, steps, agents), **turn_tools(doc.reference)},
                     "check": review_summary(turn),
                 }
-                watch = watch_summary(doc.id, turn, started or {})
+                run = (turn.get("agent_settings") or {}).get("watch_run")
+                watch_id = run.get("watch_id") if isinstance(run, dict) else None
+                if watch_id and watch_id not in watches:
+                    watches[watch_id] = db.collection("agent_watches").document(watch_id).get().to_dict() or {}
+                watch = watch_summary(doc.id, turn, started or {}, watches.get(watch_id) if watch_id else None)
                 if watch:
                     entry["watch"] = watch
                 # A Watch asks its task again on every run: that is no user repeating themselves.

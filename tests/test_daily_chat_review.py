@@ -75,10 +75,62 @@ def at(second):
     return datetime(2026, 11, 15, 8, 41, 53, tzinfo=timezone.utc) + timedelta(seconds=second)
 
 
-def receipt(step, start, end, *, agent="", first=None, finish="stop", model="openai/gpt-6.1-terra", status="succeeded"):
-    return {"step": step, "agent_id": agent, "created_at": at(start), "settled_at": at(end),
+def test_a_scheduled_run_tells_since_when_its_watch_exists_and_what_its_earlier_looks_found():
+    run = {"agent_settings": {"watch_run": {"watch_id": "w1"}}, "created_at": at(14 * 86400),
+           "agent_watch_run": {"pause": {"reason": "Which topic?"}}}
+    record = {"created_at": at(0), "status": "paused",
+              "looks": [{"at": at(1), "outcome": "needs_you", "summary": "What should I track?"},
+                        {"at": at(7 * 86400), "outcome": "quiet"},
+                        {"at": at(14 * 86400 + 9), "outcome": "needs_you", "summary": "Which topic?"}]}
+    digest = watch_summary("r3", run, {}, record)
+    assert digest == {"scheduled_run": "needs_you", "watch_since": "15.11. 09:41:53", "watch_status": "paused",
+                      "earlier_looks": ["needs_you", "quiet"]}
+    assert "track" not in json.dumps(digest)
+    assert watch_summary("r3", run, {}) == {"scheduled_run": "needs_you"}
+
+
+def receipt(step, start, end, *, agent="", first=None, finish="stop", model="openai/gpt-6.1-terra", status="succeeded",
+            round=None, endpoint=None, searches=None):
+    data = {"step": step, "agent_id": agent, "created_at": at(start), "settled_at": at(end),
             "first_token_at": at(first) if first is not None else None, "finish_reason": finish,
             "model": {"model": model}, "status": status}
+    if round:
+        data["round"] = round
+    if endpoint:
+        data["endpoint"] = endpoint
+    if searches is not None:
+        data["usage"] = {"web_search_requests": searches}
+    return data
+
+
+def test_each_reviewer_says_its_part_of_the_check_after_the_answer():
+    """Which reviewer held the check up, and whether it waited for a live
+    round, its provider was slow to start or it researched."""
+    from scripts.daily_chat_review import turn_flow
+    agents = {"a1": {"kind": "audit"}, "a2": {"kind": "audit"}}
+    steps = [
+        receipt("completion:0", 0, 8, first=2, finish="tool_calls"),
+        receipt("service:x1", 3, 4, searches=3),
+        receipt("completion:1", 10, 30, first=12),
+        receipt("agent:a1:0", 9, 36, agent="a1", model="deepseek/deepseek-v4.1-flash", round="live", searches=2),
+        receipt("agent:a1:1", 36, 73, first=51, agent="a1", model="deepseek/deepseek-v4.1-flash", round="final",
+                endpoint="DeepInfra", searches=4),
+        # The hedge that lost is no part of the round.
+        receipt("agent:a1:2", 60, 73, agent="a1", model="deepseek/deepseek-v4.1-flash", round="hedge",
+                status="cancelled"),
+        receipt("agent:a2:0", 31, 38, first=33, agent="a2", model="anthropic/claude-haiku-5.5", round="final",
+                endpoint="Anthropic", searches=0),
+    ]
+    flow = turn_flow({"created_at": at(0), "completed_at": at(73), "agent_usage": {"web_search_requests": 9}},
+                     steps, agents)
+    assert flow["check_after_answer_seconds"] == 43
+    assert flow["reviewer_check"] == {
+        "claude-haiku-5.5": {"after_answer_seconds": 8, "final_waited_seconds": 1, "final_seconds": 7,
+                             "final_endpoint": "Anthropic", "final_first_token_seconds": 2, "searches": 0},
+        "deepseek-v4.1-flash": {"after_answer_seconds": 43, "final_waited_seconds": 6, "final_seconds": 37,
+                                "final_endpoint": "DeepInfra", "final_first_token_seconds": 15, "searches": 6},
+    }
+    assert flow["web_searches"] == 9 and flow["agent_searches"] == 3
 
 
 def test_the_flow_tells_the_wait_for_the_answer_from_the_research_after_the_comparison():

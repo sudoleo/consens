@@ -12438,7 +12438,13 @@ Ausfälle; Antwort = letzter Chat-Schritt mit `stop`: Wartezeit bis zu ihrem
 ersten Token `answer_started_seconds`, Schreibdauer `answer_seconds`;
 `after_comparison_seconds` vom Vergleichsende bis Antwortende, also mit der
 Recherche danach; Prüfdauer nach Antwortende über Prüfer (`audit`,
-`reviewer_calls`) und Judges, Judge-Timeouts, langsamster Judge-Call,
+`reviewer_calls`) und Judges, je Prüfer-Modell in `flow.reviewer_check`
+sein Teil daran: Ende nach Antwortende, Warten der Schlussrunde (`round`
+`final`/`hedge`, Reparatur nach Antwortende) auf eine laufende Live-Runde,
+ihre Dauer, ihr erstes Token, ihr Endpunkt und die Suchen des Prüfers;
+`flow.agent_searches` sind die Suchen des Agenten selbst (Exa-Belege
+`service:` und Chat-Schritte), der Rest von `web_searches` gehört den
+anderen Modellen; Judge-Timeouts, langsamster Judge-Call,
 Kosten; gestoppte Judge-Calls, meist Hedge-Verlierer, getrennt als
 `judge_hedges_stopped` und nicht in der Prüfdauer), je Konto mit Chat im
 Fenster (auch temporär) der Anteil des Tageskontos je UTC-Tag aus dem
@@ -12448,7 +12454,9 @@ Arbeitsprotokoll (`flow.tools` je Name, `flow.refused_calls` als „Werkzeug:
 Feld“ für Aufrufe, die das Register vor dem Werkzeug ablehnte, nie Werte,
 `flow.tool_errors`), die Watch des Turns (`watch.proposed`/`watch.started`
 aus `agent_watches`, `watch.scheduled_run` für einen geplanten Lauf laut
-`agent_settings.watch_run`; dessen gleiche Frage zählt nicht als
+`agent_settings.watch_run`, mit `watch_since`, `watch_status` und
+`earlier_looks` aus dem Watch-Datensatz, damit eine schon beim ersten Blick
+gestellte Rückfrage nicht als verspätet gilt; dessen gleiche Frage zählt nicht als
 `repeated_question_after_seconds`) und Prüfstatus, dazu
 gezählte Warnungen aus dem Render-Log (alle Konten, auch eigene; das Log kennt
 kein Konto, `server_warnings_scope` sagt das im JSON). `collect` gibt JSON aus und merkt sich
