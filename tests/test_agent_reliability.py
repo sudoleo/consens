@@ -203,12 +203,17 @@ def test_comparison_checkpoints_finished_answer_while_peer_is_still_running(stor
 
 @pytest.mark.parametrize("heartbeat", [True, False])
 def test_real_provider_socket_stall_releases_receipt_and_preserves_partial_text(store, monkeypatch, heartbeat):
+    """On the watchdog's own clock, which only the silence after the partial
+    text moves: against a real 80 ms a loaded machine ran out before the
+    first chunk had arrived, and the step asked the provider a second time."""
     closed, requests = [], []
+    now = [0.0]
     class Body(httpx.AsyncByteStream):
         async def __aiter__(self):
             yield b'data: {"choices":[{"delta":{"content":"Partial answer"}}]}\n\n'
             while True:
                 await asyncio.sleep(.015)
+                now[0] += .015
                 if heartbeat:
                     yield b': OPENROUTER PROCESSING\n\n'
         async def aclose(self):
@@ -219,6 +224,8 @@ def test_real_provider_socket_stall_releases_receipt_and_preserves_partial_text(
     http = runtime.ProviderHTTP(transport=httpx.MockTransport(respond))
     monkeypatch.setattr(runtime, "_provider_http", http)
     monkeypatch.setattr(runtime, "_bounded_env_float", lambda *args: .08)
+    watchdog = runtime.ProviderProgressWatchdog
+    monkeypatch.setattr(runtime, "ProviderProgressWatchdog", lambda seconds: watchdog(seconds, clock=lambda: now[0]))
     loop = chat_loop(store, AgentCompletion)
     try:
         with pytest.raises(TimeoutError, match="no progress"):
