@@ -289,6 +289,46 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
+  // app-update.js loads a new build only while the page is hidden, so the
+  // restored chat opens in a hidden page.
+  it("returns a chat opened in a hidden page to its place once the page is shown", () => {
+    const app = boot();
+    let hidden = true;
+    Object.defineProperty(app.document, "hidden", { configurable: true, get: () => hidden });
+    app.saved();
+    app.window.App.chatScroll.returnTo(() => 1234);
+    app.window.App.chatScroll.opened();
+    app.tick();
+    expect(app.window.scrollTo).not.toHaveBeenCalled();
+    hidden = false;
+    app.document.dispatchEvent(new app.window.Event("visibilitychange"));
+    expect(app.window.scrollY).toBe(1234);
+    app.tick();
+    // Once: the next chat stands at its newest question.
+    app.scroll(0); app.saved("other"); app.window.App.chatScroll.opened(); app.tick();
+    expect(app.window.scrollY).toBe(2000);
+    // Shown again, nothing is opened a second time.
+    app.scroll(500); app.window.scrollTo.mockClear();
+    app.document.dispatchEvent(new app.window.Event("visibilitychange"));
+    app.tick();
+    expect(app.window.scrollTo).not.toHaveBeenCalled();
+    app.dom.window.close();
+  });
+
+  it("does not carry a place it could not return to over to the next chat", () => {
+    const app = boot();
+    app.saved();
+    app.window.App.chatScroll.returnTo(() => 1234);
+    // A dialog holds the page (overflow hidden): this opening writes nothing.
+    app.document.body.style.overflowY = "hidden";
+    app.window.App.chatScroll.opened(); app.tick();
+    expect(app.window.scrollTo).not.toHaveBeenCalled();
+    app.document.body.style.overflowY = "";
+    app.saved("other"); app.window.App.chatScroll.opened(); app.tick();
+    expect(app.window.scrollY).toBe(2000);
+    app.dom.window.close();
+  });
+
   it("offers a keyboard usable return to the latest message that jumps once", () => {
     const app = boot();
     app.window.App.revealSentMessage(); app.tick();

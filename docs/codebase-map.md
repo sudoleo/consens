@@ -4590,7 +4590,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   zur Oberkante, dazu `scrollY`); nach dem Neuladen öffnet es beim ersten
   `consensio:auth-state` desselben Kontos `window.openBookmark(id)` mit
   `App.chatScroll.returnTo(fn)` davor — das Öffnen steht dann ohne Fahrt an
-  genau dieser Stelle und hält sie, solange das Layout nachzieht —, solange der
+  genau dieser Stelle und hält sie, solange das Layout nachzieht; weil die neue
+  Seite verborgen lädt, holt `opened()` das beim ersten `visibilitychange`
+  nach, und eine Stelle, die ein Öffnen nicht einnehmen konnte (offener Dialog,
+  anderer Chat), verfällt, statt den nächsten Chat zu verschieben —, solange der
   Nutzer noch auf dem leeren Start ist
   (max. 5 min alt). War der Anmeldestand schon bekannt, bevor das deferred
   App-Bundle lief (das Firebase-Modul war fertig, das Bundle lud noch), ist das

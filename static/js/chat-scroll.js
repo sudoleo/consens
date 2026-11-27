@@ -378,12 +378,18 @@
   // frame: no ride from the top through every answer,
   // and on a phone the question is never left under the floating header,
   // as it was at the absolute end. Only "Latest message" and Send move.
+  // A chat opened in a hidden page (app-update.js reloads only then) gets
+  // its opening once the page is shown; until then nothing measures.
+  let openWhenShown = false;
   function opened() {
     // A second call while a returned-to place still settles keeps it.
     const held = jump === "open" ? place : null;
     closeMenu();
     project(App.runRegistry?.visible());
-    if (!valid() || occupied()) return;
+    openWhenShown = document.hidden && valid();
+    if (openWhenShown) return;
+    // A place is for this opening only, never for the chat opened next.
+    if (!valid() || occupied()) { pendingPlace = null; return; }
     cancelFrame();
     detach();
     jump = "open";
@@ -429,7 +435,10 @@
   }, { passive: true });
   window.visualViewport?.addEventListener("resize", changed, { passive: true });
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pause();
+    else if (openWhenShown) opened();
+  });
   window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); else changed(); });
   // The next opened() returns to this place (a function giving the scroll
   // offset) instead of the newest question; once, then as usual.
