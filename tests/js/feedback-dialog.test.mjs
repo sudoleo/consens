@@ -128,15 +128,21 @@ describe("feedback dialog for members", () => {
     window.close();
   });
 
+  // The bodies below are main.py's: error_body for an HTTPException and the
+  // RateLimitExceeded handler ({error, code, retry_after}), the validation
+  // handler ({error: "Validation failed", details}).
   it("reports a refused send in English instead of treating it as success", async () => {
-    const fetch = vi.fn(async () => response(429, { detail: "Please wait before sending feedback again." }));
+    const fetch = vi.fn(async () => response(429, {
+      error: "Please wait before sending feedback again.",
+      code: "feedback_cooldown", error_code: "feedback_cooldown", retry_after: 12,
+    }));
     const { window, document } = await boot({ user: member(), fetchImpl: fetch });
     document.getElementById("feedbackButton").click();
     const form = submit(window, document, "Second message");
     await settle(window);
     await settle(window);
     const status = document.getElementById("feedbackStatus");
-    expect(status.textContent).toBe("Please wait before sending feedback again.");
+    expect(status.textContent).toBe("You just sent feedback. Try again in a moment.");
     expect(status.dataset.tone).toBe("error");
     // The message stays for a retry.
     expect(form.elements.message.value).toBe("Second message");
@@ -144,16 +150,62 @@ describe("feedback dialog for members", () => {
     window.close();
   });
 
-  it("turns a validation list into one readable sentence", async () => {
-    const fetch = vi.fn(async () => response(422, {
-      detail: [{ msg: "Value error, Enter a valid e-mail address." }],
+  it("names the daily limit and the way around it", async () => {
+    const fetch = vi.fn(async () => response(429, {
+      error: "Daily feedback limit reached.",
+      code: "feedback_daily_limit", error_code: "feedback_daily_limit", retry_after: 40000,
     }));
     const { window, document } = await boot({ user: member(), fetchImpl: fetch });
     document.getElementById("feedbackButton").click();
-    submit(window, document, "Hello", "not-an-address");
+    submit(window, document, "Eleventh message");
     await settle(window);
     await settle(window);
-    expect(document.getElementById("feedbackStatus").textContent).toBe("Enter a valid e-mail address.");
+    expect(document.getElementById("feedbackStatus").textContent)
+      .toBe("You’ve reached today’s feedback limit. You can also write to contact@consens.io.");
+    window.close();
+  });
+
+  it("passes on the server's wait for a burst of sends", async () => {
+    const fetch = vi.fn(async () => response(429, {
+      error: "Too many requests in a short time. Please wait a moment and try again.",
+      code: "rate_limited", retry_after: 40,
+    }));
+    const { window, document } = await boot({ user: member(), fetchImpl: fetch });
+    document.getElementById("feedbackButton").click();
+    submit(window, document, "Fourth message");
+    await settle(window);
+    await settle(window);
+    expect(document.getElementById("feedbackStatus").textContent)
+      .toBe("Too many requests in a short time. Please wait a moment and try again.");
+    window.close();
+  });
+
+  it("turns a validation list into one readable sentence", async () => {
+    // me@gmailcom passes the browser's type=email check, not the server's.
+    const fetch = vi.fn(async () => response(422, {
+      error: "Validation failed",
+      details: [{ loc: ["body", "email"], type: "value_error", msg: "Value error, Enter a valid email address." }],
+    }));
+    const { window, document } = await boot({ user: member(), fetchImpl: fetch });
+    document.getElementById("feedbackButton").click();
+    submit(window, document, "Hello", "me@gmailcom");
+    await settle(window);
+    await settle(window);
+    expect(document.getElementById("feedbackStatus").textContent).toBe("Enter a valid email address.");
+    window.close();
+  });
+
+  it("does not show Pydantic's own words for a rejected field", async () => {
+    const fetch = vi.fn(async () => response(422, {
+      error: "Validation failed",
+      details: [{ loc: ["body", "message"], type: "string_too_long", msg: "String should have at most 4000 characters" }],
+    }));
+    const { window, document } = await boot({ user: member(), fetchImpl: fetch });
+    document.getElementById("feedbackButton").click();
+    submit(window, document, "Hello");
+    await settle(window);
+    await settle(window);
+    expect(document.getElementById("feedbackStatus").textContent).toBe("Your feedback couldn’t be sent. Try again.");
     window.close();
   });
 

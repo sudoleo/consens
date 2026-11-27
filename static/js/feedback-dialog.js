@@ -10,7 +10,8 @@
 //
 // Call-time dependencies: App.modalDialog (modal-dialog.js), window.auth
 // (firebase.js), App.openAuthModal (firebase.js), App.trackAppEvent
-// (app-core.js).
+// (app-core.js), App.readJson, App.httpError and App.userError
+// (app-text.js).
 // =====================================================================
 
 (function () {
@@ -22,14 +23,31 @@
     window.App.trackAppEvent?.(name, data);
   }
 
-  // The reason a failed send gives the person, in the dialog's own words.
-  // FastAPI sends a string detail for 401/429/500 and a list for validation.
-  function errorMessage(status, data) {
-    if (status === 401) return "Log in again to send feedback.";
-    const detail = Array.isArray(data?.detail) ? data.detail[0]?.msg : data?.detail;
-    if (typeof detail === "string" && detail.trim()) return detail.replace(/^Value error,\s*/, "");
-    if (status === 429) return "Too many messages in a row. Wait a minute and try again.";
-    return "Your feedback couldn’t be sent. Try again.";
+  const NOT_SENT = "Your feedback couldn’t be sent. Try again.";
+
+  // The limits of persistence_guard.create_feedback. Their server sentences
+  // have no German entry, and the daily one gives no way forward.
+  const LIMIT_MESSAGES = {
+    feedback_cooldown: "You just sent feedback. Try again in a moment.",
+    feedback_daily_limit: "You’ve reached today’s feedback limit. You can also write to contact@consens.io."
+  };
+
+  // A refusal arrives as {error, code, retry_after} (main.error_body) or, for
+  // a field the server rejects, as {error: "Validation failed", details:
+  // [{msg}]}. Only FeedbackRequest's own validators write sentences for a
+  // reader (Pydantic prefixes them with "Value error, "); Pydantic's own
+  // words ("String should have at most …") are not.
+  function errorMessage(response, data) {
+    if (response.status === 401) return "Log in again to send feedback.";
+    const error = window.App.httpError(response, data);
+    if (LIMIT_MESSAGES[error.code]) return LIMIT_MESSAGES[error.code];
+    if (response.status === 422) {
+      const own = (Array.isArray(data?.details) ? data.details : [])
+        .map(detail => String(detail?.msg || ""))
+        .find(msg => /^Value error,\s*\S/.test(msg));
+      return own ? own.replace(/^Value error,\s*/, "") : NOT_SENT;
+    }
+    return window.App.userError(error, { fallback: NOT_SENT });
   }
 
   // Resolves with the server's answer; rejects with an Error whose message
@@ -47,11 +65,11 @@
       });
     } catch (error) {
       console.error("Feedback request failed:", error);
-      throw new Error(window.App.userError(error, { fallback: "Your feedback couldn’t be sent. Try again." }));
+      throw new Error(window.App.userError(error, { fallback: NOT_SENT }));
     }
     const data = await window.App.readJson(response).catch(() => null);
     if (!response.ok || data?.status !== "success") {
-      throw new Error(errorMessage(response.status, data));
+      throw new Error(errorMessage(response, data));
     }
     return data;
   }

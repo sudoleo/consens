@@ -940,7 +940,7 @@
       </div>
       <form id="feedbackForm" method="post" action="/app">
         <textarea name="message" placeholder="Your feedback" aria-label="Your feedback" maxlength="4000" required autofocus></textarea>
-        <input type="email" name="email" placeholder="Your email (optional)" aria-label="Your email (optional)" autocomplete="email">
+        <input type="email" name="email" placeholder="Your email (optional)" aria-label="Your email (optional)" autocomplete="email" maxlength="254">
         <button type="submit" class="feedback-submit">Submit</button>
         <p id="feedbackStatus" class="feedback-status" role="status" aria-live="polite" hidden></p>
       </form>
