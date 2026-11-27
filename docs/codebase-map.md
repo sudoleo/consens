@@ -2022,7 +2022,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und Composer ist standardmäßig 704px breit (`--app-container-width` auf
   `body`, `layout.css`) und schrumpft auf kleinen Viewports. Das ist die
   Lesebreite der Antwort (`shell.css`): Text, Tabellen, Frage und Feld enden
-  auf einer Kante. Bei offener
+  auf einer Kante. Nur der leere Startbildschirm wächst seit 2026-11-27 mit
+  dem Fenster (Max: auf 2560 px wirkte das Feld verloren): `--hero-grow` auf
+  `body.is-hero:not(.direct-comparison-active)` ist ein Zehntel der Breite
+  über 1440 px (0 bis dorthin, 112 px bei 2560 px, höchstens 160 px), und
+  jede Größe des Startblocks ist ihr Grundwert plus ein Anteil davon (Spalte
+  704 → 845 px, Begrüßung 32 → 44 px, Frage 16 → 18 px; Regeln in
+  `layout.css`, `components-input.css`, `composer.css`). Ein Laptop behält
+  seine Maße, ein Chat überall die Lesebreite. Bei offener
   Desktop-Sidebar ab 1100px zentriert `--app-sidebar-offset: var(--sidebar-width)` die Spalte
   und den Startseiten-View-Switch im verbleibenden Bereich rechts der Navigation;
   eingeklappt und im mobilen Overlay-Modus gilt die Viewport-Mitte. Der mobile
@@ -3555,7 +3562,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   beim Zurückkehren die Oberkante. Die Werkzeuge des Starts stehen in der
   Reihe der Box und gehen mit dem Wechsel, die Begrüßung blendet über
   `visibility` in der Transition aus, der Hinweis des leeren Feldes kommt am
-  Ende. `body.composer-gliding` hält dabei `composer-collapse.js` (keine eigene
+  Ende. Auf breiten Fenstern ist das Startfeld breiter als die Chat-Spalte
+  (`--hero-grow`): die Breite der Box läuft dann in derselben Bewegung mit,
+  und die Spalte wechselt ihre Breite sofort
+  (`body.composer-gliding .container { transition: none }`, sonst bräche die
+  erste Frage beim Lesen neu um). Der Hinweis `.app-footer` gehört zum
+  gleitenden Abschnitt: steht er vorher und nachher an derselben Stelle (am
+  Seitenfuß, siehe Startblock), nimmt er die Bewegung per Gegen-`translate`
+  zurück und bleibt stehen; stand er unter den Beispielfragen (Handy), blendet
+  er wie bisher am Ende ein. `App.anchorGlide()` liest dafür mit der Box auch
+  seine Zeile. `body.composer-gliding` hält dabei `composer-collapse.js` (keine eigene
   Höhenanimation) und die Thread-Reserve still; ein zweiter Aufruf ohne
   Grenzwechsel lässt eine laufende Bewegung in Ruhe. Die Agent-Demo
   tippt im Hero und verlässt ihn erst beim simulierten Absenden.
@@ -3604,7 +3620,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   des Feldes fest (`--hero-lift: 117px` seit dem Wegfall der Leiste, `--hero-shift` an `.container`):
   Hinweise, Anhänge, neue Beispielfragen und Zeilen wachsen nach unten,
   `#verifyBanner` steht im DOM nach dem Composer und folgt dessen Verschiebung,
-  ein Composer-Hinweis nimmt im Hero den Platz der Beispielfragen ein (B5). Der
+  ein Composer-Hinweis nimmt im Hero den Platz der Beispielfragen ein (B5).
+  **Eine Kante (seit 2026-11-27, Max' Wahl aus drei Entwürfen):** ab 641 px
+  Breite und 501 px Höhe hat der Startblock eine linke Kante `--hero-edge`
+  (Rand des Feldes + sein Padding + das der Textarea, 25 px plus Anteil von
+  `--hero-grow`): Begrüßung (zweizeilig, ein Satz je Zeile, linksbündig),
+  erster Buchstabe der Frage, (+) und die Beispielfragen als Liste darunter;
+  die Pfeile der Liste stehen unter der Mitte von Senden. `--hero-lift` ist
+  dort `131px` plus Anteil. Der Hinweis `.app-footer` steht dort am Seitenfuß,
+  wo er auch im Chat steht (`position: absolute` in der verschobenen
+  `.input-section`, gerechnet aus `--hero-top` und `--hero-shift`; wächst der
+  Block bis dorthin, schiebt er ihn weiter). `--hero-top` = Body-Padding +
+  Spalten-Padding + die 10 px Margin des Feldes, unter dem Handy-Kopf
+  entsprechend tiefer. Die Größe der Begrüßung kommt als
+  `--hero-greeting-size` vom `body`, weil die Regeln, die sie zeigen
+  (`components-input.css`, `agent-chat.css`), sie fürs Handy mitbemessen.
+  Handy und niedrige Fenster bleiben mittig mit einer Zeile Beispielfragen. Der
   leere Start ist nicht verschiebbar: `body.is-hero { min-height: 100svh }`,
   `overscroll-behavior-y: none`, bei Höhe ≤ 500 px Beispielfragen einzeilig
   (F10). `index.html` wärmt Googles CDN und die beiden Firebase-Module per
@@ -9404,7 +9435,17 @@ springt. Seit 2026-10-16 blenden sie dabei nacheinander aus (140 ms, je
 umgekehrt (erst der Hinweis, dann die Fragen). `--starters-room` = Zeilenhöhe +
 Rand, gemessen per ResizeObserver in `composer-invite.js`
 (`trackStartersRoom`); reduzierte Bewegung blendet nur und lässt den Hinweis
-springen. Rechtliches steht
+springen. **Seit 2026-11-27 gilt die eine Zeile mit gleitendem Hinweis nur
+noch auf dem Handy und in niedrigen Fenstern** (≤ 640 px breit oder ≤ 500 px
+hoch). Überall sonst sind die Beispielfragen eine Liste unter dem Feld
+(`composer.css`, „The examples as a list“): Zeilen von mindestens 44 px auf
+der linken Kante des Startblocks, dazwischen Haarlinien, die an beiden Enden
+auslaufen, am Zeilenende ein Pfeil nach links oben („ins Feld“, als
+`::after`, unter der Mitte von Senden); Hover ist ein Ton, die Haarlinien an
+der Zeile treten dabei zurück. Der Hinweis steht dort am Seitenfuß und
+bewegt sich nicht; mit Text im Feld gibt die Liste nach dem Ausblenden auch
+ihren Platz ab (`max-height: 0`), damit ein niedriges Fenster mit langer
+Frage nicht in unsichtbaren Raum scrollt. Rechtliches steht
 in der Sidebar-Fußzeile, seit der Todo-Runde 3 in EINER Zeile
 (`.sidebar-footer-meta`): links Imprint · Privacy · Terms als leise Wörter
 (Impressum direkt erreichbar), rechts `.sidebar-footer-icons` mit zwei gleich

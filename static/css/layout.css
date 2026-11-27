@@ -21,6 +21,18 @@ body {
   --app-sidebar-offset: 0px;
 }
 
+/* The empty start screen grows with the window. A chat's column is a
+   reading measure and keeps its width on any monitor; the start block is
+   the one thing on an empty page, and at 704px it was a quarter of a 2560px
+   window. One fluid length, a tenth of the width beyond a 1440px window (0
+   up to there, 112px at 2560px), and every size of the start block is its
+   base plus a share of it (components-input.css, composer.css), so a laptop
+   keeps its sizes to the pixel. */
+body.is-hero:not(.direct-comparison-active) {
+  --hero-grow: clamp(0px, (100vw - 1440px) * 0.1, 160px);
+  --app-container-width: calc(704px + var(--hero-grow) * 1.26);
+}
+
 .container {
   width: min(var(--app-container-width), calc(100% - 48px));
   max-width: none;
@@ -50,6 +62,13 @@ body {
     left: calc(var(--app-sidebar-offset) / 2);
     transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
   }
+
+  /* Between the start screen and a chat the column changes its width at
+     once: the field glides and takes the new width with it (app-core.js
+     glideComposer), and a column narrowing on its own would wrap the first
+     question again while it is read. Over every layout's own transition of
+     the column (agent-chat.css, workspace-view.css, file-viewer.css). */
+  body.composer-gliding .container { transition: none !important; }
 
   /* The Chat | Watches switch follows the column too: components-watch.css,
      next to its own rule. */

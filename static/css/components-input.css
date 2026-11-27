@@ -160,6 +160,25 @@ body.is-hero .container {
   --hero-lift: 117px;
   --hero-shift: max(0px, calc(50svh - var(--hero-lift) - 68px));
 }
+/* Where the examples are a list (composer.css) the block is taller and its
+   note stands at the foot of the page: half of the field and the list, and
+   a share of what the start screen grows by (layout.css).
+   --hero-top is where the block starts without its shift, for what is
+   placed from the foot of the page (the note, composer.css): the body's
+   and the column's top padding and the field's own 10px margin, which
+   collapses through the block. Under the phone's header the column starts
+   lower (shell.css). */
+@media (min-width: 641px) and (min-height: 501px) {
+  body.is-hero:not(.direct-comparison-active) .container {
+    --hero-lift: calc(131px + var(--hero-grow) * 0.2);
+    --hero-top: 78px;
+  }
+}
+@media (min-width: 641px) and (max-width: 1099px) and (min-height: 501px) {
+  body.is-hero:not(.direct-comparison-active):has(.app-mobile-header) .container {
+    --hero-top: calc(var(--app-mobile-header-height) + 32px);
+  }
+}
 body.is-hero .input-section {
   transform: translateY(var(--hero-shift));
 }
@@ -190,7 +209,7 @@ body.is-hero .input-section:has(> .agent-composer-notice:not([hidden])) > .compo
   margin: 0 0 22px;
   /* The app's one headline speaks in the voice of the landing h1: set, not
      whispered. One step below it in size, the field stays the main thing. */
-  font-size: clamp(1.375rem, 2.4vw, 1.75rem);
+  font-size: var(--hero-greeting-size, clamp(1.375rem, 2.4vw, 1.75rem));
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.025em;
   line-height: var(--line-height-heading);
@@ -263,7 +282,7 @@ body.is-hero .hero-greeting {
     opacity: 1;
     visibility: visible;
     transform: none;
-    font-size: clamp(var(--font-size-read), 4.6vw, 1.75rem);
+    font-size: var(--hero-greeting-size, clamp(var(--font-size-read), 4.6vw, 1.75rem));
   }
 }
 @media (max-width: 679px) {
@@ -271,6 +290,29 @@ body.is-hero .hero-greeting {
     margin-bottom: 14px;
     letter-spacing: -0.012em;
   }
+}
+/* From the width where the examples are a list (composer.css) the start
+   block has one left edge: the sentence stands on the edge of the question's
+   first letter, of (+) and of the examples (--hero-edge: the field's border,
+   its padding and the textarea's own). Its two sentences are two lines, and
+   it is set a size larger, growing with the window (layout.css). The size
+   is handed down as a property because the rules that show the sentence
+   (above, agent-chat.css) also size it for a phone. */
+@media (min-width: 641px) and (min-height: 501px) {
+  body.is-hero:not(.direct-comparison-active) {
+    --hero-edge: calc(25px + var(--hero-grow) * 0.054);
+    --hero-greeting-size: calc(2rem + var(--hero-grow) * 0.107);
+  }
+  body.is-hero:not(.direct-comparison-active) .hero-greeting {
+    box-sizing: border-box;
+    margin-bottom: calc(26px + var(--hero-grow) * 0.072);
+    padding-left: var(--hero-edge);
+    line-height: 1.14;
+    letter-spacing: -0.03em;
+    text-align: left;
+    text-wrap: wrap;
+  }
+  body.is-hero:not(.direct-comparison-active) .hero-greeting > span { display: block; }
 }
 
 /* Leere Antwort-Platzhalter (Response-Boxen, Agent-Panel) erst nach der

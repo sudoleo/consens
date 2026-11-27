@@ -623,12 +623,14 @@ body.is-guest .composer-models .consensus-model { display: none; }
    look the same. Only under an empty new chat, and gone with the hero. While the field holds
    text they keep their room (visibility, not display), so the centred
    composer does not move; :placeholder-shown also covers text set by code
-   (a draft, a quote, Run again). Phones get one row that scrolls sideways
-   instead of three wrapped ones.
-   The first keystroke fades them out one after another, then the note
-   below glides up into their room (.app-footer by --starters-room, the
-   row's height plus margin, composer-invite.js); an emptied field reverses
-   it: the note makes room first, then they come back. */
+   (a draft, a quote, Run again). They are a list under the field ("The
+   examples as a list" below); phones and low windows get one row that
+   scrolls sideways.
+   The first keystroke fades them out one after another. Where the note
+   stands under them (that one row), it then glides up into their room
+   (.app-footer by --starters-room, the row's height plus margin,
+   composer-invite.js); an emptied field reverses it: the note makes room
+   first, then they come back. */
 .composer-starters { display: none; }
 body.is-hero:not(.direct-comparison-active) .composer-starters {
   display: flex;
@@ -662,19 +664,21 @@ body.is-hero:not(.direct-comparison-active) .composer-starter {
 .composer-starter:nth-child(3 of :not([hidden])) { --starter-k: 2; }
 .composer-starter:nth-child(4 of :not([hidden])) { --starter-k: 3; }
 .composer-starter:nth-child(n + 5 of :not([hidden])) { --starter-k: 4; }
-body.is-hero:not(.direct-comparison-active) .input-section > .app-footer {
-  transition: transform var(--dur-layer) var(--ease-standard);
-}
-body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer {
-  transform: translateY(calc(-1 * var(--starters-room, 0px)));
-  transition-delay: var(--dur-press);
-}
-/* A composer notice stands in the examples' room (components-input.css):
-   the note stays below it instead of gliding up into it, where both lay
-   over each other ("Select between two and 6 comparison models…" on
-   "Please avoid personal…"). */
-body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)):has(> .agent-composer-notice:not([hidden])) > .app-footer {
-  transform: none;
+@media (max-width: 640px), (max-height: 500px) {
+  body.is-hero:not(.direct-comparison-active) .input-section > .app-footer {
+    transition: transform var(--dur-layer) var(--ease-standard);
+  }
+  body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer {
+    transform: translateY(calc(-1 * var(--starters-room, 0px)));
+    transition-delay: var(--dur-press);
+  }
+  /* A composer notice stands in the examples' room (components-input.css):
+     the note stays below it instead of gliding up into it, where both lay
+     over each other ("Select between two and 6 comparison models…" on
+     "Please avoid personal…"). */
+  body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)):has(> .agent-composer-notice:not([hidden])) > .app-footer {
+    transform: none;
+  }
 }
 /* Reduced motion: the examples only fade; the note jumps, after they are gone. */
 @media (prefers-reduced-motion: reduce) {
@@ -682,9 +686,9 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   body.is-hero:not(.direct-comparison-active) .input-section > .app-footer { transition-duration: 0s; }
   body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer { transition-delay: var(--dur-state); }
 }
-/* Plain words under the field, no pill: the field is the
-   one object on the start screen. A finger-sized row stays around each, and
-   hover gives it the quiet tone of a list row. */
+/* Plain words, no pill: the field is the one object on the start screen.
+   A finger-sized row stays around each, and hover gives it the quiet tone
+   of a list row. */
 .composer-starter {
   padding: 7px 14px;
   border: 0;
@@ -760,6 +764,131 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
 }
 @media (forced-colors: active) {
   body.is-hero:not(.direct-comparison-active) .composer-starters { -webkit-mask-image: none; mask-image: none; }
+}
+
+/* ---- The examples as a list ------------------------------------------------
+   Wherever they are not that one scrolling row, the start block has one
+   left edge (--hero-edge, components-input.css): the sentence, the
+   question's first letter, (+) and the examples, one under the other as
+   rows of a list. Hairlines that run out at both ends stand between the
+   rows, never a box around them. A click puts the question into the field
+   and sends nothing, so each row ends in the arrow that says "into the
+   field" (up and to the left), under the middle of Send: (+) and the
+   question's edge, Send and the arrows are the block's two axes. */
+@media (min-width: 641px) and (min-height: 501px) {
+  body.is-hero:not(.direct-comparison-active) .composer-starters {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 0;
+    margin-top: calc(12px + var(--hero-grow) * 0.054);
+    padding: 0;
+  }
+  body.is-hero:not(.direct-comparison-active) .composer-starter {
+    position: relative;
+    flex: 0 0 auto;
+    min-height: calc(44px + var(--hero-grow) * 0.054);
+    padding: 0 calc(var(--hero-edge) + 28px) 0 var(--hero-edge);
+    border-radius: var(--radius-sm);
+    font-size: calc(var(--font-size-sm) + var(--hero-grow) * 0.018);
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body.is-hero:not(.direct-comparison-active) .composer-starter:nth-child(n + 2 of :not([hidden]))::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: var(--hero-edge);
+    right: var(--hero-edge);
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--line-soft) 7%, var(--line-soft) 93%, transparent);
+    transition: opacity var(--dur-state) var(--ease-standard);
+  }
+  body.is-hero:not(.direct-comparison-active) .composer-starter::after {
+    content: "";
+    position: absolute;
+    inset: 50% var(--hero-edge) auto auto;
+    width: 16px;
+    height: 16px;
+    margin-top: -8px;
+    background: var(--ink-3);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 16V7h9'/%3E%3Cpath d='M17 17 7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 16V7h9'/%3E%3Cpath d='M17 17 7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: background-color var(--dur-state) var(--ease-standard);
+  }
+  /* A row under the pointer is a tone, as in every list of the app; the
+     hairlines above and below it step back, so the tone has no line through
+     its rounded ends. */
+  @media (hover: hover) and (pointer: fine) {
+    body.is-hero:not(.direct-comparison-active) .composer-starter:hover::after { background: var(--ink); }
+    body.is-hero:not(.direct-comparison-active) .composer-starter:hover::before,
+    body.is-hero:not(.direct-comparison-active) .composer-starter:hover + .composer-starter::before { opacity: 0; }
+  }
+  @media (forced-colors: active) {
+    body.is-hero:not(.direct-comparison-active) .composer-starter::after { forced-color-adjust: none; background: ButtonText; }
+  }
+  /* With a question in the field the list gives up its room too, once it
+     has faded: the note no longer stands under it, and room nobody sees was
+     what a low window with a long question scrolled into. */
+  body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .composer-starters {
+    max-height: 0;
+    margin-top: 0;
+    overflow: hidden;
+    transition: visibility 0s var(--ease-linear) var(--dur-layer), max-height 0s var(--ease-linear) var(--dur-layer),
+      margin-top 0s var(--ease-linear) var(--dur-layer);
+  }
+  /* A notice that stands in the list's place (components-input.css) starts
+     on the list's edge. */
+  body.is-hero:not(.direct-comparison-active) .input-section > .agent-composer-notice:not(.agent-review-notice) {
+    padding-inline: var(--hero-edge);
+  }
+
+  /* The note stands where it stands in a chat, at the foot of the page, so
+     the start block is three things: the sentence, the field, the list. A
+     block that grows down to it (files, a long question in a low window)
+     pushes it on instead of running under it. Measured from the foot:
+     --hero-top and --hero-shift say where the block starts
+     (components-input.css), 9.5px is the note's distance from the foot in a
+     chat, so it does not move when the first question goes. */
+  body.is-hero:not(.direct-comparison-active) .input-section > .app-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: max(calc(100% + 48px), calc(100svh - var(--hero-top) - 9.5px - var(--hero-shift)));
+    translate: 0 -100%;
+  }
+}
+
+/* ---- The start field grows with the window --------------------------------
+   Beyond a 1440px window (layout.css, --hero-grow) the field's own sizes
+   follow the column: its padding and corners, the question's size and the
+   room it starts with, the words and marks of the row. (+) and Send keep
+   their 36px, as the 44px a finger gets. */
+@media (min-width: 1441px) {
+  body.is-hero:not(.direct-comparison-active) .chat-input-container {
+    padding: calc(12px + var(--hero-grow) * 0.036) calc(14px + var(--hero-grow) * 0.054) calc(10px + var(--hero-grow) * 0.036);
+    border-radius: calc(var(--radius-xl) + var(--hero-grow) * 0.036);
+    row-gap: calc(8px + var(--hero-grow) * 0.036);
+  }
+  body.is-hero:not(.direct-comparison-active) .chat-input-container .input-field {
+    min-height: calc(72px + var(--hero-grow) * 0.16);
+    font-size: calc(var(--font-size-base) + var(--hero-grow) * 0.018);
+  }
+  body.is-hero:not(.direct-comparison-active) .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display,
+  body.is-hero:not(.direct-comparison-active) .composer-models > .composer-mode-models,
+  body.is-hero:not(.direct-comparison-active) .composer-tools {
+    font-size: calc(var(--font-size-xs) + var(--hero-grow) * 0.0134);
+  }
+  body.is-hero:not(.direct-comparison-active) .composer-model-icon {
+    width: calc(24px + var(--hero-grow) * 0.027);
+    height: calc(24px + var(--hero-grow) * 0.027);
+  }
+  body.is-hero:not(.direct-comparison-active) .composer-model-icon img {
+    width: calc(14px + var(--hero-grow) * 0.018);
+    height: calc(14px + var(--hero-grow) * 0.018);
+  }
 }
 
 /* 44px to the finger: each example reaches 6px beyond its

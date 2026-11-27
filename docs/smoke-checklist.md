@@ -1675,10 +1675,22 @@ Server.
       sich. Senden → Login → die Frage läuft einmal im Agent; vorher Consensus
       gewählt → sie läuft in Consensus, und das Konto behält Consensus.
 - [ ] Beispielfragen beim Tippen (seit 2026-10-16): Der erste Buchstabe blendet
-      sie weich nacheinander aus, danach gleitet „Please avoid personal…“ direkt
-      unter die Leiste mit Reasoning/Attach statt allein unter einer Lücke zu
-      stehen; Feld leeren kehrt es um. Das Eingabefeld springt dabei nicht
+      sie weich nacheinander aus; Feld leeren holt sie zurück. Auf dem Handy
+      gleitet danach „Please avoid personal…“ direkt unter das Feld statt
+      allein unter einer Lücke zu stehen. Auf dem Desktop steht der Hinweis am
+      Seitenfuß und bewegt sich nicht. Das Eingabefeld springt dabei nicht
       (Desktop und Handy, hell und dunkel).
+- [ ] Startbildschirm auf einer Kante (seit 2026-11-27): Desktop, leerer neuer
+      Chat. Begrüßung zweizeilig links, ihr erster Buchstabe, „Ask anything“,
+      (+) und die drei Beispielfragen stehen auf einer linken Kante; die Pfeile
+      der Liste unter der Mitte von Senden. Zeile überfahren: Ton, kein Strich
+      durch die runden Enden. Fenster von Laptop-Breite auf einen großen
+      Monitor ziehen (über 1440 px): Feld, Schrift und Begrüßung wachsen mit,
+      nichts springt an einer Schwelle. Erste Frage senden: das Feld gleitet
+      nach unten und wird dabei schmaler, der Hinweis am Seitenfuß bleibt
+      stehen, die Frage im Thread bricht währenddessen nicht um; „New chat“
+      kehrt es um. Temporärer Chat und neuer Chat im Projekt: Begrüßung
+      ebenfalls zweizeilig auf der Kante.
 - [ ] Vorhergesagte Beispielfragen (seit 2026-10-16): Ein Konto mit mindestens
       drei Chats sieht unter dem leeren Feld nach wenigen Sekunden drei Fragen
       zu den eigenen Themen statt der kuratierten (die wechseln als Gast bei

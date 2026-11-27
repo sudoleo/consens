@@ -23,6 +23,39 @@ NOTE_BELOW_FIELD = (
     " - document.getElementById('questionInput').getBoundingClientRect().bottom"
 )
 
+# The start block's left edge and its second axis, measured where the eye
+# reads them: the first letter, not the box around it. The axis is the middle
+# of the 36px control that ends the field's row: Send, and for a guest with
+# an empty field the round end of the demo button that stands there.
+START_BLOCK = """() => {
+  const left = node => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return range.getBoundingClientRect().left;
+  };
+  const input = document.getElementById('questionInput');
+  const rows = [...document.querySelectorAll('#composerStarters .composer-starter:not([hidden])')];
+  const greeting = document.querySelector('.hero-greeting:not(.hero-greeting-temporary):not(.hero-greeting-project)');
+  const field = document.querySelector('.chat-input-container');
+  const fieldStyle = getComputedStyle(field);
+  const row = rows[0].getBoundingClientRect();
+  const arrow = getComputedStyle(rows[0], '::after');
+  return {
+    lefts: [left(greeting.firstElementChild),
+            input.getBoundingClientRect().left + parseFloat(getComputedStyle(input).paddingLeft),
+            document.querySelector('#attachTrigger svg').getBoundingClientRect().left, ...rows.map(left)],
+    greetingLines: [...greeting.children].map(line => Math.round(line.getBoundingClientRect().top)),
+    tops: rows.map(node => Math.round(node.getBoundingClientRect().top)),
+    heights: rows.map(node => node.getBoundingClientRect().height),
+    arrow: row.right - parseFloat(arrow.right) - parseFloat(arrow.width) / 2,
+    axis: field.getBoundingClientRect().right - parseFloat(fieldStyle.borderRightWidth) - parseFloat(fieldStyle.paddingRight) - 18,
+    fieldTop: field.getBoundingClientRect().top,
+    noteTop: document.querySelector('.feedback-note').getBoundingClientRect().top,
+    noteFromFoot: innerHeight - document.querySelector('.feedback-note').getBoundingClientRect().bottom,
+    scrolls: document.documentElement.scrollHeight > innerHeight,
+  };
+}"""
+
 
 def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_server):
     context, page = _guest_page(browser, phase4_server)
@@ -39,31 +72,37 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         expect(page.locator(".consensus-model")).to_be_hidden()
         expect(starters).to_be_visible()
         expect(page.locator("#sendButton")).to_be_disabled()
-        room = starters.bounding_box()["height"]
-        gap_below_field = page.evaluate(NOTE_BELOW_FIELD)
 
-        # Three curated questions per page load (starter_questions.py), in one
-        # row, without "Check an AI answer".
+        # Three curated questions per page load (starter_questions.py),
+        # without "Check an AI answer": a list under the field. The sentence
+        # (one line per sentence), the question's first letter, (+) and the
+        # examples share one left edge; each row ends in its arrow on the
+        # block's second axis, and is a finger tall.
         expect(starters.locator(".composer-starter")).to_have_count(3)
         expect(starters.locator('[data-starter="check"]')).to_have_count(0)
-        tops = {round(box["y"]) for box in (starters.locator(".composer-starter").nth(i).bounding_box() for i in range(3))}
-        assert len(tops) == 1, tops
+        block = page.evaluate(START_BLOCK)
+        assert max(block["lefts"]) - min(block["lefts"]) < 1, block["lefts"]
+        assert len(set(block["greetingLines"])) == 2, block["greetingLines"]
+        assert len(set(block["tops"])) == 3 and block["tops"] == sorted(block["tops"]), block["tops"]
+        assert min(block["heights"]) >= 44, block["heights"]
+        assert abs(block["arrow"] - block["axis"]) < 1, block
+        # The note stands at the foot of the page, as in a chat, and the
+        # empty start screen has nothing to scroll.
+        assert 0 < block["noteFromFoot"] < 24 and not block["scrolls"], block
+
         first = starters.locator(".composer-starter").first
         question = first.get_attribute("data-question")
         first.click()
         expect(field).to_have_value(question)
         expect(field).to_be_focused()
-        # The examples step back but keep their room, so the centred composer
-        # does not jump (a two-line question only grows the field itself).
+        # The examples step back and give up their room once they have faded;
+        # neither the field (a two-line question only grows it downward) nor
+        # the note moves.
         expect(starters).to_be_hidden()
-        assert starters.bounding_box()["height"] == room
-        # The note below glides up into their room instead of standing alone
-        # under an empty gap. Measured from the field's bottom: a two-line
-        # example grows the field.
-        shift = page.evaluate(
-            "() => parseFloat(getComputedStyle(document.querySelector('.input-section')).getPropertyValue('--starters-room'))")
-        assert shift > room
-        page.wait_for_function(f"() => Math.abs(({NOTE_BELOW_FIELD})() - {gap_below_field - shift}) < 1")
+        page.wait_for_function("() => document.getElementById('composerStarters').offsetHeight === 0")
+        after = page.evaluate(START_BLOCK)
+        assert after["fieldTop"] == block["fieldTop"]
+        assert after["noteTop"] == block["noteTop"] and not after["scrolls"]
 
         page.click("#sendButton")
         expect(page.locator("#loginModal")).to_be_visible()
@@ -104,6 +143,21 @@ def test_a_guest_on_a_phone_gets_the_sentence_and_one_row_of_examples(browser, p
           return { rows: tops.size, pageScroll: document.documentElement.scrollWidth > window.innerWidth };
         }""")
         assert layout == {"rows": 1, "pageScroll": False}
+
+        # Here the note stands under the examples. They step back but keep
+        # their room, so the centred composer does not jump, and the note
+        # glides up into that room instead of standing alone under a gap.
+        # Measured from the field's bottom: a long example grows the field.
+        starters = page.locator("#composerStarters")
+        room = starters.bounding_box()["height"]
+        gap_below_field = page.evaluate(NOTE_BELOW_FIELD)
+        starters.locator(".composer-starter").first.click()
+        expect(starters).to_be_hidden()
+        assert starters.bounding_box()["height"] == room
+        shift = page.evaluate(
+            "() => parseFloat(getComputedStyle(document.querySelector('.input-section')).getPropertyValue('--starters-room'))")
+        assert shift > room
+        page.wait_for_function(f"() => Math.abs(({NOTE_BELOW_FIELD})() - {gap_below_field - shift}) < 1")
     finally:
         context.close()
 

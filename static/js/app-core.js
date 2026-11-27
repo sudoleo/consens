@@ -519,10 +519,12 @@
   // forced the half-built thread's layout. Valid for the
   // task that read it.
   let anchoredBox = null;
+  // The note's line, not its box: the box has other margins in a chat.
+  const noteTop = () => document.querySelector(".input-section > .app-footer .feedback-note")?.getBoundingClientRect().top;
   function anchorGlide() {
     const box = document.querySelector(".input-section .chat-input-container");
     if (!box || anchoredBox) return;
-    anchoredBox = { rect: box.getBoundingClientRect() };
+    anchoredBox = { rect: box.getBoundingClientRect(), note: noteTop() };
     setTimeout(() => { anchoredBox = null; }, 0);
   }
   function glideComposer(change) {
@@ -531,7 +533,9 @@
     const box = composer?.querySelector(".chat-input-container");
     const wasHero = body.classList.contains("is-hero");
     const animate = Boolean(composer?.animate && box && !reducedMotion?.matches);
-    const before = animate ? anchoredBox?.rect || box.getBoundingClientRect() : null;
+    const anchored = animate ? anchoredBox : null;
+    const before = animate ? anchored?.rect || box.getBoundingClientRect() : null;
+    const noteBefore = animate ? (anchored ? anchored.note : noteTop()) : null;
     change();
     // A call that does not cross the start screen's edge (the run projecting
     // its thread once more) leaves a running glide alone.
@@ -545,9 +549,14 @@
       window.App.resizeQuestionInput?.();
       const leaving = wasHero && !body.classList.contains("is-hero");
       const after = box.getBoundingClientRect();
+      // Read with the box, before the glide's own offset is on the section.
+      const noteHeld = Math.abs(noteTop() - noteBefore) < 1;
       const dx = before.left - after.left;
       const dy = leaving ? before.bottom - after.bottom : before.top - after.top;
-      const morph = Math.abs(before.height - after.height) >= 1;
+      // On a wide window the start field is wider than a chat's column
+      // (layout.css --hero-grow): the width runs with the glide too.
+      const widen = Math.abs(before.width - after.width) >= 1;
+      const morph = widen || Math.abs(before.height - after.height) >= 1;
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && !morph) { endGlide(composer, box); return; }
       const timing = { duration: glideMs(), easing: glideEasing() };
       const animations = [composer.animate([{ translate: `${dx}px ${dy}px` }, { translate: "0px 0px" }], timing)];
@@ -555,15 +564,26 @@
         // The row of controls stays on the box's bottom edge while it grows
         // or shrinks (composer.css .is-morphing).
         box.classList.add("is-morphing");
-        animations.push(box.animate([{ height: `${before.height}px` }, { height: `${after.height}px` }], timing));
+        const size = rect => ({ height: `${rect.height}px`, ...(widen ? { width: `${rect.width}px` } : {}) });
+        animations.push(box.animate([size(before), size(after)], timing));
         const field = box.querySelector(".input-field");
         if (field) animations.push(field.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }],
           { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));
       }
-      // The note under the pill comes in once the box has nearly arrived.
-      const note = leaving ? composer.querySelector(":scope > .app-footer") : null;
-      if (note?.getClientRects().length) animations.push(note.animate([{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1 }],
-        { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));
+      // The note is part of what glides. Where it stands at the foot of the
+      // page on the start screen as in a chat (composer.css), it stays there:
+      // it takes the glide back by the same amount. Where it stood under the
+      // examples, it comes in under the pill once the box has nearly arrived.
+      const note = composer.querySelector(":scope > .app-footer");
+      if (note?.getClientRects().length) {
+        if (noteHeld) {
+          const [x = "0px", y = "0px"] = (getComputedStyle(note).translate || "").replace("none", "").split(" ").filter(Boolean);
+          animations.push(note.animate([{ translate: `calc(${x} - ${dx}px) calc(${y} - ${dy}px)` }, { translate: `${x} ${y}` }], timing));
+        } else if (leaving) {
+          animations.push(note.animate([{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1 }],
+            { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));
+        }
+      }
       composerGlide = animations;
       Promise.all(animations.map(animation => animation.finished)).then(() => {
         if (composerGlide === animations) endGlide(composer, box);
