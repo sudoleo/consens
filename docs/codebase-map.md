@@ -3359,7 +3359,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `detachForMessage` und `consensio:auth-state` beginnen eine neue, verwerfen
   verspätete FileReader-/Verkleinerungsergebnisse und setzen den
   Pending-Zähler zurück, sodass eine alte Datei weder im nächsten Entwurf
-  auftaucht noch dessen Dateilimit belegt.
+  auftaucht noch dessen Dateilimit belegt. Ein gespeicherter Agent-Upload
+  nimmt nur seine eigenen Dateien aus dem Composer
+  (`App.attachments.releaseStored`); was währenddessen dazukam oder noch
+  gelesen wird, gehört der nächsten Nachricht.
   `window.App.attachments.isImporting()` meldet laufende Imports;
   `window.sendQuestion` (Vergleich und Agent) sendet währenddessen nicht und
   zeigt einen Hinweis.

@@ -1214,15 +1214,30 @@
 
     // Agent uploads report a per-file failure (or clear it with an empty
     // message). The payload copy is matched back to its pending attachment.
+    function isSameFile(att, file) {
+      return att.name === file?.name && (att.size || 0) === (file?.size || 0) && (!file?.data || att.data === file.data);
+    }
+
     function markError(file, message) {
-      const target = (window.pendingAttachments || []).find(function (att) {
-        return att.name === file?.name && (att.size || 0) === (file?.size || 0) && (!file?.data || att.data === file.data);
-      });
+      const target = (window.pendingAttachments || []).find(function (att) { return isSameFile(att, file); });
       if (!target || (target.error || "") === (message || "")) return false;
       if (message) target.error = String(message).slice(0, 300);
       else delete target.error;
       renderAttachmentChips();
       return true;
+    }
+
+    // An Agent message's files, once stored (agent-workspace.js upload), leave
+    // the composer; a file added while they uploaded is the next message's,
+    // and so is one still being read.
+    function releaseStored(files) {
+      const stored = Array.isArray(files) ? files : [];
+      const kept = (window.pendingAttachments || []).filter(function (att) {
+        return !stored.some(function (file) { return isSameFile(att, file); });
+      });
+      if (kept.length === window.pendingAttachments.length) return;
+      window.pendingAttachments = kept;
+      renderAttachmentChips();
     }
 
     window.renderAttachmentChips = renderAttachmentChips;
@@ -1249,6 +1264,7 @@
       save: saveBlob,
       renderMessageAttachments: renderMessageAttachments,
       markError: markError,
+      releaseStored: releaseStored,
       refreshCompatibility: syncAttachmentCompatibility
     };
 
@@ -1389,7 +1405,7 @@
     }
 
     // Every import belongs to one draft generation. Clearing the draft (send,
-    // opening a saved chat, Agent upload) or an account change starts a new
+    // opening another saved chat) or an account change starts a new
     // generation: late reads of the old one are discarded and no longer count
     // against the new draft's file limit.
     let readGeneration = 0;

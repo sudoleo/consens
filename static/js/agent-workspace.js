@@ -1239,7 +1239,7 @@
     context.attachmentMeta = result;
     context.attachments = []; // Bytes never belong in saved turns or bookmarks.
     if (result.length) {
-      window.clearPendingAttachments?.();
+      App.attachments?.releaseStored?.(files);
       await refresh(chatId, true);
     }
     return result;

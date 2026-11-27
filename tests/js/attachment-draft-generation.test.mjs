@@ -1,7 +1,7 @@
 /**
  * A file that is still being read belongs to the draft it was added to.
  *
- * Resetting the draft (opening a saved chat, sending, Agent upload) or an
+ * Resetting the draft (opening a saved chat, sending) or an
  * account change must discard the late FileReader result instead of letting
  * it reappear as an attachment of the next question. The full module runs;
  * only FileReader is paused.

@@ -458,6 +458,37 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // The message's files stay in the composer until stored (a failed upload
+  // marks them there); a file added meanwhile is the next message's.
+  it('takes only the stored files out of the composer, not one added during the upload', async () => {
+    const { window, dom } = loadScripts(['static/js/attachments.js', 'static/js/agent-workspace.js'], {
+      body: `${ANSWER}<div class="chat-input-container"><button id="attachTrigger"></button><div id="attachMenu"></div>
+        <button id="attachUploadOption"></button><input id="attachFileInput" type="file"><div id="attachmentBar"></div>
+        <textarea id="questionInput"></textarea></div>`,
+      before(target) {
+        target.auth = { currentUser: { uid: 'owner', getIdToken: async () => 'token' } };
+        target.App = { agentChat: { isSelected: () => true }, showPopup: vi.fn(), agentGoogle: { refreshActions: vi.fn() },
+          runRegistry: { isAuthCurrent: () => true, visible: () => null, isExecuting: () => false,
+            getSelectedConversationBasis: () => ({ chatId: CHAT, turnId: TURN_TWO, currentTurn: { id: TURN_TWO } }) } };
+      },
+    });
+    const sent = { name: 'report.pdf', mime: 'application/pdf', size: 10, data: 'data:application/pdf;base64,eA==' };
+    const next = { name: 'next.png', mime: 'image/png', size: 7, data: 'data:image/png;base64,iVBO' };
+    window.pendingAttachments = [{ ...sent }];
+    const release = [];
+    window.fetch = vi.fn((path, options) => options?.method === 'POST'
+      ? new Promise(resolve => release.push(() => resolve({ ok: true, json: async () => ({ file: { ...UPLOAD, name: 'report.pdf', warnings: [] } }) })))
+      : Promise.resolve(reply([UPLOAD])));
+    const context = { runId: 'run-1', metadata: { chatId: CHAT }, consensus: {}, attachments: window.getAttachmentsPayload() };
+    const pending = window.App.agentWorkspace.upload(context, {}, new AbortController().signal);
+    await vi.waitFor(() => expect(release).toHaveLength(1));
+    window.pendingAttachments = [...window.pendingAttachments, { ...next }];
+    release[0]();
+    await pending;
+    expect(window.pendingAttachments.map(file => file.name)).toEqual(['next.png']);
+    dom.window.close();
+  });
+
   // Otherwise an opened chat fetches every picture of every turn at once,
   // up to 5 MB each.
   it("loads a picture once its place comes near the screen, as the server's preview", async () => {
