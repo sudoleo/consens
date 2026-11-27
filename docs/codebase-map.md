@@ -2709,6 +2709,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Blöcke. Seit 2026-10-20 auch `/app` (Apple-Audit B12): `index.html` trägt
   nur das Meta-Tag, KaTeX lädt beim ersten Formel-Treffer im Stream oder in
   einer gespeicherten Antwort, nicht mehr bei jedem Start.
+  **Eine Formel malt nur, wo sie steht:** `typeset()` gibt KaTeX `maxSize`
+  (10 em) mit, das jede positive Größe deckelt (`\rule{300em}{300em}`,
+  `\kern`). Negative Größen und verschachtelte Boxen (abgesenkte `\rule`
+  unter `\smash`, `\mathllap`, `\kern-100em`) gehen daran vorbei; deshalb
+  beschneidet `static/css/math.css` (von `style.css` und `public-pages.css`
+  importiert) jedes `.katex-base` und `.katex-tag` per `clip-path` auf seine
+  Box plus 0,5 em. `clip-path` ändert kein Layout; an 73 typischen Formeln
+  in Chromium pixelgleich bis auf Kantenglättung.
   Innerhalb einer Formel ist Markdown Notation, kein Markup: Backslashes und
   alle ASCII-Satzzeichen werden geschützt; insbesondere bleibt ein einzelnes
   `=` in mehrzeiligen Formeln Formelinhalt statt Setext-Überschrift. Derselbe

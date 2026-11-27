@@ -1,0 +1,25 @@
+/* ==========================================================================
+   A formula in an answer (math-render.js, KaTeX)
+
+   Imported by style.css (/app) and public-pages.css (shared answers, Topic
+   and Watch pages). A formula paints only where it stands. Its source is
+   the model's, and TeX can move ink anywhere without taking room for it:
+   \smash with a lowered \rule, \mathllap, a negative \kern. Over another
+   turn, the composer or a shared page's frame, such a box could pass for
+   the app's own. math-render.js caps every size KaTeX is given (maxSize),
+   but a negative one or nested boxes still go past it.
+
+   So each piece of a formula is clipped to its own box. clip-path changes
+   no layout (a baseline, a line break, a formula's width stay as they
+   were). The half em of slack is the ink KaTeX's own boxes leave out: a
+   big operator's slant, a superscript's top; measured on 73 formulas a
+   model writes, none reached a third of an em. Inline and display math
+   both break into .katex-base pieces; a display formula's \tag stands
+   beside them.
+   ========================================================================== */
+
+.katex .katex-base,
+.katex .katex-tag {
+  -webkit-clip-path: inset(-0.5em);
+  clip-path: inset(-0.5em);
+}

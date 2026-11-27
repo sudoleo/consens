@@ -42,6 +42,8 @@
 @import url('./css/diagram.css');
 /* Syntax tones in a code block, shared with the public pages. */
 @import url('./css/code-highlight.css');
+/* A formula paints only where it stands, shared with the public pages. */
+@import url('./css/math.css');
 /* Figures, two sides, timeline, bars and steps an answer draws from plain
    Markdown, shared with the public pages. */
 @import url('./css/answer-shapes.css');

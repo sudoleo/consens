@@ -1,5 +1,5 @@
 {
-  "sources": "67e5e78b29cf",
+  "sources": "8886f367a20d",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -43,6 +43,7 @@
     "static/css/landing.css",
     "static/css/layout.css",
     "static/css/letter-clouds.css",
+    "static/css/math.css",
     "static/css/model-answer-reader.css",
     "static/css/model-pulse.css",
     "static/css/motion.css",
@@ -612,20 +613,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.072b759fa199.js",
+      "src": "/static/dist/app.ab7b7e5eccd4.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.2a9a3bb9e15d.css",
+    "app": "/static/dist/app.0b566156782f.css",
     "landing": "/static/dist/landing.c4cf293124e5.css",
-    "public": "/static/dist/public.a2ed1b7cf984.css"
+    "public": "/static/dist/public.5daaf308382c.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "510567f54526",
+      "hash": "dc9412605acd",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -656,6 +657,7 @@
         "static/css/foundation.css",
         "static/css/layout.css",
         "static/css/letter-clouds.css",
+        "static/css/math.css",
         "static/css/model-answer-reader.css",
         "static/css/motion.css",
         "static/css/overlays.css",
@@ -690,12 +692,13 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "cae4d08be504",
+      "hash": "6ac50a2c2044",
       "inputs": [
         "static/css/answer-shapes.css",
         "static/css/code-highlight.css",
         "static/css/diagram.css",
         "static/css/foundation.css",
+        "static/css/math.css",
         "static/css/public-nav.css",
         "static/css/public-pages.css",
         "static/css/public-tokens.css",
@@ -706,10 +709,10 @@
     }
   },
   "previous_assets": [
+    "app.2a9a3bb9e15d.css",
     "app.8e9335360349.css",
-    "app.3fcb485e2e8a.css",
+    "app.072b759fa199.js",
     "app.ffec59fa0fe7.js",
-    "app.c0f77b365953.js",
     "auth.f43feb5d30b7.js",
     "auth.8772a54342ab.js",
     "demo.4a3c6e6124b0.js",
@@ -720,7 +723,7 @@
     "head.15346e59e34c.js",
     "landing.66ea147c8f92.css",
     "landing.0015085c444f.css",
-    "public.ce9b752e83ab.css",
-    "public.95e10823f698.css"
+    "public.a2ed1b7cf984.css",
+    "public.ce9b752e83ab.css"
   ]
 }

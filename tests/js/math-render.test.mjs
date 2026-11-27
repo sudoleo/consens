@@ -9,9 +9,12 @@
  * Beides faellt visuell kaum auf und veraendert trotzdem, was dasteht.
  */
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { loadScripts } from "./helpers/appWindow.mjs";
+import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 
 function bootRenderPipeline() {
   // Pinned test dependencies mirror the CDN versions in templates/index.html.
@@ -326,6 +329,31 @@ describe("ConsensusMath.wrapBareLatex", () => {
       "2026-08-20"
     ];
     claims.forEach((claim) => expect(math.wrapBareLatex(claim)).toBe(""));
+  });
+});
+
+// Die Formel kommt vom Modell. Was sie an Tinte ausserhalb ihres Platzes
+// malt (abgesenkte \rule unter \smash, \mathllap, negatives \kern),
+// laege ueber anderen Turns, dem Composer oder dem Rahmen einer Share-Seite.
+describe("eine Formel malt nur, wo sie steht", () => {
+  it("deckelt jede Groesse, die eine Formel angibt", () => {
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    window.injectMarkdown(answer, String.raw`Ein Kasten \(\rule{300em}{300em}\) und \(\hspace{80em}x\).`);
+    expect(answer.querySelectorAll(".katex")).toHaveLength(2);
+    // Was gezeichnet wird, nicht die Quelle, die MathML fuer Screenreader behaelt.
+    const drawn = [...answer.querySelectorAll(".katex-html [style]")].map((node) => node.getAttribute("style")).join(";");
+    expect(drawn).toMatch(/border-right-width:\s*10em/);
+    expect(drawn).toMatch(/margin-right:\s*10em/);
+    expect(drawn).not.toMatch(/(?<![\d.])(300|80)em/);
+    window.close();
+  });
+
+  it("beschneidet jedes Stueck einer Formel in App und auf den oeffentlichen Seiten", () => {
+    const css = readFileSync(path.join(ROOT, "static/css/math.css"), "utf8");
+    expect(css).toMatch(/\.katex \.katex-base,\s*\.katex \.katex-tag\s*\{[^}]*\bclip-path:\s*inset\(-0\.5em\)/);
+    expect(readFileSync(path.join(ROOT, "static/style.css"), "utf8")).toContain("@import url('./css/math.css');");
+    expect(readFileSync(path.join(ROOT, "static/css/public-pages.css"), "utf8")).toContain("@import url('./math.css');");
   });
 });
 

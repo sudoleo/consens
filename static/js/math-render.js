@@ -330,11 +330,18 @@
     pending.forEach(function (entry) { entry[0].nodeValue = entry[1]; });
   }
 
+  // Die Formel kommt vom Modell: \rule{300em}{300em} oder \kern300em
+  // wuerden die Antwort sprengen. KaTeX deckelt damit jede angegebene
+  // Groesse (in em), nur keine negative; was die an Tinte verschiebt,
+  // beschneidet css/math.css.
+  const MAX_SIZE_EM = 10;
+
   function typeset(root) {
     window.renderMathInElement(root, {
       delimiters: delimiters,
       throwOnError: false,
-      trust: false
+      trust: false,
+      maxSize: MAX_SIZE_EM
     });
   }
 
