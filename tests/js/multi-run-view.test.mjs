@@ -438,4 +438,43 @@ describe("run-local evidence mapping", () => {
     )).toBe("Die Quellen stehen bereits richtig.[1]");
     dom.window.close();
   });
+
+  it("renumbers the citations of an answer, never the brackets in its code", () => {
+    const { window, dom } = loadScripts(["static/js/sources.js"], {
+      before(target) {
+        target.App = { state: { set: vi.fn() } };
+      }
+    });
+    const earlier = [1, 2, 3].map(n => ({ id: `S${n}`, url: `https://earlier.example/${n}` }));
+    const answer = [
+      "Lists start at zero [S1].",
+      "```python",
+      "nums = [1, 2, 3]",
+      "window = [0, 1]",
+      "```",
+      "~~~js",
+      "pick(a[2]). ",
+      "~~~",
+      "Use `a[2]` for the third item [S2]."
+    ].join("\n");
+    const prepared = window.App.prepareResponseSourcesForEvidence(answer, [
+      { id: "S1", url: "https://new.example/one" },
+      { id: "S2", url: "https://new.example/two" },
+      { id: "S3", url: "https://new.example/three" }
+    ], earlier);
+
+    // The code is the model's, as it wrote it (source_catalog.py leaves it alone too).
+    expect(prepared.markdown).toBe([
+      "Lists start at zero.[4]",
+      "```python",
+      "nums = [1, 2, 3]",
+      "window = [0, 1]",
+      "```",
+      "~~~js",
+      "pick(a[2]). ",
+      "~~~",
+      "Use `a[2]` for the third item.[5]"
+    ].join("\n"));
+    dom.window.close();
+  });
 });

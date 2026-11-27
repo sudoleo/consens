@@ -889,19 +889,28 @@ function normalizeLeadingModelSourceTags(markdown) {
   return `${body.slice(0, end).replace(/[ \t]+$/, "")} ${tags}${body.slice(end)}`;
 }
 
+// Fenced (``` and ~~~) and inline code, read as math-render.js reads it:
+// "nums = [1, 2]" there is the model's code, never a citation, and the
+// rewritten text is what the comparison saves (source_catalog.py leaves
+// code alone the same way).
+const SOURCE_TAG_CODE = /(```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`)/g;
+function outsideCode(markdown, rewrite) {
+  return String(markdown || "").split(SOURCE_TAG_CODE)
+    .map((part, index) => index % 2 ? part : rewrite(part)).join("");
+}
+
 function rewriteSourceTags(markdown, idMap) {
-  if (!markdown || !idMap || !Object.keys(idMap).length) {
-    return normalizeTerminalSourceTagOrder(normalizeLeadingModelSourceTags(markdown));
-  }
-  const rewritten = markdown.replace(/\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g, (match, inner) => {
-    const mapped = inner.split(",").map(part => {
-      const token = part.trim();
-      const numeric = token.replace(/^S/i, "");
-      return idMap[token] || idMap[numeric] || null;
-    }).filter(Boolean);
-    return mapped.length ? `[${mapped.join(", ")}]` : match;
-  });
-  return normalizeTerminalSourceTagOrder(normalizeLeadingModelSourceTags(rewritten));
+  const rewritten = markdown && idMap && Object.keys(idMap).length
+    ? outsideCode(markdown, prose => prose.replace(/\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g, (match, inner) => {
+      const mapped = inner.split(",").map(part => {
+        const token = part.trim();
+        const numeric = token.replace(/^S/i, "");
+        return idMap[token] || idMap[numeric] || null;
+      }).filter(Boolean);
+      return mapped.length ? `[${mapped.join(", ")}]` : match;
+    }))
+    : markdown;
+  return outsideCode(normalizeLeadingModelSourceTags(rewritten), normalizeTerminalSourceTagOrder);
 }
 
 function registerResponseSources(markdown, incomingSources) {
