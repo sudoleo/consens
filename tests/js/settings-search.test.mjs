@@ -61,7 +61,7 @@ const DIALOG = `
 // App.settingsTabs as app-ui.js has it: one panel at a time, a click on a
 // tab selects it.
 function boot({ highlights = true } = {}) {
-  const loaded = loadScripts(["static/js/settings-search.js"], {
+  const loaded = loadScripts(["static/js/app-core.js", "static/js/settings-search.js"], {
     body: DIALOG,
     before(window) {
       const { document } = window;
@@ -94,7 +94,7 @@ function boot({ highlights = true } = {}) {
     input.value = text;
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
   };
-  const press = (target, key) => target.dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  const press = (target, key, init = {}) => target.dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
   // The settings in view: visible panel, not a miss.
   const shown = () => [...document.querySelectorAll(".settings-category:not([hidden]) .settings-group > .settings-section:not(.is-search-miss)")]
     .map(row => row.id);
@@ -224,6 +224,20 @@ describe("settings search: the dialog", () => {
     app.type("animation");
     app.press(app.input, "Enter");
     expect(app.document.activeElement.id).toBe("lettersSwitch");
+  });
+
+  it("leaves Enter and Escape to an input method that is still composing", () => {
+    const app = boot();
+    app.type("animation");
+    app.input.focus();
+    // Enter confirms the word (Japanese, Chinese); Safari says so by keyCode 229.
+    expect(app.press(app.input, "Enter", { isComposing: true })).toBe(true);
+    expect(app.press(app.input, "Enter", { keyCode: 229 })).toBe(true);
+    expect(app.document.activeElement).toBe(app.input);
+    // Escape drops the word being composed, not the query.
+    expect(app.press(app.input, "Escape", { isComposing: true })).toBe(true);
+    expect(app.input.value).toBe("animation");
+    expect(app.search.active()).toBe(true);
   });
 
   it("takes a letter typed on the tabs into the field", () => {

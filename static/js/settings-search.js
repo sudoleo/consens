@@ -269,6 +269,8 @@
     nodes.input.dataset.bound = "true";
     nodes.input.addEventListener("input", () => run(nodes.input.value));
     nodes.input.addEventListener("keydown", event => {
+      // Enter confirms, Escape drops the word an input method still composes.
+      if (App.isComposingKey?.(event)) return;
       if (event.key === "Escape" && nodes.input.value) {
         // Clears the field; a second Escape closes Settings (modal-dialog.js
         // leaves a prevented Escape alone).
