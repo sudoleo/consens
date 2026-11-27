@@ -68,6 +68,21 @@ describe("attachment import generation", () => {
     expect(names(ctx)).toEqual([]);
   });
 
+  it("keeps the draft's files when the same chat is drawn anew", async () => {
+    // firebase.js openBookmark: the background check of the chat on screen
+    // found a change and redraws it with keepComposer. The typed follow-up
+    // and its quote stay, and so do the files added for it.
+    const ctx = boot();
+    await pick(ctx, "shot.txt", "notes.txt");
+    await finish(ctx, ctx.readers[0]);
+
+    ctx.window.showBookmarkAttachments([], { keepComposer: true });
+    expect(ctx.window.App.attachments.isImporting()).toBe(true);
+    await finish(ctx, ctx.readers[1]);
+
+    expect(names(ctx)).toEqual(["shot.txt", "notes.txt"]);
+  });
+
   it("drops a late import after the draft was handed to a sent message", async () => {
     const ctx = boot();
     await pick(ctx, "draft-a.txt");

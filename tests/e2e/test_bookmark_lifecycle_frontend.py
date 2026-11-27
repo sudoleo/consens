@@ -382,8 +382,8 @@ def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_togethe
         expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat.')
 
         # Back from another chat to one that changed meanwhile: its check
-        # draws it anew, and what was typed before the check returned stays
-        # (a redraw once emptied it).
+        # draws it anew, and what was typed and attached before the check
+        # returned stays.
         page.locator('.bookmark[data-id="second"]').click()
         page.wait_for_timeout(150)
         release('detail', 'second'); release('conversation', 'second')
@@ -391,12 +391,15 @@ def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_togethe
         page.locator('.bookmark[data-id="first"]').click()
         expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat.')
         page.locator('#questionInput').fill('Which one is cheaper?')
+        page.locator('#attachFileInput').set_input_files({'name': 'offer.txt', 'mimeType': 'text/plain', 'buffer': b'Price 42 EUR'})
+        expect(page.locator('#attachmentBar')).to_contain_text('offer.txt')
         chats['first']['turn']['consensus'] = 'Answer of the first chat, now longer.'
         chats['first']['bookmark']['responses']['consensus'] = 'Answer of the first chat, now longer.'
         page.wait_for_timeout(150)
         release('detail', 'first'); release('conversation', 'first')
         expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat, now longer.')
         expect(page.locator('#questionInput')).to_have_value('Which one is cheaper?')
+        expect(page.locator('#attachmentBar')).to_contain_text('offer.txt')
         assert not errors
     finally:
         context.close()

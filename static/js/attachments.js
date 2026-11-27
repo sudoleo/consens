@@ -1651,9 +1651,10 @@
   // Anhänge eines gespeicherten Bookmarks. Sie gehören zu der Frage, mit der
   // sie damals rausgegangen sind, und stehen deshalb an ihr im Thread — nicht
   // im Eingabefeld, das der naechsten Frage gehoert. Reine Metadaten: die
-  // Dateien selbst sind nicht gespeichert.
-  window.showBookmarkAttachments = function (attachmentsMeta) {
-    window.clearPendingAttachments?.();
+  // Dateien selbst sind nicht gespeichert. Derselbe Chat, neu gezeichnet
+  // (keepComposer), behaelt die Dateien der Folgefrage wie ihren Text.
+  window.showBookmarkAttachments = function (attachmentsMeta, options) {
+    if (!options?.keepComposer) window.clearPendingAttachments?.();
     window.App?.setThreadQuestionAttachments?.(attachmentsMeta);
   };
 })();

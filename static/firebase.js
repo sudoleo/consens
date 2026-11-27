@@ -3177,8 +3177,8 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         if (bookmark.query) {
             window.App?.setThreadQuestion?.(displayQuestion);
             // The same chat drawn anew (openBookmark's check of a cached
-            // view found a change) keeps what was typed meanwhile and its
-            // quote.
+            // view found a change) keeps what was typed meanwhile, its
+            // quote and its files (showBookmarkAttachments).
             if (!options.keepComposer) {
                 const questionInput = document.getElementById("questionInput");
                 if (questionInput) {
@@ -3196,7 +3196,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // Anhänge des Bookmarks als Vorschau-Chips anzeigen (nur Metadaten,
         // die Dateien selbst sind nicht gespeichert und werden nicht mitgesendet)
         if (typeof window.showBookmarkAttachments === "function") {
-            window.showBookmarkAttachments(bookmark.attachments || []);
+            window.showBookmarkAttachments(bookmark.attachments || [], { keepComposer: options.keepComposer });
         }
     }
     if (directComparison) window.App?.answerReader?.showDirectBookmark?.(bookmark);

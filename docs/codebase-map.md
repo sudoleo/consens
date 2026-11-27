@@ -8299,7 +8299,9 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   wird seit 2026-10-31 gar nicht neu gezeichnet, nur geprüft: Folgefrage,
   Zitat und Anhänge im Composer bleiben. Zeichnet die Prüfung einen Chat
   wegen einer echten Änderung neu (`loadSingleBookmarkUI(..., {keepComposer: true})`),
-  bleiben die inzwischen getippte Folgefrage und das Zitat seit 2026-11-03 auch.
+  bleiben die inzwischen getippte Folgefrage und das Zitat seit 2026-11-03 auch,
+  und ihre Anhänge (`showBookmarkAttachments(meta, {keepComposer})` leert den
+  Composer dann nicht).
   Sonst zeigt `showChatOpening` sofort Frage (aus der Listen-Meta) und
   `.answer-skeleton` (`.thread-opening`, `body.chat-opening` blendet den
   vorigen Chat nur aus; ein Fehler gibt ihn unverändert zurück), und
